@@ -23,11 +23,16 @@ const CLI_PACKAGE_INFO = {
     packageName: "@google/gemini-cli",
     updateCommand: "npm install -g @google/gemini-cli@latest",
   },
+  agy: {
+    packageName: undefined,
+    updateCommand: "agy update",
+  },
 } as const;
 
 export type LocalCliName = keyof typeof CLI_PACKAGE_INFO;
 export type ModelHealthStatus = "responding" | "failed" | "missing-cli" | "not-configured";
 export type CliUpdateStatus = "current" | "outdated" | "unknown" | "missing";
+export type CliAuthStatus = "signed-in" | "auth-required" | "unknown";
 
 export interface LocalCliToolStatus {
   available: boolean;
@@ -35,8 +40,10 @@ export interface LocalCliToolStatus {
   version?: string;
   latestVersion?: string;
   packageName?: string;
-  installMethod?: "homebrew" | "npm";
+  installMethod?: "homebrew" | "homebrew-cask" | "npm";
   updateCommand?: string;
+  replacementFor?: LocalCliName;
+  authStatus?: CliAuthStatus;
   updateStatus: CliUpdateStatus;
   isOutdated?: boolean;
   checkedAt: string;
@@ -111,7 +118,8 @@ function hydrateModelCache() {
   }
 }
 
-function getLatestPackageVersion(packageName: string) {
+function getLatestPackageVersion(packageName?: string) {
+  if (!packageName) return { latestVersion: undefined, error: undefined };
   const latest = spawnSync("npm", ["view", packageName, "version", "--silent"], {
     encoding: "utf8",
     timeout: 5000,
@@ -125,6 +133,12 @@ function getLatestPackageVersion(packageName: string) {
 
 function resolveInstallMethod(command: LocalCliName, cliPath?: string): Pick<LocalCliToolStatus, "installMethod" | "updateCommand"> {
   const packageInfo = CLI_PACKAGE_INFO[command];
+  if (command === "agy") {
+    return {
+      installMethod: "homebrew-cask",
+      updateCommand: "agy update",
+    };
+  }
   const realPath = cliPath
     ? (() => {
         try {
@@ -149,6 +163,18 @@ function resolveInstallMethod(command: LocalCliName, cliPath?: string): Pick<Loc
   };
 }
 
+function detectAgyAuthStatus() {
+  const models = spawnSync("agy", ["models"], {
+    encoding: "utf8",
+    timeout: 5000,
+    maxBuffer: 1024 * 1024,
+  });
+  const output = sanitizeProviderOutput(`${models.stdout || ""}\n${models.stderr || ""}`);
+  if (models.status === 0) return "signed-in" as const;
+  if (/sign in|authentication|required/i.test(output)) return "auth-required" as const;
+  return "unknown" as const;
+}
+
 function buildToolStatus(command: LocalCliName, options: { force?: boolean } = {}): LocalCliToolStatus {
   const packageInfo = CLI_PACKAGE_INFO[command];
   const cached = readCache().tools?.[command];
@@ -166,6 +192,8 @@ function buildToolStatus(command: LocalCliName, options: { force?: boolean } = {
       packageName: packageInfo.packageName,
       updateCommand: packageInfo.updateCommand,
       installMethod: "npm",
+      replacementFor: command === "agy" ? "gemini" : undefined,
+      authStatus: command === "agy" ? "unknown" : undefined,
       updateStatus: "missing",
       checkedAt: now,
       nextCheckAt: nextCheckAt(now),
@@ -181,6 +209,7 @@ function buildToolStatus(command: LocalCliName, options: { force?: boolean } = {
   const isOutdated = latest.latestVersion ? isVersionOutdated(installedVersion, latest.latestVersion) : undefined;
   const cliPath = located.stdout.trim();
   const install = resolveInstallMethod(command, cliPath);
+  const authStatus = command === "agy" ? detectAgyAuthStatus() : undefined;
 
   return {
     available: true,
@@ -190,6 +219,8 @@ function buildToolStatus(command: LocalCliName, options: { force?: boolean } = {
     packageName: packageInfo.packageName,
     installMethod: install.installMethod,
     updateCommand: install.updateCommand,
+    replacementFor: command === "agy" ? "gemini" : undefined,
+    authStatus,
     updateStatus: isOutdated === true ? "outdated" : isOutdated === false ? "current" : "unknown",
     isOutdated,
     checkedAt: now,
@@ -238,6 +269,7 @@ export function detectLocalCliTools(options: { force?: boolean } = {}) {
     claude: detectCli("claude", options),
     codex: detectCli("codex", options),
     gemini: detectCli("gemini", options),
+    agy: detectCli("agy", options),
   };
 }
 

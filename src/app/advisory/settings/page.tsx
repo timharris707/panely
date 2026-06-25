@@ -12,6 +12,8 @@ type ToolStatus = {
   latestVersion?: string;
   packageName?: string;
   updateCommand?: string;
+  replacementFor?: string;
+  authStatus?: "signed-in" | "auth-required" | "unknown";
   updateStatus?: "current" | "outdated" | "unknown" | "missing";
   isOutdated?: boolean;
   checkedAt?: string;
@@ -179,24 +181,40 @@ export default function AdvisorySettingsPage() {
               {data?.routing === "local-cli-only" ? "Local CLI only" : "Checking"}
             </span>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "10px" }}>
-            {["claude", "codex", "gemini"].map((tool) => {
-              const status = data?.tools?.[tool];
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "10px" }}>
+            {[
+              { id: "claude", label: "Claude" },
+              { id: "codex", label: "Codex" },
+              { id: "gemini", label: "Gemini" },
+              { id: "agy", label: "Antigravity" },
+            ].map((tool) => {
+              const toolId = tool.id;
+              const status = data?.tools?.[toolId];
+              const needsAttention = !status?.available || status?.isOutdated || status?.authStatus === "auth-required";
+              const badge = !status?.available
+                ? "Missing"
+                : status?.authStatus === "auth-required"
+                  ? "Sign in"
+                  : status?.isOutdated
+                    ? "Update"
+                    : "Current";
               return (
-                <div key={tool} style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "12px", background: "var(--surface-elevated)", minWidth: 0 }}>
+                <div key={toolId} style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "12px", background: "var(--surface-elevated)", minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                    {status?.available && !status?.isOutdated ? <CheckCircle2 size={15} color="#22c55e" /> : <CircleAlert size={15} color="#f59e0b" />}
-                    <strong style={{ textTransform: "capitalize" }}>{tool}</strong>
-                    <span style={{ marginLeft: "auto", color: status?.isOutdated ? "#f59e0b" : status?.available ? "#22c55e" : "#f59e0b", fontSize: "10px", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                      {status?.isOutdated ? "Update" : status?.available ? "Current" : "Missing"}
+                    {status?.available && !needsAttention ? <CheckCircle2 size={15} color="#22c55e" /> : <CircleAlert size={15} color="#f59e0b" />}
+                    <strong>{tool.label}</strong>
+                    <span style={{ marginLeft: "auto", color: needsAttention ? "#f59e0b" : "#22c55e", fontSize: "10px", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                      {badge}
                     </span>
                   </div>
                   <div style={{ color: "var(--text-muted)", fontSize: "12px", overflowWrap: "anywhere", lineHeight: 1.5 }}>
                     {status?.available ? status.path : "Not detected"}
                     {status?.version ? <><br />Installed: {status.version}</> : null}
                     {status?.latestVersion ? <><br />Latest: {status.latestVersion}</> : null}
+                    {status?.replacementFor ? <><br />Replacement for: {status.replacementFor}</> : null}
+                    {status?.authStatus ? <><br />Auth: {status.authStatus}</> : null}
                     {status?.checkedAt ? <><br />Checked: {formatCheckTime(status.checkedAt)}</> : null}
-                    {status?.isOutdated && status.updateCommand ? <><br /><code>{status.updateCommand}</code></> : null}
+                    {needsAttention && status?.updateCommand ? <><br /><code>{status.updateCommand}</code></> : null}
                     {status?.error ? <><br />{status.error}</> : null}
                   </div>
                 </div>
