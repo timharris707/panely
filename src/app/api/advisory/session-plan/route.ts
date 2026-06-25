@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateText } from "@/lib/ai/router";
-import { resolveProviderModelId } from "@/lib/ai/providers";
+import { PROVIDERS, resolveProviderModelId } from "@/lib/ai/providers";
 
 type Intent = "decision" | "stress-test" | "compare" | "ideas" | "red-team";
 type ThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
@@ -14,7 +14,7 @@ interface PlannedAdvisor {
   stance: string;
 }
 
-const ALLOWED_MODELS = ["claude-opus", "claude-sonnet", "codex-frontier", "gpt-4o", "gemini-pro", "gemini-flash"];
+const ALLOWED_MODELS = PROVIDERS.map((provider) => provider.id);
 const ALLOWED_THINKING: ThinkingLevel[] = ["minimal", "low", "medium", "high", "xhigh", "max"];
 
 function inferIntent(text: string): Intent {
@@ -125,12 +125,7 @@ export async function POST(req: NextRequest) {
 Return ONLY valid JSON. No markdown.
 
 Available model IDs:
-- claude-opus: Claude Code 4.8, best for deep synthesis and hard judgment
-- claude-sonnet: Claude Sonnet 4.6, strong balanced reasoning
-- codex-frontier: GPT-5.5, best for coding, product strategy, and frontier reasoning
-- gemini-pro: Gemini 2.5 Pro, best for long-context and data-heavy review
-- gpt-4o: fast OpenAI fallback
-- gemini-flash: fast Gemini fallback
+${PROVIDERS.map((provider) => `- ${provider.id}: ${provider.name}, ${provider.intendedUse ?? provider.intent ?? "available local CLI model"}`).join("\n")}
 
 Thinking levels: minimal, low, medium, high, xhigh, max.
 

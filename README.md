@@ -145,7 +145,9 @@ For this project, **deploy** means publishing the latest source to GitHub:
 ```bash
 git status
 npm run lint
+npx tsc --noEmit
 npm run build
+node scripts/publish-safety-check.mjs
 git add .
 git commit -m "Describe the change"
 git push origin main
@@ -173,9 +175,18 @@ The repository ignores common local secret and data paths, including:
 - `.vercel/`
 - `*.sqlite`
 - `data/advisory/exports/`
+- `data/advisory/packets/`
+- `data/advisory/briefs/`
 - `docs/source-material/`
+- `docs/source-packets/`
 
-Before publishing or sharing a fork, run a secret scan and review any local data directories.
+Before publishing or sharing a fork, run:
+
+```bash
+node scripts/publish-safety-check.mjs
+```
+
+The scanner checks Git publish candidates for local advisory data, generated source packets, env files, key-like strings, and other content that should not land in the public repository.
 
 ## Product Direction
 

@@ -12,7 +12,13 @@ data/billing/
 data/exports/
 data/advisory/*.json
 data/advisory/exports/
+data/advisory/packets/
+data/advisory/briefs/
 docs/source-material/
+docs/source-packets/
+*source-packet*.txt
+*reference-packet*.txt
+*context-packet*.txt
 
 # env files — never commit secrets
 .env

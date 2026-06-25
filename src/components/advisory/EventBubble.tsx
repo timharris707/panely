@@ -105,6 +105,12 @@ export default function EventBubble({
     return overlayId ? [overlayId] : [];
   })();
 
+  const durationLabel = typeof event.durationMs === "number"
+    ? event.durationMs < 1000
+      ? `${event.durationMs}ms`
+      : `${(event.durationMs / 1000).toFixed(1)}s`
+    : null;
+
   // Helper to resolve overlay name/emoji for both static and AI-generated personas
   const resolveOverlayName = (oid: string): string => {
     if (oid.startsWith("ai-") && aiPersonas) {
@@ -305,7 +311,7 @@ export default function EventBubble({
                 {resolveOverlayEmoji(oid)} {resolveOverlayName(oid)}
               </span>
             ))}
-            {event.model && !isSystem && !isHuman && !isError && (
+            {event.model && !isSystem && !isHuman && (
               <span
                 style={{
                   fontSize: "9px",
@@ -320,6 +326,40 @@ export default function EventBubble({
                 }}
               >
                 {formatModelName(event.model)}
+              </span>
+            )}
+            {durationLabel && !isSystem && !isHuman && (
+              <span
+                style={{
+                  fontSize: "9px",
+                  fontWeight: 500,
+                  color: isError ? "#fca5a5" : "#64748b",
+                  backgroundColor: isError ? "rgba(239,68,68,0.1)" : "rgba(100,116,139,0.08)",
+                  border: isError ? "1px solid rgba(239,68,68,0.25)" : "1px solid rgba(100,116,139,0.2)",
+                  padding: "2px 6px",
+                  borderRadius: "4px",
+                  fontFamily: "var(--font-mono)",
+                  letterSpacing: "0.03em",
+                }}
+              >
+                {durationLabel}
+              </span>
+            )}
+            {event.errorKind && (
+              <span
+                style={{
+                  fontSize: "9px",
+                  fontWeight: 700,
+                  color: "#fca5a5",
+                  backgroundColor: "rgba(239,68,68,0.1)",
+                  border: "1px solid rgba(239,68,68,0.25)",
+                  padding: "2px 6px",
+                  borderRadius: "4px",
+                  fontFamily: "var(--font-mono)",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                {event.errorKind}
               </span>
             )}
           </div>

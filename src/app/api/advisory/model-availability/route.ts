@@ -1,33 +1,12 @@
-import { spawnSync } from "child_process";
 import { NextResponse } from "next/server";
 import { PROVIDERS } from "@/lib/ai/providers";
+import { detectLocalCliTools, probeModelHealth } from "@/lib/ai/model-health";
 
-const TOOLS = ["claude", "codex", "gemini"] as const;
-
-function detectTool(command: (typeof TOOLS)[number]) {
-  const located = spawnSync("which", [command], {
-    encoding: "utf8",
-    timeout: 1000,
-  });
-
-  if (located.status !== 0) {
-    return { available: false };
-  }
-
-  const version = spawnSync(command, ["--version"], {
-    encoding: "utf8",
-    timeout: 2000,
-  });
-
-  return {
-    available: true,
-    path: located.stdout.trim(),
-    version: version.status === 0 ? version.stdout.trim() || version.stderr.trim() : undefined,
-  };
-}
-
-export async function GET() {
-  const tools = Object.fromEntries(TOOLS.map((tool) => [tool, detectTool(tool)]));
+export async function GET(request: Request) {
+  const probeMode = new URL(request.url).searchParams.get("probe");
+  const shouldProbe = probeMode === "1" || probeMode === "large";
+  const largeContext = probeMode === "large";
+  const tools = detectLocalCliTools();
   const models = PROVIDERS.map((model) => ({
     id: model.id,
     name: model.name,
@@ -39,6 +18,10 @@ export async function GET() {
     cliPath: model.localCli ? tools[model.localCli]?.path : undefined,
     cliVersion: model.localCli ? tools[model.localCli]?.version : undefined,
     intent: model.intent,
+    contextWindow: model.contextWindow,
+    thinkingLevels: model.thinkingLevels,
+    intendedUse: model.intendedUse,
+    probe: shouldProbe ? probeModelHealth(model.id, { largeContext }) : undefined,
   }));
   return NextResponse.json({ tools, models, routing: "local-cli-only" });
 }

@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
 import { getProviderModelById, type AIProvider } from "@/lib/ai/providers";
+import { classifyProviderError } from "@/lib/ai/provider-errors";
 
 export interface GenerateTextInput {
   prompt: string;
@@ -61,7 +62,8 @@ function runCommand(
       if (code === 0) {
         resolve(stdout.trim());
       } else {
-        reject(new Error(`${command} exited with code ${code}: ${stderr.trim() || stdout.trim()}`));
+        const classified = classifyProviderError(`${command} exited with code ${code}: ${stderr.trim() || stdout.trim()}`);
+        reject(new Error(`${classified.kind}: ${classified.message}`));
       }
     });
 
@@ -87,6 +89,7 @@ async function generateWithLocalCli(input: GenerateTextInput, localCli: "claude"
     : derivedTimeoutMs;
 
   if (localCli === "claude") {
+    // Claude CLI accepts the prompt as an argv tail and streams stdout directly.
     return runCommand(
       "claude",
       [
@@ -109,6 +112,7 @@ async function generateWithLocalCli(input: GenerateTextInput, localCli: "claude"
   }
 
   if (localCli === "codex") {
+    // Codex CLI is most reliable when the final answer is written to a file; it does not stream token-by-token here.
     const dir = mkdtempSync(path.join(tmpdir(), "panely-codex-"));
     const outputFile = path.join(dir, "last-message.txt");
     try {
@@ -136,11 +140,12 @@ async function generateWithLocalCli(input: GenerateTextInput, localCli: "claude"
     }
   }
 
+  // Gemini CLI receives prompts on stdin so large source packets do not exceed argv limits.
   return runCommand(
     "gemini",
     [
       "--prompt",
-      prompt,
+      "",
       "--model",
       model,
       "--output-format",
@@ -148,7 +153,7 @@ async function generateWithLocalCli(input: GenerateTextInput, localCli: "claude"
       "--approval-mode",
       "plan",
     ],
-    undefined,
+    prompt,
     timeoutMs,
     input.onTextChunk,
   );
@@ -167,6 +172,9 @@ export async function generateText(input: GenerateTextInput): Promise<GenerateTe
   }
 
   const text = await generateWithLocalCli(input, modelConfig.localCli, modelConfig.model);
+  if (!text.trim()) {
+    throw new Error("empty-output: Provider returned empty output.");
+  }
 
   return {
     text,

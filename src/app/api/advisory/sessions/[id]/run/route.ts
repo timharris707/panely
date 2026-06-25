@@ -4,6 +4,9 @@ import { sessionFileStore as fs } from "@/lib/advisory-session-store";
 import { AGENT_CONFIGS } from "@/config/agents";
 import { spawnAdvisoryAgentWithRetry, type SpawnAdvisoryAgentResult } from "@/lib/advisory-agent";
 import { resolveProviderModelId } from "@/lib/ai/providers";
+import { classifyProviderError } from "@/lib/ai/provider-errors";
+import { finishRunAttempt, startRunAttempt, type RunAttemptStartInput } from "@/lib/advisory-run-telemetry";
+import type { AdvisoryRunAttempt } from "@/types/advisory";
 
 const DATA_DIR = path.join(process.cwd(), "data", "advisory");
 const MEMORY_FILE = path.join(DATA_DIR, "agent-memory.json");
@@ -175,7 +178,6 @@ function resolveModel(sessionModel?: string): { model: string; thinking?: boolea
   if (sessionModel.includes("opus")) return { model: "claude-opus" };
   if (sessionModel.includes("sonnet")) return { model: "claude-sonnet" };
   if (sessionModel.includes("gpt-5")) return { model: "codex-frontier" };
-  if (sessionModel.includes("gpt-4o")) return { model: "gpt-4o" };
   if (sessionModel.includes("gemini") && sessionModel.includes("flash")) return { model: "gemini-flash" };
   if (sessionModel.includes("gemini")) return { model: "gemini-pro" };
   return { model: resolveProviderModelId(sessionModel) };
@@ -585,16 +587,18 @@ function createStreamingTextUpdater(sessionPath: string, eventId: string) {
         updatedAt: new Date().toISOString(),
       }));
     },
-    fail(errorText: string) {
+    fail(errorText: string, meta?: { errorKind?: string; durationMs?: number; attemptId?: string; phase?: string }) {
       if (pendingTimer) {
         clearTimeout(pendingTimer);
         pendingTimer = null;
       }
       updateEvent(sessionPath, eventId, (event) => ({
         ...event,
+        type: "error",
         text: errorText,
         streaming: false,
         error: true,
+        ...meta,
         updatedAt: new Date().toISOString(),
       }));
     },
@@ -623,6 +627,46 @@ function setRunInProgress(sessionPath: string, inProgress: boolean) {
   } catch (err) {
     console.warn("[Advisory] Failed to set runInProgress:", err);
   }
+}
+
+function updateSessionRecord(
+  sessionPath: string,
+  updater: (session: Record<string, unknown>) => void
+) {
+  const raw = fs.readFileSync(sessionPath, "utf-8");
+  const session = JSON.parse(raw);
+  updater(session);
+  fs.writeFileSync(sessionPath, JSON.stringify(session, null, 2));
+  return session;
+}
+
+function beginAttempt(sessionPath: string, input: RunAttemptStartInput) {
+  let attemptId = "";
+  updateSessionRecord(sessionPath, (session) => {
+    const attempt = startRunAttempt(session, input);
+    attemptId = attempt.id;
+  });
+  return attemptId;
+}
+
+function completeAttempt(
+  sessionPath: string,
+  attemptId: string,
+  update: { status: "succeeded"; modelSource?: string } | { status: "failed"; error: unknown }
+): AdvisoryRunAttempt | null {
+  let completed: AdvisoryRunAttempt | null = null;
+  updateSessionRecord(sessionPath, (session) => {
+    completed = finishRunAttempt(session, attemptId, update);
+  });
+  return completed as AdvisoryRunAttempt | null;
+}
+
+function eventFailureText(label: string, err: unknown) {
+  const classified = classifyProviderError(err);
+  return {
+    text: `⚠️ ${label}: ${classified.message}`,
+    errorKind: classified.kind,
+  };
 }
 
 // ─── Pacing helpers ───────────────────────────────────────────────────────────
@@ -942,26 +986,45 @@ Open the session now. Frame the agenda: what are the key questions we need to an
     let openingText = "";
     let openingModel = model;
     const openingMaxTokens = RESPONSE_LENGTH_CONFIG[responseLength].maxTokens;
+    const openingAttemptId = beginAttempt(filePath, {
+      phase: "moderator-opening",
+      agentId: moderatorId,
+      model,
+    });
+    let openingDurationMs: number | undefined;
+    let openingErrorKind: string | undefined;
+    let openingError = false;
     setThinkingAgent(filePath, moderatorId);
     try {
       const result = await callAgent(modSystemPrompt, openingPrompt, model, thinking, openingMaxTokens, moderatorId);
       openingText = result.text;
       openingModel = result.model;
+      openingDurationMs = completeAttempt(filePath, openingAttemptId, { status: "succeeded", modelSource: result.model })?.durationMs;
     } catch (err) {
-      openingText = `⚠️ Failed to generate moderator opening: ${String(err)}`;
+      const completed = completeAttempt(filePath, openingAttemptId, { status: "failed", error: err });
+      const failure = eventFailureText("Failed to generate moderator opening", err);
+      openingText = failure.text;
+      openingErrorKind = failure.errorKind;
+      openingDurationMs = completed?.durationMs;
+      openingError = true;
     }
     setThinkingAgent(filePath, null);
 
     appendEvent(filePath, {
       id: `evt_mod_open_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       timestamp: new Date().toISOString(),
-      type: "worker",
+      type: openingError ? "error" : "worker",
       speaker: moderatorId,
       emoji: modAgent.emoji,
       role: "moderator" as const,
       text: openingText,
       model: openingModel,
       modelSource: openingModel,
+      error: openingError || undefined,
+      errorKind: openingErrorKind,
+      durationMs: openingDurationMs,
+      attemptId: openingAttemptId,
+      phase: "moderator-opening",
     });
 
     await new Promise((r) => setTimeout(r, 500));
@@ -1029,6 +1092,11 @@ Open the session now. Frame the agenda: what are the key questions we need to an
       });
 
       const streamUpdater = createStreamingTextUpdater(filePath, eventId);
+      const attemptId = beginAttempt(filePath, {
+        phase: `roundtable-round-${round}`,
+        agentId,
+        model: agentModel,
+      });
       setThinkingAgent(filePath, agentId);
       try {
         const result = await callAgent(
@@ -1040,9 +1108,23 @@ Open the session now. Frame the agenda: what are the key questions we need to an
           agentId,
           streamUpdater.append
         );
+        const completed = completeAttempt(filePath, attemptId, { status: "succeeded", modelSource: result.model });
         streamUpdater.finish(result.text, result.model);
+        updateEvent(filePath, eventId, (event) => ({
+          ...event,
+          attemptId,
+          phase: `roundtable-round-${round}`,
+          durationMs: completed?.durationMs,
+        }));
       } catch (err) {
-        streamUpdater.fail(`⚠️ Failed to generate response: ${String(err)}`);
+        const completed = completeAttempt(filePath, attemptId, { status: "failed", error: err });
+        const failure = eventFailureText("Failed to generate response", err);
+        streamUpdater.fail(failure.text, {
+          errorKind: failure.errorKind,
+          durationMs: completed?.durationMs,
+          attemptId,
+          phase: `roundtable-round-${round}`,
+        });
       }
       setThinkingAgent(filePath, null);
 
@@ -1083,26 +1165,45 @@ Open the session now. Frame the agenda: what are the key questions we need to an
       let interjectText = "";
       let interjectModel = model;
       const interjectMaxTokens = RESPONSE_LENGTH_CONFIG[responseLength].maxTokens;
+      const interjectAttemptId = beginAttempt(filePath, {
+        phase: `moderator-interjection-${round}`,
+        agentId: moderatorId,
+        model,
+      });
+      let interjectDurationMs: number | undefined;
+      let interjectErrorKind: string | undefined;
+      let interjectError = false;
       setThinkingAgent(filePath, moderatorId);
       try {
         const result = await callAgent(modSystemPrompt, interjectPrompt, model, thinking, interjectMaxTokens, moderatorId);
         interjectText = result.text;
         interjectModel = result.model;
+        interjectDurationMs = completeAttempt(filePath, interjectAttemptId, { status: "succeeded", modelSource: result.model })?.durationMs;
       } catch (err) {
-        interjectText = `⚠️ Failed to generate moderator interjection: ${String(err)}`;
+        const completed = completeAttempt(filePath, interjectAttemptId, { status: "failed", error: err });
+        const failure = eventFailureText("Failed to generate moderator interjection", err);
+        interjectText = failure.text;
+        interjectErrorKind = failure.errorKind;
+        interjectDurationMs = completed?.durationMs;
+        interjectError = true;
       }
       setThinkingAgent(filePath, null);
 
       appendEvent(filePath, {
         id: `evt_mod_interject_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         timestamp: new Date().toISOString(),
-        type: "worker",
+        type: interjectError ? "error" : "worker",
         speaker: moderatorId,
         emoji: modAgent.emoji,
         role: "moderator" as const,
         text: interjectText,
         model: interjectModel,
         modelSource: interjectModel,
+        error: interjectError || undefined,
+        errorKind: interjectErrorKind,
+        durationMs: interjectDurationMs,
+        attemptId: interjectAttemptId,
+        phase: `moderator-interjection-${round}`,
       });
 
       await new Promise((r) => setTimeout(r, 500));
@@ -1152,6 +1253,14 @@ Open the session now. Frame the agenda: what are the key questions we need to an
   let summaryText = "";
   let summaryModel = summaryModelId;
   const summaryMaxTokens = RESPONSE_LENGTH_CONFIG[responseLength].maxTokens;
+  const summaryAttemptId = beginAttempt(filePath, {
+    phase: "roundtable-summary",
+    agentId: summaryAgentId,
+    model: summaryModelId,
+  });
+  let summaryDurationMs: number | undefined;
+  let summaryErrorKind: string | undefined;
+  let summaryError = false;
   try {
     const result = await callAgent(
       finalSystemPrompt,
@@ -1163,8 +1272,14 @@ Open the session now. Frame the agenda: what are the key questions we need to an
     );
     summaryText = result.text;
     summaryModel = result.model;
+    summaryDurationMs = completeAttempt(filePath, summaryAttemptId, { status: "succeeded", modelSource: result.model })?.durationMs;
   } catch (err) {
-    summaryText = `Could not generate summary: ${String(err)}`;
+    const completed = completeAttempt(filePath, summaryAttemptId, { status: "failed", error: err });
+    const failure = eventFailureText("Could not generate summary", err);
+    summaryText = failure.text;
+    summaryErrorKind = failure.errorKind;
+    summaryDurationMs = completed?.durationMs;
+    summaryError = true;
   }
 
   const summaryAgent = AGENT_DEFS[summaryAgentId];
@@ -1179,6 +1294,11 @@ Open the session now. Frame the agenda: what are the key questions we need to an
     verdict: "approve",
     model: summaryModel,
     modelSource: summaryModel,
+    error: summaryError || undefined,
+    errorKind: summaryErrorKind,
+    durationMs: summaryDurationMs,
+    attemptId: summaryAttemptId,
+    phase: "roundtable-summary",
   };
   appendEvent(filePath, summaryEvent);
 
@@ -1188,6 +1308,8 @@ Open the session now. Frame the agenda: what are the key questions we need to an
   completedSession.status = "completed";
   completedSession.completedAt = new Date().toISOString();
   completedSession.outcome = "roundtable-complete";
+  completedSession.thinkingAgent = null;
+  completedSession.runInProgress = false;
   fs.writeFileSync(filePath, JSON.stringify(completedSession, null, 2));
 }
 
@@ -1493,36 +1615,57 @@ ${pitchSummary}
     setThinkingAgent(filePath, agentId);
     let text = "";
     let spawnedModel = agentModel;
+    let failed = false;
+    let errorKind: string | undefined;
+    let durationMs: number | undefined;
+    const attemptId = beginAttempt(filePath, {
+      phase: "competitive-pitch",
+      agentId,
+      model: agentModel,
+    });
     try {
       const result = await callAgent(systemPrompt, userPrompt, agentModel, agentThinking || false, RESPONSE_LENGTH_CONFIG[agentLength].maxTokens, agentId);
       text = result.text;
       spawnedModel = result.model;
+      durationMs = completeAttempt(filePath, attemptId, { status: "succeeded", modelSource: result.model })?.durationMs;
     } catch (err) {
-      text = `⚠️ Failed to generate pitch: ${String(err)}`;
+      const completed = completeAttempt(filePath, attemptId, { status: "failed", error: err });
+      const failure = eventFailureText("Failed to generate pitch", err);
+      text = failure.text;
+      errorKind = failure.errorKind;
+      durationMs = completed?.durationMs;
+      failed = true;
     }
     setThinkingAgent(filePath, null);
 
-    pitches[agentId] = text;
+    if (!failed) pitches[agentId] = text;
 
     const agent = getSessionAgentIdentity(session, agentId);
     appendEvent(filePath, {
       id: `evt_pitch_${agentId}_${Date.now()}`,
       timestamp: new Date().toISOString(),
-      type: "worker",
+      type: failed ? "error" : "worker",
       speaker: agentId,
       emoji: agent.emoji,
       role: "worker",
       text,
       model: spawnedModel,
       modelSource: spawnedModel,
+      error: failed || undefined,
+      errorKind,
+      durationMs,
+      attemptId,
+      phase: "competitive-pitch",
     });
 
-    // Store pitch in session state
-    const pitchRaw = fs.readFileSync(filePath, "utf-8");
-    const pitchSession = JSON.parse(pitchRaw);
-    if (!pitchSession.competitive) pitchSession.competitive = { phase: "pitch", voteMode: competitiveVoteMode, topCount: competitiveTopCount, pitches: {}, votes: [], winner: null, voteTally: {} };
-    pitchSession.competitive.pitches[agentId] = text;
-    fs.writeFileSync(filePath, JSON.stringify(pitchSession, null, 2));
+    if (!failed) {
+      // Store pitch in session state
+      const pitchRaw = fs.readFileSync(filePath, "utf-8");
+      const pitchSession = JSON.parse(pitchRaw);
+      if (!pitchSession.competitive) pitchSession.competitive = { phase: "pitch", voteMode: competitiveVoteMode, topCount: competitiveTopCount, pitches: {}, votes: [], winner: null, voteTally: {} };
+      pitchSession.competitive.pitches[agentId] = text;
+      fs.writeFileSync(filePath, JSON.stringify(pitchSession, null, 2));
+    }
 
     await new Promise((r) => setTimeout(r, 500));
     const continueSession = await applyPacing(filePath, pacing);
@@ -1567,12 +1710,26 @@ ${pitchSummary}
     setThinkingAgent(filePath, agentId);
     let text = "";
     let spawnedModel = agentModel;
+    let failed = false;
+    let errorKind: string | undefined;
+    let durationMs: number | undefined;
+    const attemptId = beginAttempt(filePath, {
+      phase: "competitive-critique",
+      agentId,
+      model: agentModel,
+    });
     try {
       const result = await callAgent(systemPrompt, userPrompt, agentModel, agentThinking || false, RESPONSE_LENGTH_CONFIG[agentLength].maxTokens, agentId);
       text = result.text;
       spawnedModel = result.model;
+      durationMs = completeAttempt(filePath, attemptId, { status: "succeeded", modelSource: result.model })?.durationMs;
     } catch (err) {
-      text = `⚠️ Failed to generate critique: ${String(err)}`;
+      const completed = completeAttempt(filePath, attemptId, { status: "failed", error: err });
+      const failure = eventFailureText("Failed to generate critique", err);
+      text = failure.text;
+      errorKind = failure.errorKind;
+      durationMs = completed?.durationMs;
+      failed = true;
     }
     setThinkingAgent(filePath, null);
 
@@ -1580,13 +1737,18 @@ ${pitchSummary}
     appendEvent(filePath, {
       id: `evt_critique_${agentId}_${Date.now()}`,
       timestamp: new Date().toISOString(),
-      type: "reviewer",
+      type: failed ? "error" : "reviewer",
       speaker: agentId,
       emoji: agent.emoji,
       role: "reviewer",
       text,
       model: spawnedModel,
       modelSource: spawnedModel,
+      error: failed || undefined,
+      errorKind,
+      durationMs,
+      attemptId,
+      phase: "competitive-critique",
     });
 
     await new Promise((r) => setTimeout(r, 500));
@@ -1622,7 +1784,10 @@ ${pitchSummary}
     if (checkSession.status !== "active") return;
 
     const currentEvents = checkSession.events || [];
-    const history = buildHistoryString(currentEvents);
+    const blindVoteEvents = currentEvents.filter(
+      (event: { id?: string }) => !String(event.id || "").startsWith("evt_vote_")
+    );
+    const history = buildHistoryString(blindVoteEvents);
     const agentModel = resolveModel(agentModelOverrides?.[agentId] || model).model;
     const agentThinking = agentThinkingLevels?.[agentId] || (thinking ? "medium" : undefined);
     const systemPrompt = buildCompetitiveSystemPrompt(agentId, "vote", pitches);
@@ -1633,26 +1798,40 @@ ${pitchSummary}
     setThinkingAgent(filePath, agentId);
     let text = "";
     let spawnedModel = agentModel;
+    let failed = false;
+    let errorKind: string | undefined;
+    let durationMs: number | undefined;
+    const attemptId = beginAttempt(filePath, {
+      phase: "competitive-vote",
+      agentId,
+      model: agentModel,
+    });
     try {
       const result = await callAgent(systemPrompt, userPrompt, agentModel, agentThinking || false, 512, agentId);
       text = result.text;
       spawnedModel = result.model;
+      durationMs = completeAttempt(filePath, attemptId, { status: "succeeded", modelSource: result.model })?.durationMs;
     } catch (err) {
-      text = `⚠️ Failed to generate vote: ${String(err)}`;
+      const completed = completeAttempt(filePath, attemptId, { status: "failed", error: err });
+      const failure = eventFailureText("Failed to generate vote", err);
+      text = failure.text;
+      errorKind = failure.errorKind;
+      durationMs = completed?.durationMs;
+      failed = true;
     }
     setThinkingAgent(filePath, null);
 
     // Parse the vote
-    const topIdeaVotes = isTopIdeasVote ? parseTopIdeaVotes(text) : [];
-    const votedFor = isTopIdeasVote ? (topIdeaVotes.join("; ") || "Unknown") : parseCompetitiveVote(text, agentId);
-    if (isTopIdeasVote) {
+    const topIdeaVotes = !failed && isTopIdeasVote ? parseTopIdeaVotes(text) : [];
+    const votedFor = failed ? "Provider failed" : isTopIdeasVote ? (topIdeaVotes.join("; ") || "Unknown") : parseCompetitiveVote(text, agentId);
+    if (!failed && isTopIdeasVote) {
       const normalizedVotes: string[] = [];
       for (const idea of topIdeaVotes) {
         const tallyLabel = registerTopIdeaVote(idea);
         if (tallyLabel) normalizedVotes.push(tallyLabel);
       }
       votes.push({ voter: agentId, votedFor: normalizedVotes.join("; ") || votedFor, reasoning: text });
-    } else if (votedFor !== "Unknown" && voteTally[votedFor] !== undefined) {
+    } else if (!failed && votedFor !== "Unknown" && voteTally[votedFor] !== undefined) {
       voteTally[votedFor]++;
       votes.push({ voter: agentId, votedFor, reasoning: text });
     } else {
@@ -1663,7 +1842,7 @@ ${pitchSummary}
     appendEvent(filePath, {
       id: `evt_vote_${agentId}_${Date.now()}`,
       timestamp: new Date().toISOString(),
-      type: "worker",
+      type: failed ? "error" : "worker",
       speaker: agentId,
       emoji: agent.emoji || "🗳️",
       role: "worker",
@@ -1671,6 +1850,11 @@ ${pitchSummary}
       verdict: "approve",
       model: spawnedModel,
       modelSource: spawnedModel,
+      error: failed || undefined,
+      errorKind,
+      durationMs,
+      attemptId,
+      phase: "competitive-vote",
     });
 
     await new Promise((r) => setTimeout(r, 300));
@@ -1754,13 +1938,27 @@ Deliver the final verdict and action plan.`;
   const summaryModelId = resolveModel(agentModelOverrides?.Henry || model).model;
   const summaryThinking = agentThinkingLevels?.Henry || (thinking ? "medium" : undefined);
   let summaryModel = summaryModelId;
+  const summaryAttemptId = beginAttempt(filePath, {
+    phase: "competitive-summary",
+    agentId: "Henry",
+    model: summaryModelId,
+  });
+  let summaryDurationMs: number | undefined;
+  let summaryErrorKind: string | undefined;
+  let summaryError = false;
   setThinkingAgent(filePath, "Henry");
   try {
     const result = await callAgent(summarySystemPrompt, summaryUserPrompt, summaryModelId, summaryThinking || false, lengthMaxTokens, "Henry");
     summaryText = result.text;
     summaryModel = result.model;
+    summaryDurationMs = completeAttempt(filePath, summaryAttemptId, { status: "succeeded", modelSource: result.model })?.durationMs;
   } catch (err) {
-    summaryText = `Could not generate summary: ${String(err)}`;
+    const completed = completeAttempt(filePath, summaryAttemptId, { status: "failed", error: err });
+    const failure = eventFailureText("Could not generate summary", err);
+    summaryText = failure.text;
+    summaryErrorKind = failure.errorKind;
+    summaryDurationMs = completed?.durationMs;
+    summaryError = true;
   }
   setThinkingAgent(filePath, null);
 
@@ -1776,6 +1974,11 @@ Deliver the final verdict and action plan.`;
     verdict: "approve",
     model: summaryModel,
     modelSource: summaryModel,
+    error: summaryError || undefined,
+    errorKind: summaryErrorKind,
+    durationMs: summaryDurationMs,
+    attemptId: summaryAttemptId,
+    phase: "competitive-summary",
   });
 
   // Mark session complete
@@ -1784,6 +1987,8 @@ Deliver the final verdict and action plan.`;
   completedSession.status = "completed";
   completedSession.completedAt = new Date().toISOString();
   completedSession.outcome = "competitive-complete";
+  completedSession.thinkingAgent = null;
+  completedSession.runInProgress = false;
   completedSession.competitive = { phase: "complete", voteMode: competitiveVoteMode, topCount: competitiveTopCount, pitches, votes, winner, voteTally, topIdeas };
   fs.writeFileSync(filePath, JSON.stringify(completedSession, null, 2));
 }

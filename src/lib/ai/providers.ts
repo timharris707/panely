@@ -10,6 +10,9 @@ export interface ProviderModel {
   routedModel?: string;
   localCli?: "claude" | "codex" | "gemini";
   intent?: string;
+  contextWindow?: number;
+  thinkingLevels?: Array<"minimal" | "low" | "medium" | "high" | "xhigh" | "max">;
+  intendedUse?: string;
 }
 
 export const PROVIDERS: ProviderModel[] = [
@@ -22,6 +25,9 @@ export const PROVIDERS: ProviderModel[] = [
     routedModel: "anthropic/claude-opus-4-8",
     localCli: "claude",
     intent: "Most capable Claude option for hard reasoning and agentic work.",
+    contextWindow: 200000,
+    thinkingLevels: ["low", "medium", "high", "xhigh", "max"],
+    intendedUse: "Deep strategy, synthesis, judgment, and high-stakes critique.",
   },
   {
     id: "claude-sonnet",
@@ -33,6 +39,35 @@ export const PROVIDERS: ProviderModel[] = [
     routedModel: "anthropic/claude-sonnet-4-6",
     localCli: "claude",
     intent: "Deep reasoning, synthesis, and careful critique.",
+    contextWindow: 200000,
+    thinkingLevels: ["low", "medium", "high", "xhigh", "max"],
+    intendedUse: "Balanced analysis, critique, and live moderation.",
+  },
+  {
+    id: "gemini-pro",
+    name: "Gemini 3.1 Pro Preview",
+    provider: "google",
+    model: "gemini-3.1-pro-preview",
+    costTier: "medium",
+    routedModel: "google/gemini-3.1-pro-preview",
+    localCli: "gemini",
+    intent: "Google flagship for long-context analysis, forecasting, and data-heavy review.",
+    contextWindow: 1000000,
+    thinkingLevels: ["minimal", "low", "medium", "high"],
+    intendedUse: "Large source packets, repository review, and long-context comparison.",
+  },
+  {
+    id: "gemini-flash",
+    name: "Gemini 3.1 Flash-Lite",
+    provider: "google",
+    model: "gemini-3.1-flash-lite",
+    costTier: "low",
+    routedModel: "google/gemini-3.1-flash-lite",
+    localCli: "gemini",
+    intent: "Fast Google fallback for quick passes and lower-latency checks.",
+    contextWindow: 1000000,
+    thinkingLevels: ["minimal", "low", "medium"],
+    intendedUse: "Fast large-context passes when depth is less important than speed.",
   },
   {
     id: "codex-frontier",
@@ -43,35 +78,9 @@ export const PROVIDERS: ProviderModel[] = [
     routedModel: "openai/gpt-5.5",
     localCli: "codex",
     intent: "Coding, product strategy, and broad frontier reasoning.",
-  },
-  {
-    id: "gpt-4o",
-    name: "GPT-4o",
-    provider: "openai",
-    model: "gpt-4o",
-    costTier: "medium",
-    routedModel: "openai/gpt-4o",
-    localCli: "codex",
-    intent: "Fast general-purpose fallback.",
-  },
-  {
-    id: "gemini-pro",
-    name: "Gemini 2.5 Pro",
-    provider: "google",
-    model: "gemini-2.5-pro",
-    costTier: "medium",
-    routedModel: "google/gemini-2.5-pro",
-    localCli: "gemini",
-    intent: "Long-context analysis, forecasting, and data-heavy review.",
-  },
-  {
-    id: "gemini-flash",
-    name: "Gemini Flash",
-    provider: "google",
-    model: "gemini-2.5-flash",
-    costTier: "low",
-    routedModel: "google/gemini-2.5-flash",
-    localCli: "gemini",
+    contextWindow: 200000,
+    thinkingLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    intendedUse: "Software review, product architecture, implementation planning, and broad reasoning.",
   },
 ];
 

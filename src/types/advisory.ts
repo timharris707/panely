@@ -14,6 +14,10 @@ export interface AdvisoryEvent {
   modelSource?: string;
   streaming?: boolean;
   error?: boolean;
+  errorKind?: string;
+  durationMs?: number;
+  attemptId?: string;
+  phase?: string;
 }
 
 export interface ActionItem {
@@ -94,6 +98,42 @@ export interface AdvisorySession {
   agentResponseLengths?: Record<string, string>;
   agentThinkingLevels?: Record<string, string>;
   moderator?: string;
+  modelHealthSnapshot?: unknown;
+  runAttempts?: AdvisoryRunAttempt[];
+  brief?: BoardBrief;
+}
+
+export interface AdvisoryRunAttempt {
+  id: string;
+  phase: string;
+  agentId: string;
+  model: string;
+  modelSource?: string;
+  status: "running" | "succeeded" | "failed";
+  startedAt: string;
+  completedAt?: string;
+  durationMs?: number;
+  attempt: number;
+  errorKind?: string;
+  error?: string;
+}
+
+export interface BoardBrief {
+  id: string;
+  sessionId: string;
+  title: string;
+  topic: string;
+  mode: "roundtable" | "competitive";
+  status: "draft" | "complete";
+  generatedAt: string;
+  decision: string;
+  recommendation: string;
+  topIdeas: Array<{ idea: string; votes?: number; rank?: number }>;
+  dissent: string[];
+  risks: string[];
+  actionItems: string[];
+  modelProvenance: Array<{ agent: string; model?: string; status?: string; durationMs?: number }>;
+  markdown: string;
 }
 
 export interface CustomAgent {

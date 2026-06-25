@@ -238,6 +238,22 @@ function getPrintCSS(): string {
       margin: 20px 0;
     }
 
+    .pdf-brief-markdown {
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+      font-size: 9px;
+      line-height: 1.55;
+      color: #1e293b;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 14px;
+      margin-bottom: 18px;
+      page-break-inside: auto;
+    }
+
     /* Round divider */
     .pdf-round-divider {
       display: flex;
@@ -422,7 +438,17 @@ function getPrintCSS(): string {
 
 // ─── HTML generation ────────────────────────────────────────────────────────
 
-function buildPrintHTML(session: PDFSession, events: PDFEvent[]): string {
+function buildBriefHTML(briefMarkdown?: string) {
+  if (!briefMarkdown) return "";
+  return `
+    <div class="pdf-section-label">Board Brief</div>
+    <pre class="pdf-brief-markdown">${escapeHTML(briefMarkdown)}</pre>
+    <hr class="pdf-divider" />
+    <div class="pdf-section-label">Transcript</div>
+  `;
+}
+
+function buildPrintHTML(session: PDFSession, events: PDFEvent[], briefMarkdown?: string): string {
   const dateStr = formatDate(session.createdAt);
   const modelsUsed = [...new Set(events.map((e) => e.model).filter(Boolean))];
   const modelsStr = modelsUsed.length > 0 ? modelsUsed.join(", ") : (session.model ?? "");
@@ -555,6 +581,8 @@ function buildPrintHTML(session: PDFSession, events: PDFEvent[]): string {
       <div class="pdf-meta">${metaChips.join("")}</div>
     </div>
 
+    ${buildBriefHTML(briefMarkdown)}
+
     <div class="pdf-section-label">Participants</div>
     <div class="pdf-participants">${participants}</div>
 
@@ -585,7 +613,15 @@ export async function exportSessionAsPDF(
   session: PDFSession,
   events: PDFEvent[]
 ): Promise<void> {
-  const html = buildPrintHTML(session, events);
+  let briefMarkdown = "";
+  try {
+    const res = await fetch(`/api/advisory/sessions/${session.id}/brief?regenerate=1`, { cache: "no-store" });
+    const data = await res.json();
+    if (res.ok && data.brief?.markdown) briefMarkdown = data.brief.markdown;
+  } catch {
+    // Fall back to transcript-only printable artifact.
+  }
+  const html = buildPrintHTML(session, events, briefMarkdown);
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const printWindow = window.open(url, "_blank");

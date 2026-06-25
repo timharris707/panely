@@ -6,6 +6,7 @@ import {
   saveAdvisorySession,
   type AdvisorySessionRecord,
 } from "@/lib/advisory-session-store";
+import type { ModelHealthResult } from "@/lib/ai/model-health";
 
 const DEFAULT_REFERENCE_CONTEXT_BUDGET_CHARS = 50_000;
 const MAX_REFERENCE_CONTEXT_BUDGET_CHARS = 1_000_000;
@@ -14,6 +15,23 @@ function resolveReferenceContextBudget(value: unknown) {
   const parsed = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_REFERENCE_CONTEXT_BUDGET_CHARS;
   return Math.min(Math.trunc(parsed), MAX_REFERENCE_CONTEXT_BUDGET_CHARS);
+}
+
+function selectedModelIds(defaultModel: unknown, overrides: unknown) {
+  const ids = new Set<string>();
+  ids.add(typeof defaultModel === "string" && defaultModel ? defaultModel : "claude-sonnet");
+  if (overrides && typeof overrides === "object" && !Array.isArray(overrides)) {
+    for (const value of Object.values(overrides)) {
+      if (typeof value === "string" && value) ids.add(value);
+    }
+  }
+  return Array.from(ids);
+}
+
+function summarizeUnhealthyModels(results: ModelHealthResult[]) {
+  return results
+    .filter((result) => !result.ok)
+    .map((result) => `${result.name} (${result.model}): ${result.error || result.status}`);
 }
 
 export async function GET() {
@@ -50,6 +68,19 @@ export async function POST(req: NextRequest) {
     const id = `session-${Date.now()}-${randomUUID().slice(0, 8)}`;
     const now = new Date().toISOString();
     const resolvedReferenceContextBudget = resolveReferenceContextBudget(referenceContextBudgetChars);
+    const { probeSelectedModelHealth } = await import("@/lib/ai/model-health");
+    const modelHealth = probeSelectedModelHealth(selectedModelIds(model, agentModelOverrides));
+    const unhealthyModels = summarizeUnhealthyModels(modelHealth);
+    if (unhealthyModels.length > 0) {
+      return NextResponse.json(
+        {
+          error: "One or more selected models failed local CLI preflight.",
+          models: modelHealth,
+          details: unhealthyModels,
+        },
+        { status: 400 }
+      );
+    }
 
     const isCompetitive = mode === "competitive";
     const resolvedCompetitiveVoteMode: "agent-winner" | "top-ideas" = competitiveVoteMode === "top-ideas" ? "top-ideas" : "agent-winner";
@@ -100,6 +131,7 @@ export async function POST(req: NextRequest) {
       ...(competitiveState ? { competitive: competitiveState } : {}),
       ...(isCompetitive ? { competitiveVoteMode: resolvedCompetitiveVoteMode, competitiveTopCount: resolvedCompetitiveTopCount } : {}),
       ...(moderator ? { moderator } : {}),
+      modelHealthSnapshot: modelHealth,
       events: [
         {
           id: "evt_001",

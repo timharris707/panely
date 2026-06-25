@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan: Panely Provider Reliability, Publish Safety, Artifacts, and Telemetry</title>
+<style>
+:root {
+  --bg: #0b0d10;
+  --surface: #15181d;
+  --surface-2: #1d222a;
+  --ink: #f4f7fb;
+  --muted: #a7b0bd;
+  --line: #313844;
+  --accent: #7c8cff;
+  --accent-2: #39d98a;
+  --warn: #f5b84b;
+  --danger: #ff6b6b;
+  --code: #101318;
+  --radius: 8px;
+  --font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); color: var(--ink); font-family: var(--font); line-height: 1.55; }
+body { margin: 0; padding: 32px; }
+main { max-width: 1120px; margin: 0 auto; }
+header { border: 1px solid var(--line); background: linear-gradient(135deg, #171b24, #101318); border-radius: var(--radius); padding: 28px; margin-bottom: 18px; }
+h1 { margin: 0 0 12px; font-size: 34px; line-height: 1.1; letter-spacing: 0; }
+h2 { margin: 0 0 14px; font-size: 22px; letter-spacing: 0; }
+h3 { margin: 0 0 10px; font-size: 18px; letter-spacing: 0; }
+h4 { margin: 22px 0 8px; font-size: 15px; color: var(--ink); }
+p { margin: 0 0 12px; color: var(--muted); }
+a { color: var(--accent); }
+section, .phase { border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius); padding: 22px; margin: 18px 0; }
+.phase { background: #12161c; }
+code { font-family: var(--mono); background: var(--code); border: 1px solid #222a36; border-radius: 5px; padding: 2px 5px; color: #dce6f5; }
+pre { background: var(--code); border: 1px solid #222a36; border-radius: var(--radius); padding: 14px; overflow: auto; color: #dce6f5; }
+ul { margin: 0 0 10px 20px; padding: 0; color: var(--muted); }
+li { margin: 7px 0; }
+dl { display: grid; grid-template-columns: 160px 1fr; gap: 8px 14px; margin: 12px 0 0; }
+dt { color: var(--muted); }
+dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+summary { cursor: pointer; color: var(--ink); font-weight: 800; }
+.meta { color: var(--muted); }
+.tag { display: inline-flex; align-items: center; height: 22px; padding: 0 7px; border-radius: 5px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; margin-right: 6px; }
+.existing { color: #a5b4fc; background: rgba(124, 140, 255, .12); border: 1px solid rgba(124, 140, 255, .35); }
+.new { color: #7ee2a8; background: rgba(57, 217, 138, .12); border: 1px solid rgba(57, 217, 138, .35); }
+.checklist { list-style: none; margin-left: 0; }
+.status { color: var(--accent-2); font-weight: 800; }
+.loop { border-left: 3px solid var(--warn); background: rgba(245, 184, 75, .08); padding: 12px 14px; border-radius: 6px; color: #f8d58b; margin-top: 14px; }
+.visual { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 18px 0 0; }
+.node { min-height: 92px; border: 1px solid var(--line); background: var(--surface-2); border-radius: var(--radius); padding: 14px; }
+.node strong { display: block; color: var(--ink); margin-bottom: 6px; }
+.node span { color: var(--muted); font-size: 13px; }
+.callout { border: 1px solid rgba(124, 140, 255, .35); background: rgba(124, 140, 255, .1); color: #dbe1ff; padding: 14px; border-radius: var(--radius); margin: 14px 0; }
+.risk { border-color: rgba(255, 107, 107, .35); background: rgba(255, 107, 107, .08); color: #ffd2d2; }
+table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+th, td { border: 1px solid var(--line); padding: 10px; text-align: left; vertical-align: top; }
+th { color: var(--ink); background: var(--surface-2); }
+td { color: var(--muted); }
+@media (max-width: 820px) {
+  body { padding: 18px; }
+  .visual { grid-template-columns: 1fr; }
+  dl { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<main>
+
+  <header>
+    <h1>Plan: Panely Provider Reliability, Publish Safety, Artifacts, and Telemetry</h1>
+    <p>Build out the four winning priorities from the Panely competitive review: provider reliability, publish safety, board brief artifacts, and stuck-run recovery with execution telemetry.</p>
+    <details class="meta">
+      <summary>Metadata</summary>
+      <dl>
+        <dt>created</dt><dd>2026-06-25T09:09:33Z</dd>
+        <dt>modified</dt><dd>2026-06-25T09:09:33Z</dd>
+        <dt>commits</dt><dd>643a8a7</dd>
+        <dt>agent name</dt><dd>Codex</dd>
+        <dt>session id</dt><dd>current Codex desktop thread</dd>
+        <dt>back refs</dt><dd>Panely competitive review session; local codebase at /Users/timharris/projects/panely; installed planf3 skill from disler/planf3</dd>
+        <dt>forward refs</dt><dd>Implementation PR or commit sequence for provider reliability, publish safety, artifacts, and telemetry</dd>
+      </dl>
+    </details>
+    <div class="visual" aria-label="plan flow">
+      <div class="node"><strong>1. Prove Models</strong><span>Detect, probe, route, and fail cleanly before sessions start.</span></div>
+      <div class="node"><strong>2. Guard Data</strong><span>Prevent local session packets and private material from being published.</span></div>
+      <div class="node"><strong>3. Recover Runs</strong><span>Expose elapsed time, retries, provider failure states, and resume paths.</span></div>
+      <div class="node"><strong>4. Ship Briefs</strong><span>Produce durable decision records and full transcripts after every run.</span></div>
+    </div>
+  </header>
+
+  <section id="purpose">
+    <h2>Purpose</h2>
+    <p>Make Panely reliable enough to trust for serious local-first advisory work. The immediate goal is not more surface area; it is confidence that selected models are current and responding, private local material stays private, long sessions recover from provider failures, and every run ends with an artifact worth saving.</p>
+  </section>
+
+  <section id="problem">
+    <h2>Problem</h2>
+    <p>The recent Panely self-review exposed three real product failures: Gemini was mapped to an older model, large Gemini prompts failed when passed as a giant command-line argument, and failed provider turns were recorded too much like normal session events. A fourth gap is product-value oriented: the conversation is strong, but the end-of-run artifact is not yet a first-class decision record.</p>
+    <div class="callout risk"><strong>Primary risk:</strong> if provider failure, private-data leakage, and incomplete run state are not addressed first, richer artifacts will summarize unreliable or unsafe sessions.</div>
+  </section>
+
+  <section id="solution">
+    <h2>Solution</h2>
+    <p>Implement the buildout in dependency order. First, harden local CLI model routing and preflight checks. Second, add publish-safety guardrails around local data and generated packets. Third, formalize run telemetry and recovery state. Fourth, build first-class board briefs and transcript exports on top of reliable completed sessions.</p>
+  </section>
+
+  <section id="files" class="files">
+    <h2>Relevant Files</h2>
+
+    <h3>Existing Files</h3>
+    <ul>
+      <li><span class="tag existing">existing</span> <code>src/lib/ai/providers.ts</code> - canonical model names, provider IDs, local CLI bindings, and model intent labels.</li>
+      <li><span class="tag existing">existing</span> <code>src/lib/ai/router.ts</code> - local CLI execution path, timeout behavior, stdout streaming, and Gemini prompt delivery.</li>
+      <li><span class="tag existing">existing</span> <code>src/app/api/advisory/model-availability/route.ts</code> - settings API for CLI detection and model response probes.</li>
+      <li><span class="tag existing">existing</span> <code>src/app/advisory/settings/page.tsx</code> - visible model settings page and operator-facing model status.</li>
+      <li><span class="tag existing">existing</span> <code>src/app/api/advisory/session-plan/route.ts</code> - AI-generated session plan prompt and allowed model catalog.</li>
+      <li><span class="tag existing">existing</span> <code>src/app/api/advisory/sessions/[id]/run/route.ts</code> - competitive run loop, pitch/critique/vote phases, final summary, and current completion behavior.</li>
+      <li><span class="tag existing">existing</span> <code>src/lib/advisory-session-store.ts</code> - local session persistence and SQLite-backed JSON session storage.</li>
+      <li><span class="tag existing">existing</span> <code>src/types/advisory.ts</code> - session, event, competitive state, and vote record types.</li>
+      <li><span class="tag existing">existing</span> <code>src/app/advisory/page.tsx</code> - session UI, live/history tabs, results display, and run controls.</li>
+      <li><span class="tag existing">existing</span> <code>src/components/AdvisoryPDFExport.tsx</code> - current printable/export rendering path.</li>
+      <li><span class="tag existing">existing</span> <code>.gitignore</code> - local data exclusion boundary.</li>
+      <li><span class="tag existing">existing</span> <code>README.md</code> - public GitHub positioning and publish workflow language.</li>
+    </ul>
+
+    <h3>New Files</h3>
+    <ul>
+      <li><span class="tag new">new</span> <code>src/lib/ai/model-health.ts</code> - shared model probing, model health result types, latency capture, and sanitized provider errors.</li>
+      <li><span class="tag new">new</span> <code>src/lib/ai/provider-errors.ts</code> - provider error classification for timeout, unavailable model, auth, rate limit, and runtime failure.</li>
+      <li><span class="tag new">new</span> <code>src/lib/publish-safety.ts</code> - repository safety scanner for ignored local data, env files, advisory packets, and accidental staged secrets.</li>
+      <li><span class="tag new">new</span> <code>src/app/api/advisory/publish-safety/route.ts</code> - local-only endpoint to run the safety scanner from settings or future pre-push UI.</li>
+      <li><span class="tag new">new</span> <code>scripts/publish-safety-check.mjs</code> - command-line safety check usable before GitHub pushes.</li>
+      <li><span class="tag new">new</span> <code>src/lib/advisory-run-telemetry.ts</code> - event helpers for run attempts, elapsed time, phase state, provider failures, retries, and recovery hints.</li>
+      <li><span class="tag new">new</span> <code>src/lib/advisory-brief.ts</code> - board brief schema, markdown rendering, and decision record extraction helpers.</li>
+      <li><span class="tag new">new</span> <code>src/app/api/advisory/sessions/[id]/brief/route.ts</code> - durable board brief generation and retrieval endpoint.</li>
+    </ul>
+  </section>
+
+  <section id="phases">
+    <h2>Implementation Phases</h2>
+    <p><strong>IMPORTANT:</strong> Execute every phase and task step by step, in order, top to bottom.</p>
+    <p>Status markers: <code>[]</code> idle, <code>[wip]</code> in progress, <code>[x]</code> complete, <code>[f]</code> failed. All start as <code>[]</code>; the Build Plan workflow updates them as it works.</p>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 1: Provider Reliability and Model Health</h3>
+      <p>Make local model routing truthful and testable before any serious session starts. This phase includes the current Gemini 3.1 Pro mapping and stdin large-context fix, then expands it into a reusable health layer.</p>
+
+      <h4>1.1 Normalize Model Catalog</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Confirm <code>gemini-pro</code> maps to <code>gemini-3.1-pro-preview</code> and settings/session planner labels it as Google flagship.</li>
+        <li><code class="status">[x]</code> Confirm <code>gemini-flash</code> maps to a locally accepted fallback, currently <code>gemini-3.1-flash-lite</code>.</li>
+        <li><code class="status">[x]</code> Remove or relabel <code>gpt-4o</code> if the local Codex CLI cannot run it; do not show it as usable when probe fails.</li>
+        <li><code class="status">[x]</code> Add model capability metadata: context window, thinking levels supported, provider, local CLI, and intended use.</li>
+      </ul>
+
+      <h4>1.2 Extract Shared Health Probing</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Move model probe logic out of <code>model-availability/route.ts</code> into <code>src/lib/ai/model-health.ts</code>.</li>
+        <li><code class="status">[x]</code> Use a common <code>ModelHealthResult</code> type with <code>status</code>, <code>durationMs</code>, <code>model</code>, <code>provider</code>, and sanitized <code>error</code>.</li>
+        <li><code class="status">[x]</code> Support probe scopes: binary detection, tiny model response, and optional large-context smoke test.</li>
+        <li><code class="status">[x]</code> Cache probe results briefly in memory to avoid running every CLI repeatedly on every settings refresh.</li>
+      </ul>
+
+      <h4>1.3 Harden CLI Execution</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Keep Gemini prompt delivery on stdin for large context and avoid giant command-line arguments.</li>
+        <li><code class="status">[x]</code> Add provider-specific prompt delivery comments where the CLI behaviors differ.</li>
+        <li><code class="status">[x]</code> Classify failures into timeout, model-not-found, auth, rate-limit, provider-runtime, and unknown.</li>
+        <li><code class="status">[x]</code> Ensure stderr shown to users is sanitized and capped; never expose env vars or command context.</li>
+      </ul>
+
+      <h4>1.4 Preflight Selected Session Plans</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Before starting a session, probe the exact selected model IDs.</li>
+        <li><code class="status">[x]</code> If any selected model fails, block start or require an explicit substitution.</li>
+        <li><code class="status">[x]</code> Add UI copy on the launch wizard showing "responding", "failed", or "not tested" per model.</li>
+        <li><code class="status">[x]</code> Persist a lightweight health snapshot onto the session so the final artifact can show what was actually available at start.</li>
+      </ul>
+
+      <h4>1.5 Testing Strategy</h4>
+      <p>Validate through unit-level helpers, API probes, and a small real session that includes Gemini 3.1 Pro with a large reference packet.</p>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> <code>curl -s "http://localhost:3000/api/advisory/model-availability?probe=1"</code> - proves configured models respond or fail truthfully.</li>
+        <li><code class="status">[x]</code> <code>npm run lint</code> - proves ESLint accepts the refactor.</li>
+        <li><code class="status">[x]</code> <code>npx tsc --noEmit</code> - proves health result types compile.</li>
+        <li><code class="status">[x]</code> <code>npm run build</code> - proves Next routes and settings page compile for production.</li>
+      </ul>
+      <div class="loop">Do not exit this phase until failed providers are impossible to confuse with healthy providers in settings or launch.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 2: Publish-Safety and Local Data Boundary</h3>
+      <p>Prevent irreversible public mistakes. Panely is local-first but public on GitHub, so private advisory packets, session JSON, SQLite files, env files, and generated source packets need explicit guardrails.</p>
+
+      <h4>2.1 Define Safety Rules</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> List protected paths: <code>data/advisory/*.json</code>, SQLite files, <code>.env*</code>, source packets, local transcripts, generated exports, and temp artifacts.</li>
+        <li><code class="status">[x]</code> List protected content patterns: API key prefixes, private repo packet headers, local absolute paths with sensitive home directories, and advisory reference contexts.</li>
+        <li><code class="status">[x]</code> Keep the scanner conservative and local-only; it should produce findings, not upload anything.</li>
+      </ul>
+
+      <h4>2.2 Implement Scanner</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Create <code>src/lib/publish-safety.ts</code> with filesystem and git-index checks.</li>
+        <li><code class="status">[x]</code> Create <code>scripts/publish-safety-check.mjs</code> for terminal use before <code>git push</code>.</li>
+        <li><code class="status">[x]</code> Add a settings page safety panel showing pass/fail, scanned paths, and actionable remediation.</li>
+        <li><code class="status">[x]</code> Update <code>README.md</code> publishing section to run this scanner before GitHub pushes.</li>
+      </ul>
+
+      <h4>2.3 Strengthen Git Ignore Boundary</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Audit <code>.gitignore</code> against the protected-path list.</li>
+        <li><code class="status">[x]</code> Add ignore rules for generated packets and exported session artifacts that should remain local by default.</li>
+        <li><code class="status">[x]</code> Confirm public-facing specs can be tracked while private run outputs remain ignored.</li>
+      </ul>
+
+      <h4>2.4 Testing Strategy</h4>
+      <p>Use synthetic fixture files and git-index dry runs to prove the scanner catches the right things without blocking normal source files.</p>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> <code>node scripts/publish-safety-check.mjs</code> - proves the current repo is safe to publish.</li>
+        <li><code class="status">[x]</code> <code>git check-ignore data/advisory/example.json</code> - proves local advisory data is ignored.</li>
+        <li><code class="status">[x]</code> <code>npm run lint</code> - proves scanner and UI code pass lint.</li>
+        <li><code class="status">[x]</code> <code>npm run build</code> - proves settings safety panel compiles.</li>
+      </ul>
+      <div class="loop">Do not exit this phase until a mistaken <code>git add .</code> is unlikely to publish private Panely data.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 3: Stuck-Run Recovery and Execution Telemetry</h3>
+      <p>Make long sessions legible and recoverable. Operators should know which agent is running, how long it has been running, what model it is using, whether it failed, and what action is available next.</p>
+
+      <h4>3.1 Add Run Attempt Model</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Extend session state with <code>runAttempts</code> or add normalized telemetry events for each agent call.</li>
+        <li><code class="status">[x]</code> Record phase, agent, model ID, provider, startedAt, completedAt, durationMs, status, attempt number, and error class.</li>
+        <li><code class="status">[x]</code> Mark provider failures as failure events, not normal worker output.</li>
+        <li><code class="status">[x]</code> Preserve transcript readability while separating system telemetry from contentful advisor responses.</li>
+      </ul>
+
+      <h4>3.2 Retry and Substitution Policy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Define when to retry automatically: transient provider runtime failure, timeout, and empty output.</li>
+        <li><code class="status">[x]</code> Define when not to retry automatically: model-not-found, auth failure, explicit user pause, or safety block.</li>
+        <li><code class="status">[x]</code> Add fallback substitution only when user pre-approves it or launch config marks it allowed.</li>
+        <li><code class="status">[x]</code> Display substituted models in the final artifact and event stream.</li>
+      </ul>
+
+      <h4>3.3 UI Telemetry</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Show per-agent elapsed time while a model is thinking.</li>
+        <li><code class="status">[x]</code> Show phase progress based on successful content turns, not just raw events.</li>
+        <li><code class="status">[x]</code> Add visible failure badges for failed provider turns with a retry action where safe.</li>
+        <li><code class="status">[x]</code> Fix any state path where <code>competitive.phase</code> is complete but <code>status</code> or <code>runInProgress</code> remains active.</li>
+      </ul>
+
+      <h4>3.4 Testing Strategy</h4>
+      <p>Use intentionally invalid model IDs, forced timeouts, and normal successful runs to validate all state transitions.</p>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> <code>curl -s http://localhost:3000/api/advisory/sessions/&lt;id&gt;</code> - proves completed sessions have <code>status: completed</code> and <code>runInProgress: false</code>.</li>
+        <li><code class="status">[x]</code> <code>npm run lint</code> - proves telemetry helpers and UI pass lint.</li>
+        <li><code class="status">[x]</code> <code>npx tsc --noEmit</code> - proves new telemetry state is typed.</li>
+        <li><code class="status">[x]</code> <code>npm run build</code> - proves full app compiles.</li>
+      </ul>
+      <div class="loop">Do not exit this phase until a Gemini failure is visually and structurally different from a valid Gemini answer.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 4: First-Class Board Brief and Decision Record</h3>
+      <p>Turn each session into a usable artifact. The brief should be durable, exportable, and trustworthy because it includes what was decided, why, dissent, model provenance, and the full transcript or a link to it.</p>
+
+      <h4>4.1 Define Brief Schema</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Create a <code>BoardBrief</code> type with title, topic, mode, status, modelsUsed, providerHealth, decision, topIdeas, dissent, risks, actionItems, transcriptSummary, and generatedAt.</li>
+        <li><code class="status">[x]</code> Include competitive-specific fields: vote mode, blind vote indicator, vote tally, normalized idea rankings, and vote breakdown.</li>
+        <li><code class="status">[x]</code> Include roundtable-specific fields: consensus, key disagreements, open questions, and recommendation.</li>
+      </ul>
+
+      <h4>4.2 Generate and Persist Briefs</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add <code>src/lib/advisory-brief.ts</code> to derive a deterministic baseline brief from session state.</li>
+        <li><code class="status">[x]</code> Use the moderator model only to improve prose after deterministic facts are assembled.</li>
+        <li><code class="status">[x]</code> Persist brief JSON or markdown alongside the session record in local SQLite/session data.</li>
+        <li><code class="status">[x]</code> Make brief regeneration idempotent so fixing a bug can regenerate old briefs safely.</li>
+      </ul>
+
+      <h4>4.3 Export Paths</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add "Export Brief MD" that includes the artifact plus the complete transcript appendix.</li>
+        <li><code class="status">[x]</code> Fix PDF export so it renders the same brief content instead of blank or partial pages.</li>
+        <li><code class="status">[x]</code> Add a route like <code>/brief/[id]</code> or reuse the existing route to show the final decision record cleanly.</li>
+        <li><code class="status">[x]</code> Make exports include model IDs, provider source, thinking level, health snapshot, and failures/substitutions.</li>
+      </ul>
+
+      <h4>4.4 Testing Strategy</h4>
+      <p>Validate with one competitive session, one roundtable session, and a session containing a provider failure.</p>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> <code>npm run lint</code> - proves brief generator and export UI pass lint.</li>
+        <li><code class="status">[x]</code> <code>npx tsc --noEmit</code> - proves brief schema compiles.</li>
+        <li><code class="status">[x]</code> <code>npm run build</code> - proves export and brief routes compile.</li>
+        <li><code class="status">[x]</code> Browser test: open a completed competitive session, export MD, export PDF, and confirm both contain vote results, final brief, and transcript content.</li>
+      </ul>
+      <div class="loop">Do not exit this phase until the final artifact is useful without rereading the live conversation.</div>
+    </div>
+  </section>
+
+  <section id="validation">
+    <h2>Validation Commands</h2>
+    <p>Execute these commands to validate the entire plan is complete:</p>
+    <ul class="checklist">
+      <li><code class="status">[x]</code> <code>npm run lint</code> - verifies code style and static lint rules.</li>
+      <li><code class="status">[x]</code> <code>npx tsc --noEmit</code> - verifies TypeScript across provider, telemetry, and artifact state.</li>
+      <li><code class="status">[x]</code> <code>npm run build</code> - verifies production compilation.</li>
+      <li><code class="status">[x]</code> <code>curl -s "http://localhost:3000/api/advisory/model-availability?probe=1"</code> - verifies live model response status and latency.</li>
+      <li><code class="status">[x]</code> <code>node scripts/publish-safety-check.mjs</code> - verifies the public GitHub push boundary.</li>
+      <li><code class="status">[x]</code> Browser test: create a competitive top-ideas session using Claude, Codex, and Gemini 3.1 Pro; confirm blind voting, model health, telemetry, final completion, and artifact export.</li>
+    </ul>
+    <div class="loop">The plan is not complete until every box is checked and every command passes. If a step is impossible, mark it with <code>[f]</code>, explain why in amendments, and continue only if product safety is not compromised.</div>
+  </section>
+
+  <section id="notes">
+    <h2>Notes</h2>
+    <h3>Completion Note</h3>
+    <p>Implementation completed with local CLI model probes, publish-safety scanning, run telemetry, failure events, elapsed thinking indicators, and board brief exports. Production build passes; Next/Turbopack still emits a tracing warning for the model-availability route because it intentionally invokes local CLI detection through Node child processes.</p>
+    <h3>Current Local Foundation Already Started</h3>
+    <p>The current worktree already contains uncommitted foundation changes that belong to Phase 1 and Phase 3: Gemini 3.1 Pro mapping, Gemini stdin prompt delivery, settings-page model probes, and blind competitive voting. Before starting broader implementation, review those diffs, decide whether to keep them as the first commit, and avoid mixing unrelated product work into that commit.</p>
+
+    <h3>Recommended Commit Sequence</h3>
+    <table>
+      <thead>
+        <tr><th>Commit</th><th>Scope</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>Gemini 3.1 and model probes</td><td>Unblocks trustworthy model selection and fixes the actual provider failure observed in the Panely review.</td></tr>
+        <tr><td>2</td><td>Publish-safety scanner</td><td>Reduces irreversible public repo risk before adding more local artifacts.</td></tr>
+        <tr><td>3</td><td>Run telemetry and recovery</td><td>Turns provider failures and long runs into legible, recoverable states.</td></tr>
+        <tr><td>4</td><td>Board brief artifacts</td><td>Builds the highest-value user artifact on top of reliable state and safe data boundaries.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Design Constraints</h3>
+    <ul>
+      <li>Keep Panely local-first and subscription-backed through local CLIs.</li>
+      <li>Do not reintroduce OpenRouter or Vercel assumptions into runtime or docs.</li>
+      <li>Model settings must distinguish "binary detected" from "model responding".</li>
+      <li>Provider failures should be useful telemetry, not pretend advisor messages.</li>
+      <li>Final artifacts should include enough provenance to trust the result later.</li>
+    </ul>
+
+    <h3>Rejected Approach</h3>
+    <p>Do not jump straight to a polished artifact UI before provider and safety work. The recent run showed that the system can produce persuasive outputs even when two agents silently fail. That makes reliability and provenance the first product requirement, not internal cleanup.</p>
+  </section>
+
+  <section id="amendments">
+    <h2>Amendments</h2>
+    <p>No amendments yet. Append future plan changes here instead of rewriting history.</p>
+  </section>
+
+</main>
+</body>
+</html>

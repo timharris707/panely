@@ -1,20 +1,38 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { AgentAvatar } from "@/components/AgentAvatar";
 import { AGENTS } from "./constants";
 
 interface TypingIndicatorProps {
   agentId: string | null;
   overrideLabel?: string;
+  startedAt?: number | null;
 }
 
-export default function TypingIndicator({ agentId, overrideLabel }: TypingIndicatorProps) {
+function formatElapsed(ms: number) {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes}m ${remainingSeconds.toString().padStart(2, "0")}s`;
+}
+
+export default function TypingIndicator({ agentId, overrideLabel, startedAt }: TypingIndicatorProps) {
+  const [now, setNow] = useState(() => Date.now());
   const agentDef = agentId ? AGENTS.find((a) => a.id === agentId) : null;
   const label = overrideLabel
     ? overrideLabel
     : agentId
       ? `${agentId} is thinking...`
       : "Agents are deliberating...";
+  const elapsedLabel = startedAt ? formatElapsed(now - startedAt) : null;
+
+  useEffect(() => {
+    if (!startedAt) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [startedAt]);
 
   return (
     <div
@@ -66,8 +84,15 @@ export default function TypingIndicator({ agentId, overrideLabel }: TypingIndica
       </div>
 
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: "12px", color: "#a78bfa", fontWeight: 600, marginBottom: "5px" }}>
-          {label}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "5px" }}>
+          <span style={{ fontSize: "12px", color: "#a78bfa", fontWeight: 600 }}>
+            {label}
+          </span>
+          {elapsedLabel ? (
+            <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 800 }}>
+              {elapsedLabel}
+            </span>
+          ) : null}
         </div>
         {/* Animated dots */}
         <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>

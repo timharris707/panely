@@ -20,6 +20,7 @@ import {
   Paperclip,
   GitBranch,
   Settings,
+  FileText,
 } from "lucide-react";
 import Link from "next/link";
 import { exportSessionAsPDF } from "@/components/AdvisoryPDFExport";
@@ -92,6 +93,8 @@ export default function AdvisoryPage() {
   const [advancingTurn, setAdvancingTurn] = useState(false);
   const [requestingFullRound, setRequestingFullRound] = useState(false);
   const [thinkingAgent, setThinkingAgent] = useState<string | null>(null);
+  const [thinkingStartedAt, setThinkingStartedAt] = useState<number | null>(null);
+  const [thinkingKey, setThinkingKey] = useState<string | null>(null);
   const [connectingToAI, setConnectingToAI] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterAgent, setFilterAgent] = useState<string>("");
@@ -282,6 +285,27 @@ export default function AdvisoryPage() {
 
   // Keep eventsRef in sync
   useEffect(() => { eventsRef.current = events; }, [events]);
+
+  useEffect(() => {
+    const activeThinkingKey = endingSession
+      ? `ending:${activeSession?.id ?? "unknown"}`
+      : thinkingAgent
+        ? `agent:${thinkingAgent}`
+        : connectingToAI
+          ? `connecting:${activeSession?.id ?? "unknown"}`
+          : null;
+
+    if (!activeThinkingKey) {
+      setThinkingKey(null);
+      setThinkingStartedAt(null);
+      return;
+    }
+
+    if (activeThinkingKey !== thinkingKey) {
+      setThinkingKey(activeThinkingKey);
+      setThinkingStartedAt(Date.now());
+    }
+  }, [activeSession?.id, connectingToAI, endingSession, thinkingAgent, thinkingKey]);
 
   // ── Polling ──────────────────────────────────────────────────────────────
 
@@ -509,6 +533,26 @@ export default function AdvisoryPage() {
     const topicSlug = slugify(activeSession.topic);
     const fileName = `${topicSlug}-${dateStr}.md`;
     const blob = new Blob([md], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportBriefMD = async () => {
+    if (!activeSession) return;
+    const res = await fetch(`/api/advisory/sessions/${activeSession.id}/brief?regenerate=1`, { cache: "no-store" });
+    const data = await res.json();
+    if (!res.ok || !data.brief?.markdown) {
+      console.error("Brief export error:", data);
+      return;
+    }
+    const dateStr = new Date(activeSession.createdAt).toISOString().split("T")[0];
+    const topicSlug = slugify(activeSession.title || activeSession.topic);
+    const fileName = `${topicSlug}-board-brief-${dateStr}.md`;
+    const blob = new Blob([data.brief.markdown], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -1229,6 +1273,14 @@ export default function AdvisoryPage() {
                             style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid rgba(96,165,250,0.4)", backgroundColor: "rgba(96,165,250,0.1)", color: "#60a5fa", cursor: "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 600 }}>
                             <FileDown size={12} /> Export MD
                           </button>
+                          <button onClick={handleExportBriefMD} title="Export board brief with transcript"
+                            style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid rgba(74,222,128,0.4)", backgroundColor: "rgba(74,222,128,0.1)", color: "#4ade80", cursor: "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 700 }}>
+                            <FileText size={12} /> Brief MD
+                          </button>
+                          <Link href={`/brief/${activeSession.id}`} target="_blank" title="Open board brief"
+                            style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid rgba(74,222,128,0.4)", backgroundColor: "rgba(74,222,128,0.08)", color: "#4ade80", cursor: "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 700, textDecoration: "none" }}>
+                            <FileText size={12} /> Open Brief
+                          </Link>
                           <button onClick={handleExportPDF} disabled={exportingPDF} title="Print / Save PDF"
                             style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid rgba(139,92,246,0.4)", backgroundColor: exportingPDF ? "rgba(139,92,246,0.2)" : "rgba(139,92,246,0.1)", color: "#a78bfa", cursor: exportingPDF ? "not-allowed" : "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 600, opacity: exportingPDF ? 0.7 : 1, transition: "all 150ms ease" }}>
                             {exportingPDF ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />}
@@ -1407,16 +1459,17 @@ export default function AdvisoryPage() {
                           );
                         })}
                         {endingSession && activeSession?.status === "active" && (
-                          <TypingIndicator agentId={activeSession.moderator || activeSession.agents[0] || "Moderator"} overrideLabel="Moderator is writing the final summary..." />
+                          <TypingIndicator agentId={activeSession.moderator || activeSession.agents[0] || "Moderator"} overrideLabel="Moderator is writing the final summary..." startedAt={thinkingStartedAt} />
                         )}
                         {isGenerating && activeSession?.status === "active" && !isPaused && !endingSession && (
                           <TypingIndicator
                             agentId={thinkingAgent}
                             overrideLabel={connectingToAI && !thinkingAgent ? "Connecting to AI..." : undefined}
+                            startedAt={thinkingStartedAt}
                           />
                         )}
                         {connectingToAI && !isGenerating && activeSession?.status === "active" && !endingSession && (
-                          <TypingIndicator agentId={null} overrideLabel="Connecting to AI..." />
+                          <TypingIndicator agentId={null} overrideLabel="Connecting to AI..." startedAt={thinkingStartedAt} />
                         )}
                         {activeSession?.status === "completed" && sessionData?.competitive && (sessionData.competitive as { phase: string; votes: unknown[]; winner: string | null; voteTally: Record<string, number> }).winner && (() => {
                           const comp = sessionData.competitive as { phase: string; voteMode?: string; topCount?: number; votes: Array<{ voter: string; votedFor: string; reasoning: string }>; winner: string; voteTally: Record<string, number> };
@@ -1655,6 +1708,14 @@ export default function AdvisoryPage() {
                         style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid rgba(96,165,250,0.4)", backgroundColor: "rgba(96,165,250,0.1)", color: "#60a5fa", cursor: "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 600 }}>
                         <FileDown size={12} /> Export MD
                       </button>
+                      <button onClick={handleExportBriefMD} title="Export board brief with transcript"
+                        style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid rgba(74,222,128,0.4)", backgroundColor: "rgba(74,222,128,0.1)", color: "#4ade80", cursor: "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 700 }}>
+                        <FileText size={12} /> Brief MD
+                      </button>
+                      <Link href={`/brief/${activeSession.id}`} target="_blank" title="Open board brief"
+                        style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid rgba(74,222,128,0.4)", backgroundColor: "rgba(74,222,128,0.08)", color: "#4ade80", cursor: "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 700, textDecoration: "none" }}>
+                        <FileText size={12} /> Open Brief
+                      </Link>
                       <button onClick={handleExportPDF} disabled={exportingPDF} title="Open printable artifact"
                         style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid rgba(139,92,246,0.4)", backgroundColor: exportingPDF ? "rgba(139,92,246,0.2)" : "rgba(139,92,246,0.08)", color: "#a78bfa", cursor: exportingPDF ? "not-allowed" : "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 600, opacity: exportingPDF ? 0.6 : 1 }}>
                         {exportingPDF ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />}
