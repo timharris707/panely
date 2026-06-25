@@ -90,7 +90,24 @@ export interface FormalBoardRoundArtifact {
 
 export interface FormalBoardVerdict {
   schema: "advisory-board/verdict@1";
+  title: string;
+  date: string;
   verdict: "ship" | "caution" | "block";
+  confidence: "low" | "medium" | "high";
+  unanimous: boolean;
+  rounds: number;
+  board: Array<{
+    seat: string;
+    model: string;
+    lens?: string;
+    round_verdicts: Array<"ship" | "caution" | "block">;
+    dropped: boolean;
+    verdictsEstimated?: boolean;
+  }>;
+  blockers: Array<{ title: string; body: string }>;
+  dissent: Array<{ who: string; body: string }>;
+  open_questions: string[];
+  next_actions: string[];
   summary: string;
   evidenceBacked: string[];
   judgmentCalls: string[];
@@ -100,6 +117,9 @@ export interface FormalBoardVerdict {
   degradedSeats: Array<{ agentId: string; reason?: string }>;
   valid: boolean;
   validityReason?: string;
+  sameSeatContinuity: string[];
+  synthesisNeutrality?: "neutral-clerk" | "model-reused" | "seat-authored";
+  synthesisProducer?: string;
 }
 
 export interface FormalBoardState {

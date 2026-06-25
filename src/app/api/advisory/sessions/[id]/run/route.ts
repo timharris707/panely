@@ -3,7 +3,7 @@ import path from "path";
 import { sessionFileStore as fs } from "@/lib/advisory-session-store";
 import { AGENT_CONFIGS } from "@/config/agents";
 import { spawnAdvisoryAgentWithRetry, type SpawnAdvisoryAgentResult } from "@/lib/advisory-agent";
-import { resolveProviderModelId } from "@/lib/ai/providers";
+import { getProviderModelById, PROVIDERS, resolveProviderModelId } from "@/lib/ai/providers";
 import { classifyProviderError } from "@/lib/ai/provider-errors";
 import { finishRunAttempt, startRunAttempt, type RunAttemptStartInput } from "@/lib/advisory-run-telemetry";
 import {
@@ -27,6 +27,12 @@ import {
   recordFormalRoundArtifact,
   setFormalBoardPhase,
 } from "@/lib/advisory/formal-board";
+import {
+  buildFormalHandoffData,
+  buildFormalRunMetadata,
+  formalVerdictArtifactName,
+  renderFormalConsensusHtml,
+} from "@/lib/advisory/formal-artifacts";
 import { buildSourcePacket } from "@/lib/advisory/source-packet";
 import { completeRunStep, createRunStep, failRunStep } from "@/lib/advisory/run-ledger";
 import type { AdvisoryRunAttempt, AdvisoryRunStep, FormalBoardState } from "@/types/advisory";
@@ -36,6 +42,18 @@ const MEMORY_FILE = path.join(DATA_DIR, "agent-memory.json");
 
 function eventProvenance(requestedModel?: string, observedModel?: string) {
   return buildRequestedModelProvenance(requestedModel, observedModel);
+}
+
+function modelComparisonKey(modelIdOrSource?: string) {
+  const providerModel = (
+    PROVIDERS.find((modelConfig) =>
+      modelConfig.id === modelIdOrSource ||
+      modelConfig.model === modelIdOrSource ||
+      modelConfig.routedModel === modelIdOrSource ||
+      Boolean(modelIdOrSource?.endsWith(`:${modelConfig.model}`))
+    ) || getProviderModelById(modelIdOrSource)
+  );
+  return `${providerModel.localCli || providerModel.provider}:${providerModel.model}`;
 }
 
 // ─── Agent memory ─────────────────────────────────────────────────────────────
@@ -721,8 +739,9 @@ function writeFormalArtifact(state: FormalBoardState, fileName: string, content:
   const artifactDir = path.isAbsolute(state.artifactDir)
     ? state.artifactDir
     : path.join(process.cwd(), state.artifactDir);
-  fs.mkdirSync(artifactDir, { recursive: true });
-  fs.writeFileSync(path.join(artifactDir, fileName), content);
+  const targetPath = path.join(artifactDir, fileName);
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  fs.writeFileSync(targetPath, content);
 }
 
 function writeFormalStateSnapshot(state: FormalBoardState) {
@@ -1069,7 +1088,7 @@ async function runFormalBoard(
     speaker: "System",
     emoji: "🧾",
     role: "system",
-    text: `**Formal Board Review — Round 1: Independent Review**\n\nEach seat receives the same source packet only. Peer output is hidden until Round 2.\n\nSource packet SHA-256: \`${sourcePacket.hash}\``,
+    text: `**Formal Board Review — Round 1: Independent Review**\n\nEach seat receives the same source packet only. Peer output is hidden at the prompt level until Round 2.\n\nSource packet SHA-256: \`${sourcePacket.hash}\``,
     phase: "formal-round-1",
   });
   updateFormalBoard((state) => setFormalBoardPhase(state, "round-1"));
@@ -1149,7 +1168,7 @@ async function runFormalBoard(
         model: result.model,
         attemptId,
       }));
-      writeFormalArtifact(formalBoard, `round-1-${safeArtifactName(agentId)}.md`, result.text);
+      writeFormalArtifact(formalBoard, `round-1/${safeArtifactName(agentId)}.md`, result.text);
     } catch (err) {
       const completed = completeAttempt(filePath, attemptId, { status: "failed", error: err });
       const failure = eventFailureText("Formal Round 1 failed", err);
@@ -1169,7 +1188,7 @@ async function runFormalBoard(
         attemptId,
         errorKind: failure.errorKind,
       }));
-      writeFormalArtifact(formalBoard, `round-1-${safeArtifactName(agentId)}.md`, failure.text);
+      writeFormalArtifact(formalBoard, `round-1/${safeArtifactName(agentId)}.md`, failure.text);
     } finally {
       setThinkingAgent(filePath, null);
     }
@@ -1180,6 +1199,14 @@ async function runFormalBoard(
   }
 
   const successfulRoundOne = formalBoard.rounds.filter((artifact) => artifact.round === 1 && artifact.status === "ran");
+  const roundTwoBoardPacket = successfulRoundOne
+    .map((artifact) => `## ${artifact.agentId}\n\nModel: ${artifact.model || "unknown"}\n\n${artifact.text}`)
+    .join("\n\n---\n\n");
+  writeFormalArtifact(
+    formalBoard,
+    "board-packet-round-2.md",
+    `# Round 2 Board Packet\n\nSource packet SHA-256: ${sourcePacket.hash}\n\n${roundTwoBoardPacket}\n`
+  );
 
   appendEvent(filePath, {
     id: `evt_formal_round2_${Date.now()}`,
@@ -1194,7 +1221,7 @@ async function runFormalBoard(
   updateFormalBoard((state) => setFormalBoardPhase(state, "round-2"));
 
   if (successfulRoundOne.length >= 2) {
-    for (const agentId of agents) {
+    for (const agentId of successfulRoundOne.map((artifact) => artifact.agentId)) {
       const currentRaw = fs.readFileSync(filePath, "utf-8");
       const currentSession = JSON.parse(currentRaw);
       if (currentSession.status !== "active") return;
@@ -1273,7 +1300,7 @@ async function runFormalBoard(
           model: result.model,
           attemptId,
         }));
-        writeFormalArtifact(formalBoard, `round-2-${safeArtifactName(agentId)}.md`, result.text);
+        writeFormalArtifact(formalBoard, `round-2/${safeArtifactName(agentId)}.md`, result.text);
       } catch (err) {
         const completed = completeAttempt(filePath, attemptId, { status: "failed", error: err });
         const failure = eventFailureText("Formal Round 2 failed", err);
@@ -1293,7 +1320,7 @@ async function runFormalBoard(
           attemptId,
           errorKind: failure.errorKind,
         }));
-        writeFormalArtifact(formalBoard, `round-2-${safeArtifactName(agentId)}.md`, failure.text);
+        writeFormalArtifact(formalBoard, `round-2/${safeArtifactName(agentId)}.md`, failure.text);
       } finally {
         setThinkingAgent(filePath, null);
       }
@@ -1311,9 +1338,11 @@ async function runFormalBoard(
     artifacts: formalBoard.rounds,
     seats: formalBoard.seats,
   });
-  const synthesisAgentId = agents[0];
-  const synthesisModelId = resolveModel(agentModelOverrides?.[synthesisAgentId] || model).model;
-  const synthesisThinking = agentThinkingLevels?.[synthesisAgentId] || (thinking ? "medium" : undefined);
+  const synthesisAgentId = "formal-board-clerk";
+  const synthesisModelId = resolveModel(model).model;
+  const debatingModels = new Set(agents.map((agentId) => modelComparisonKey(resolveModel(agentModelOverrides?.[agentId] || model).model)));
+  let synthesisNeutrality: "neutral-clerk" | "model-reused" = debatingModels.has(modelComparisonKey(synthesisModelId)) ? "model-reused" : "neutral-clerk";
+  const synthesisThinking = thinking ? "medium" : undefined;
   const synthesisAttemptId = beginAttempt(filePath, {
     phase: "formal-synthesis",
     agentId: synthesisAgentId,
@@ -1345,6 +1374,7 @@ async function runFormalBoard(
     );
     synthesisText = result.text;
     synthesisModel = result.model;
+    synthesisNeutrality = debatingModels.has(modelComparisonKey(result.model)) ? "model-reused" : "neutral-clerk";
     synthesisDurationMs = completeAttempt(filePath, synthesisAttemptId, { status: "succeeded", modelSource: result.model })?.durationMs;
     updateRunStepRecord(filePath, synthesisStep?.id, (runStep) => completeRunStep({
       ...runStep,
@@ -1362,13 +1392,54 @@ async function runFormalBoard(
     setThinkingAgent(filePath, null);
   }
 
-  const verdict = buildFormalVerdict({ topic, synthesisText, state: formalBoard });
+  const title = typeof session.title === "string" && session.title.trim() ? session.title.trim() : topic.slice(0, 90);
+  const verdict = buildFormalVerdict({
+    topic,
+    title,
+    synthesisText,
+    state: formalBoard,
+    synthesisNeutrality,
+    synthesisProducer: synthesisAgentId,
+  });
   updateFormalBoard((state) => ({
     ...setFormalBoardPhase(state, "complete"),
     verdict,
   }));
   writeFormalArtifact(formalBoard, "final-consensus.md", synthesisText);
-  writeFormalArtifact(formalBoard, "verdict.json", JSON.stringify(verdict, null, 2));
+  writeFormalArtifact(formalBoard, formalVerdictArtifactName(verdict), JSON.stringify(verdict, null, 2));
+  writeFormalArtifact(
+    formalBoard,
+    "run-metadata.md",
+    buildFormalRunMetadata({
+      title,
+      topic,
+      state: formalBoard,
+      verdict,
+      sourcePacketHash: sourcePacket.hash,
+      synthesisProducer: synthesisAgentId,
+      synthesisModel,
+      synthesisNeutrality,
+    })
+  );
+  const handoffData = buildFormalHandoffData({
+    title,
+    topic,
+    state: formalBoard,
+    verdict,
+    finalConsensusMarkdown: synthesisText,
+  });
+  writeFormalArtifact(formalBoard, "handoff-data.json", JSON.stringify(handoffData, null, 2));
+  writeFormalArtifact(
+    formalBoard,
+    "final-consensus.html",
+    renderFormalConsensusHtml({
+      title,
+      topic,
+      state: formalBoard,
+      verdict,
+      finalConsensusMarkdown: synthesisText,
+    })
+  );
 
   appendEvent(filePath, {
     id: `evt_formal_verdict_${Date.now()}`,

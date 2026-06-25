@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { buildSourcePacket } from "./source-packet.ts";
+import { formalVerdictArtifactName, renderFormalConsensusHtml } from "./formal-artifacts.ts";
 import {
   buildFormalRoundOneUserPrompt,
   buildFormalVerdict,
@@ -9,6 +14,15 @@ import {
   markFormalSeat,
   recordFormalRoundArtifact,
 } from "./formal-board.ts";
+
+const ADVISORY_BOARD_VERDICT_VALIDATOR = path.join(
+  homedir(),
+  ".codex",
+  "skills",
+  "advisory-board",
+  "scripts",
+  "board_verdict.py"
+);
 
 test("formal board requires at least two runnable seats", () => {
   const sourcePacket = buildSourcePacket({ topic: "Review the plan" });
@@ -73,7 +87,12 @@ test("formal verdict records dropped and degraded seats", () => {
 
   assert.equal(verdict.schema, "advisory-board/verdict@1");
   assert.equal(verdict.verdict, "caution");
+  assert.equal(verdict.confidence, "low");
+  assert.equal(verdict.rounds, 2);
   assert.equal(verdict.valid, true);
+  assert.deepEqual(verdict.sameSeatContinuity, ["A", "B"]);
+  assert.equal(verdict.board.filter((seat) => !seat.dropped).length, 2);
+  assert.equal(verdict.board.find((seat) => seat.seat === "C")?.verdictsEstimated, true);
   assert.deepEqual(verdict.degradedSeats, [{ agentId: "C", reason: "timeout" }]);
 });
 
@@ -117,5 +136,83 @@ test("formal verdict is invalid when rebuttal round has fewer than two successfu
   });
 
   assert.equal(verdict.valid, false);
-  assert.match(verdict.validityReason || "", /Round 2/);
+  assert.match(verdict.validityReason || "", /same seats/);
+});
+
+test("formal verdict is invalid when different seats complete each round", () => {
+  const sourcePacket = buildSourcePacket({ topic: "Review the plan" });
+  let state = createFormalBoardState({
+    sessionId: "session-test",
+    agents: ["A", "B", "C"],
+    sourcePacket,
+  });
+  state = recordFormalRoundArtifact(state, { round: 1, agentId: "A", status: "ran", text: "## Verdict\nCAUTION" });
+  state = recordFormalRoundArtifact(state, { round: 1, agentId: "B", status: "ran", text: "## Verdict\nCAUTION" });
+  state = recordFormalRoundArtifact(state, { round: 2, agentId: "B", status: "ran", text: "## Verdict\nCAUTION" });
+  state = recordFormalRoundArtifact(state, { round: 2, agentId: "C", status: "ran", text: "## Verdict\nCAUTION" });
+
+  const verdict = buildFormalVerdict({
+    topic: "Review the plan",
+    state,
+    synthesisText: "## Verdict\nCAUTION",
+  });
+
+  assert.equal(verdict.valid, false);
+  assert.deepEqual(verdict.sameSeatContinuity, ["B"]);
+  assert.equal(verdict.board.filter((seat) => !seat.dropped).length, 1);
+  assert.equal(formalVerdictArtifactName(verdict), "panely-invalid-verdict.json");
+});
+
+test("formal verdict validates with the Advisory Board skill schema gate", { skip: !existsSync(ADVISORY_BOARD_VERDICT_VALIDATOR) }, () => {
+  const sourcePacket = buildSourcePacket({ topic: "Review the plan" });
+  let state = createFormalBoardState({
+    sessionId: "session-test",
+    agents: ["A", "B"],
+    sourcePacket,
+  });
+  for (const round of [1, 2] as const) {
+    state = recordFormalRoundArtifact(state, { round, agentId: "A", status: "ran", text: "## Verdict\nCAUTION" });
+    state = recordFormalRoundArtifact(state, { round, agentId: "B", status: "ran", text: "## Verdict\nCAUTION" });
+  }
+
+  const verdict = buildFormalVerdict({
+    topic: "Review the plan",
+    state,
+    synthesisText: "## Verdict\nCAUTION\n\n## Evidence-backed\n- Tests exist.\n\n## Next actions\n- Stage the rollout.",
+  });
+  const dir = mkdtempSync(path.join(tmpdir(), "panely-verdict-"));
+  const verdictPath = path.join(dir, "verdict.json");
+  writeFileSync(verdictPath, JSON.stringify(verdict, null, 2));
+
+  const result = spawnSync("python3", [ADVISORY_BOARD_VERDICT_VALIDATOR, verdictPath], { encoding: "utf-8" });
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+});
+
+test("formal consensus HTML is self-contained and placeholder-free", () => {
+  const sourcePacket = buildSourcePacket({ topic: "Review the plan" });
+  let state = createFormalBoardState({
+    sessionId: "session-test",
+    agents: ["A", "B"],
+    sourcePacket,
+  });
+  for (const round of [1, 2] as const) {
+    state = recordFormalRoundArtifact(state, { round, agentId: "A", status: "ran", text: "## Verdict\nCAUTION" });
+    state = recordFormalRoundArtifact(state, { round, agentId: "B", status: "ran", text: "## Verdict\nCAUTION" });
+  }
+  const finalConsensusMarkdown = "## Verdict\nCAUTION\n\n## Evidence-backed\n- Tests exist.";
+  const verdict = buildFormalVerdict({ topic: "Review the plan", state, synthesisText: finalConsensusMarkdown });
+
+  const html = renderFormalConsensusHtml({
+    title: "Review the plan",
+    topic: "Review the plan",
+    state,
+    verdict,
+    finalConsensusMarkdown,
+  });
+
+  assert.doesNotMatch(html, /\{\{[^}]+\}\}/);
+  assert.doesNotMatch(html, /<script\b|<link\b|\b(?:src|href)=["']https?:\/\//i);
+  assert.match(html, /Formal Board Review/);
+  assert.equal(formalVerdictArtifactName(verdict), "verdict.json");
 });

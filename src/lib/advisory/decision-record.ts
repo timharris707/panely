@@ -139,7 +139,17 @@ function buildProvenance(session: AdvisorySession): DecisionRecordProvenance[] {
     }));
 }
 
+function safeList<T>(value: T[] | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
 export function renderDecisionRecordMarkdown(record: Omit<DecisionRecord, "markdown">) {
+  const formalVerdict = record.formalVerdict;
+  const formalSameSeatContinuity = safeList(formalVerdict?.sameSeatContinuity);
+  const formalEvidenceBacked = safeList(formalVerdict?.evidenceBacked);
+  const formalJudgmentCalls = safeList(formalVerdict?.judgmentCalls);
+  const formalCouldntVerify = safeList(formalVerdict?.couldntVerify);
+  const formalMinorityReport = safeList(formalVerdict?.minorityReport);
   return [
     `# ${record.title}`,
     "",
@@ -149,7 +159,7 @@ export function renderDecisionRecordMarkdown(record: Omit<DecisionRecord, "markd
     `- **Generated:** ${record.generatedAt}`,
     `- **Topic:** ${record.topic}`,
     record.voteMode ? `- **Vote mode:** ${record.voteMode}${record.blindVote ? " (blind final vote)" : ""}` : "",
-    record.formalVerdict ? `- **Formal verdict:** ${record.formalVerdict.verdict.toUpperCase()} (${record.formalVerdict.valid ? "valid" : "invalid"})` : "",
+    formalVerdict ? `- **Formal verdict:** ${formalVerdict.verdict.toUpperCase()} (${formalVerdict.valid ? "valid" : "invalid"})` : "",
     "",
     "## Decision",
     "",
@@ -168,27 +178,31 @@ export function renderDecisionRecordMarkdown(record: Omit<DecisionRecord, "markd
     "## Dissent and Caveats",
     "",
     ...(record.dissent.length ? record.dissent.map((item) => `- ${item.agent}: ${item.summary}`) : ["- No explicit dissent was recorded."]),
-    record.formalVerdict ? "" : "",
-    record.formalVerdict ? "## Formal Board Verdict" : "",
-    record.formalVerdict ? "" : "",
-    ...(record.formalVerdict
+    formalVerdict ? "" : "",
+    formalVerdict ? "## Formal Board Verdict" : "",
+    formalVerdict ? "" : "",
+    ...(formalVerdict
       ? [
-          `- **Schema:** ${record.formalVerdict.schema}`,
-          `- **Verdict:** ${record.formalVerdict.verdict.toUpperCase()}`,
-          `- **Valid:** ${record.formalVerdict.valid ? "yes" : "no"}`,
-          ...(record.formalVerdict.validityReason ? [`- **Validity note:** ${record.formalVerdict.validityReason}`] : []),
+          `- **Schema:** ${formalVerdict.schema}`,
+          `- **Verdict:** ${formalVerdict.verdict.toUpperCase()}`,
+          `- **Confidence:** ${formalVerdict.confidence || "unknown"}`,
+          `- **Rounds:** ${formalVerdict.rounds || "unknown"}`,
+          `- **Same-seat continuity:** ${formalSameSeatContinuity.length ? formalSameSeatContinuity.join(", ") : "none recorded"}`,
+          `- **Synthesis:** ${formalVerdict.synthesisProducer || "unknown"}${formalVerdict.synthesisNeutrality ? ` (${formalVerdict.synthesisNeutrality})` : ""}`,
+          `- **Valid:** ${formalVerdict.valid ? "yes" : "no"}`,
+          ...(formalVerdict.validityReason ? [`- **Validity note:** ${formalVerdict.validityReason}`] : []),
           "",
           "### Evidence-backed",
-          ...(record.formalVerdict.evidenceBacked.length ? record.formalVerdict.evidenceBacked.map((item) => `- ${item}`) : ["- None extracted."]),
+          ...(formalEvidenceBacked.length ? formalEvidenceBacked.map((item) => `- ${item}`) : ["- None extracted."]),
           "",
           "### Judgment Calls",
-          ...(record.formalVerdict.judgmentCalls.length ? record.formalVerdict.judgmentCalls.map((item) => `- ${item}`) : ["- None extracted."]),
+          ...(formalJudgmentCalls.length ? formalJudgmentCalls.map((item) => `- ${item}`) : ["- None extracted."]),
           "",
           "### Could Not Verify",
-          ...(record.formalVerdict.couldntVerify.length ? record.formalVerdict.couldntVerify.map((item) => `- ${item}`) : ["- None extracted."]),
+          ...(formalCouldntVerify.length ? formalCouldntVerify.map((item) => `- ${item}`) : ["- None extracted."]),
           "",
           "### Minority Report",
-          ...(record.formalVerdict.minorityReport.length ? record.formalVerdict.minorityReport.map((item) => `- ${item}`) : ["- No explicit minority report was extracted."]),
+          ...(formalMinorityReport.length ? formalMinorityReport.map((item) => `- ${item}`) : ["- No explicit minority report was extracted."]),
         ]
       : []),
     "",

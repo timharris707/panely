@@ -31,6 +31,47 @@ function parseExplicitVerdict(text: string): FormalBoardVerdict["verdict"] {
     : "caution";
 }
 
+function parseConfidence(text: string): FormalBoardVerdict["confidence"] {
+  const confidence = text.match(/\bconfidence\s*[:\-]\s*(low|medium|high)\b/i)?.[1]?.toLowerCase();
+  if (confidence === "low" || confidence === "medium" || confidence === "high") return confidence;
+  if (/could not verify|unknown|unclear|missing|failed|degraded/i.test(text)) return "low";
+  if (/evidence-backed|verified|source|hash|observed/i.test(text)) return "high";
+  return "medium";
+}
+
+function sectionLines(text: string, heading: RegExp, maxItems = 8) {
+  const match = text.match(heading);
+  if (!match?.index && match?.index !== 0) return [];
+  const start = match.index + match[0].length;
+  const rest = text.slice(start);
+  const section = rest.split(/\n##\s+/)[0] || "";
+  return section
+    .split("\n")
+    .map((line) => line.replace(/^[-*\d.)\s]+/, "").trim())
+    .filter(Boolean)
+    .slice(0, maxItems);
+}
+
+function buildBlockers(text: string) {
+  const lines = normalizeLines(text, /blocker|must|risk|failure|unsafe|missing|cannot|should not/i, 8);
+  return lines.map((line, index) => ({
+    title: line.length > 70 ? `${line.slice(0, 67).trim()}...` : line || `Blocker ${index + 1}`,
+    body: line,
+  }));
+}
+
+function buildDissent(text: string) {
+  const lines = sectionLines(text, /(?:^|\n)##\s*Minority report\s*\n/i, 8);
+  return lines.map((line) => ({ who: "Board", body: line }));
+}
+
+function extractRoundVerdicts(artifacts: FormalBoardRoundArtifact[]) {
+  return artifacts
+    .filter((artifact) => artifact.status === "ran")
+    .sort((a, b) => a.round - b.round)
+    .map((artifact) => parseExplicitVerdict(artifact.text));
+}
+
 export function createFormalBoardState(input: {
   sessionId: string;
   agents: string[];
@@ -202,9 +243,14 @@ export function buildFormalVerdict(input: {
   topic: string;
   synthesisText: string;
   state: FormalBoardState;
+  title?: string;
+  date?: string;
+  synthesisNeutrality?: FormalBoardVerdict["synthesisNeutrality"];
+  synthesisProducer?: string;
 }): FormalBoardVerdict {
   const text = input.synthesisText;
   const verdict = parseExplicitVerdict(text);
+  const confidence = parseConfidence(text);
   const droppedSeats = input.state.seats
     .filter((seat) => seat.status === "dropped")
     .map((seat) => ({ agentId: seat.agentId, reason: seat.statusReason }));
@@ -213,11 +259,38 @@ export function buildFormalVerdict(input: {
     .map((seat) => ({ agentId: seat.agentId, reason: seat.statusReason }));
   const successfulRoundOneSeats = new Set(input.state.rounds.filter((artifact) => artifact.round === 1 && artifact.status === "ran").map((artifact) => artifact.agentId));
   const successfulRoundTwoSeats = new Set(input.state.rounds.filter((artifact) => artifact.round === 2 && artifact.status === "ran").map((artifact) => artifact.agentId));
-  const valid = successfulRoundOneSeats.size >= 2 && successfulRoundTwoSeats.size >= 2;
+  const sameSeatContinuity = Array.from(successfulRoundOneSeats).filter((agentId) => successfulRoundTwoSeats.has(agentId)).sort();
+  const valid = sameSeatContinuity.length >= 2;
+  const roundsRun = Math.max(1, ...input.state.rounds.map((artifact) => artifact.round));
+  const board = input.state.seats.map((seat) => {
+    const seatArtifacts = input.state.rounds.filter((artifact) => artifact.agentId === seat.agentId);
+    const roundVerdicts = extractRoundVerdicts(seatArtifacts);
+    const dropped = seat.status === "dropped" || !sameSeatContinuity.includes(seat.agentId);
+    return {
+      seat: seat.agentId,
+      model: seat.model || "unknown",
+      lens: seat.role,
+      round_verdicts: roundVerdicts.length ? roundVerdicts : ["caution" as const],
+      dropped,
+      verdictsEstimated: !roundVerdicts.length,
+    };
+  });
+  const finalRoundVerdicts = board.filter((seat) => !seat.dropped).map((seat) => seat.round_verdicts.at(-1)).filter(Boolean);
+  const unanimous = finalRoundVerdicts.length >= 2 && finalRoundVerdicts.every((item) => item === verdict);
 
   return {
     schema: VERDICT_SCHEMA,
+    title: input.title || input.topic.slice(0, 90),
+    date: input.date || new Date().toISOString().slice(0, 10),
     verdict,
+    confidence,
+    unanimous,
+    rounds: roundsRun,
+    board,
+    blockers: buildBlockers(text),
+    dissent: buildDissent(text),
+    open_questions: sectionLines(text, /(?:^|\n)##\s*(?:Open questions|Could not verify)\s*\n/i, 8),
+    next_actions: sectionLines(text, /(?:^|\n)##\s*Next actions\s*\n/i, 8),
     summary: summarize(text),
     evidenceBacked: normalizeLines(text, /evidence|verified|shows|observed|because|source|sha|data/i),
     judgmentCalls: normalizeLines(text, /judgment|assume|likely|should|recommend|trade[- ]?off|opinion/i),
@@ -226,6 +299,9 @@ export function buildFormalVerdict(input: {
     droppedSeats,
     degradedSeats,
     valid,
-    validityReason: valid ? undefined : "A valid Formal Board Review requires at least two seats to complete independent Round 1 and rebuttal Round 2.",
+    validityReason: valid ? undefined : "A valid Formal Board Review requires at least two of the same seats to complete independent Round 1 and rebuttal Round 2.",
+    sameSeatContinuity,
+    synthesisNeutrality: input.synthesisNeutrality,
+    synthesisProducer: input.synthesisProducer,
   };
 }
