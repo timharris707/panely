@@ -4,9 +4,9 @@ import { detectLocalCliTools, probeModelHealth } from "@/lib/ai/model-health";
 
 export async function GET(request: Request) {
   const probeMode = new URL(request.url).searchParams.get("probe");
-  const shouldProbe = probeMode === "1" || probeMode === "large";
+  const forceProbe = probeMode === "1" || probeMode === "large";
   const largeContext = probeMode === "large";
-  const tools = detectLocalCliTools();
+  const tools = detectLocalCliTools({ force: forceProbe });
   const models = PROVIDERS.map((model) => ({
     id: model.id,
     name: model.name,
@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     contextWindow: model.contextWindow,
     thinkingLevels: model.thinkingLevels,
     intendedUse: model.intendedUse,
-    probe: shouldProbe ? probeModelHealth(model.id, { largeContext }) : undefined,
+    probe: probeModelHealth(model.id, { force: forceProbe, largeContext }),
   }));
   return NextResponse.json({ tools, models, routing: "local-cli-only" });
 }

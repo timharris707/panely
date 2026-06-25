@@ -59,7 +59,7 @@ function fallbackPlan(topic: string): { intent: Intent; mode: "roundtable" | "co
       name: "Execution Reviewer",
       role: "Implementation and operating model reviewer",
       purpose: "Checks whether the plan is buildable, sequenced correctly, and operationally realistic.",
-      modelId: "gemini-pro",
+      modelId: "gemini-flash",
       thinkingLevel: "high",
       stance: "practical",
     },

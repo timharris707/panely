@@ -9,6 +9,14 @@ type ToolStatus = {
   available: boolean;
   path?: string;
   version?: string;
+  latestVersion?: string;
+  packageName?: string;
+  updateCommand?: string;
+  updateStatus?: "current" | "outdated" | "unknown" | "missing";
+  isOutdated?: boolean;
+  checkedAt?: string;
+  nextCheckAt?: string;
+  error?: string;
 };
 
 type ModelStatus = {
@@ -28,6 +36,10 @@ type ModelStatus = {
   probe?: {
     ok: boolean;
     durationMs: number;
+    status: string;
+    checkedAt: string;
+    nextCheckAt: string;
+    cached?: boolean;
     error?: string;
   };
 };
@@ -43,6 +55,16 @@ function formatContextWindow(contextWindow?: number) {
   if (contextWindow >= 1000000) return `${(contextWindow / 1000000).toFixed(0)}M context`;
   if (contextWindow >= 1000) return `${Math.round(contextWindow / 1000)}K context`;
   return `${contextWindow} context`;
+}
+
+function formatCheckTime(value?: string) {
+  if (!value) return "Not checked";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 type PublishSafetyReport = {
@@ -124,7 +146,7 @@ export default function AdvisorySettingsPage() {
               }}
             >
               <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-              Refresh
+              Daily Check
             </button>
             <button
               onClick={() => void load(true)}
@@ -144,7 +166,7 @@ export default function AdvisorySettingsPage() {
               }}
             >
               <RefreshCw size={14} className={probing ? "animate-spin" : ""} />
-              Test Models
+              Force Test
             </button>
           </div>
         </header>
@@ -163,12 +185,19 @@ export default function AdvisorySettingsPage() {
               return (
                 <div key={tool} style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "12px", background: "var(--surface-elevated)", minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                    {status?.available ? <CheckCircle2 size={15} color="#22c55e" /> : <CircleAlert size={15} color="#f59e0b" />}
+                    {status?.available && !status?.isOutdated ? <CheckCircle2 size={15} color="#22c55e" /> : <CircleAlert size={15} color="#f59e0b" />}
                     <strong style={{ textTransform: "capitalize" }}>{tool}</strong>
+                    <span style={{ marginLeft: "auto", color: status?.isOutdated ? "#f59e0b" : status?.available ? "#22c55e" : "#f59e0b", fontSize: "10px", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                      {status?.isOutdated ? "Update" : status?.available ? "Current" : "Missing"}
+                    </span>
                   </div>
                   <div style={{ color: "var(--text-muted)", fontSize: "12px", overflowWrap: "anywhere", lineHeight: 1.5 }}>
                     {status?.available ? status.path : "Not detected"}
-                    {status?.version ? <><br />{status.version}</> : null}
+                    {status?.version ? <><br />Installed: {status.version}</> : null}
+                    {status?.latestVersion ? <><br />Latest: {status.latestVersion}</> : null}
+                    {status?.checkedAt ? <><br />Checked: {formatCheckTime(status.checkedAt)}</> : null}
+                    {status?.isOutdated && status.updateCommand ? <><br /><code>{status.updateCommand}</code></> : null}
+                    {status?.error ? <><br />{status.error}</> : null}
                   </div>
                 </div>
               );
@@ -252,11 +281,15 @@ export default function AdvisorySettingsPage() {
               <div style={{ justifySelf: "end", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px", color: model.probe ? (model.probe.ok ? "#22c55e" : "#f59e0b") : model.available ? "#22c55e" : "#f59e0b", fontWeight: 800, fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "7px" }}>
                   {(model.probe ? model.probe.ok : model.available) ? <CheckCircle2 size={15} /> : <CircleAlert size={15} />}
-                  {model.probe ? (model.probe.ok ? "Responding" : "Failed") : model.available ? "Detected" : "Missing"}
+                  {model.probe ? (model.probe.ok ? "Valid" : "Failed") : model.available ? "Detected" : "Missing"}
                 </span>
                 {model.probe ? (
                   <span style={{ color: "var(--text-muted)", fontSize: "11px", textTransform: "none", letterSpacing: 0, fontWeight: 700, textAlign: "right", maxWidth: "170px", overflowWrap: "anywhere" }}>
-                    {model.probe.ok ? `${(model.probe.durationMs / 1000).toFixed(1)}s` : model.probe.error || "Probe failed"}
+                    {model.probe.ok ? `${(model.probe.durationMs / 1000).toFixed(1)}s${model.probe.cached ? " cached" : ""}` : model.probe.error || "Probe failed"}
+                    <br />
+                    Checked {formatCheckTime(model.probe.checkedAt)}
+                    <br />
+                    Next {formatCheckTime(model.probe.nextCheckAt)}
                   </span>
                 ) : null}
               </div>
