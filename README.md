@@ -138,6 +138,21 @@ Build for production:
 npm run build
 ```
 
+## Publishing
+
+For this project, **deploy** means publishing the latest source to GitHub:
+
+```bash
+git status
+npm run lint
+npm run build
+git add .
+git commit -m "Describe the change"
+git push origin main
+```
+
+Panely is local-first and does not require Vercel or any hosted deployment target. A hosted demo can be added later if needed, but the normal release path is GitHub plus local execution.
+
 ## Local Model Tools
 
 Panely is designed to work best when these CLIs are installed and authenticated locally:
