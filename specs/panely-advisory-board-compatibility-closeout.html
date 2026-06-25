@@ -63,12 +63,12 @@
       <summary>Metadata</summary>
       <dl>
         <dt>created</dt><dd>2026-06-25T09:45:00-07:00</dd>
-        <dt>modified</dt><dd>2026-06-25T09:45:00-07:00</dd>
-        <dt>commits</dt><dd>pending</dd>
+        <dt>modified</dt><dd>2026-06-25T10:05:00-07:00</dd>
+        <dt>commits</dt><dd>9b4f8c0 — Close formal board compatibility gaps</dd>
         <dt>agent name</dt><dd>Codex</dd>
         <dt>session id</dt><dd>019efcdb-afca-78d2-93fc-220dcdb3c9c0</dd>
         <dt>back refs</dt><dd>Panely commit a289211; updated advisory-board skill from timharris707/skills@d20bb6d; Hermes compatibility review</dd>
-        <dt>forward refs</dt><dd>Implementation commit for Advisory Board compatibility closeout</dd>
+        <dt>forward refs</dt><dd>Status-sync commit for this execution tracker</dd>
       </dl>
     </details>
   </header>
@@ -85,13 +85,13 @@
 
   <section id="problem">
     <h2>Problem</h2>
-    <p>Panely now has a useful Formal Board Review mode, but it still claims the Advisory Board verdict schema name without matching the schema, marks some split-seat runs valid, exposes Claude <code>xhigh</code> as enforceable when that may drift by CLI version, lacks several canonical artifacts, and uses the first debating seat as synthesizer. Those are exactly the areas where formal review trust can degrade.</p>
+    <p>Before this run, Panely had a useful Formal Board Review mode, but it still claimed the Advisory Board verdict schema name without matching the schema, marked some split-seat runs valid, exposed Claude <code>xhigh</code> as enforceable without a fresh local check, lacked several canonical artifacts, and used the first debating seat as synthesizer. Those were exactly the areas where formal review trust could degrade.</p>
     <div class="callout blocker"><strong>Compatibility line:</strong> Panely must not emit a file named <code>verdict.json</code> with schema <code>advisory-board/verdict@1</code> unless <code>board_verdict.py</code> accepts it.</div>
   </section>
 
   <section id="solution">
     <h2>Solution</h2>
-    <p>Patch Panely’s Formal Board layer to produce validator-compatible verdicts, require at least two same seats to complete both independent and rebuttal rounds, normalize Claude reasoning honestly, emit richer run metadata and HTML handoff artifacts, and document the current isolation model. Validate against both Panely tests and the installed Advisory Board skill scripts.</p>
+    <p>Panely’s Formal Board layer now produces validator-compatible canonical verdicts for valid runs, requires at least two same seats to complete both independent and rebuttal rounds, keeps model reasoning claims honest, emits richer run metadata and HTML handoff artifacts, and documents the current isolation model. Invalid continuity runs are preserved in Panely state but write <code>panely-invalid-verdict.json</code> instead of a canonical <code>verdict.json</code>.</p>
   </section>
 
   <section id="files" class="files">
@@ -110,8 +110,8 @@
     </ul>
     <h3>New Files</h3>
     <ul>
-      <li><span class="tag new">new</span><code>src/lib/advisory/formal-artifacts.ts</code> — Optional helper if artifact rendering becomes too large for <code>formal-board.ts</code>.</li>
-      <li><span class="tag new">new</span><code>specs/panely-advisory-board-compatibility-closeout.html</code> — This execution plan.</li>
+      <li><span class="tag new">new</span><code>src/lib/advisory/formal-artifacts.ts</code> — Formal metadata, handoff data, HTML rendering, and canonical/invalid verdict artifact naming helpers.</li>
+      <li><span class="tag new">new</span><code>specs/panely-advisory-board-compatibility-closeout.html</code> — This live execution tracker.</li>
     </ul>
   </section>
 
@@ -121,96 +121,96 @@
     <p>Status markers: <code>[]</code> idle · <code>[wip]</code> in progress · <code>[x]</code> complete · <code>[f]</code> failed.</p>
 
     <div class="phase">
-      <h3><code class="status">[]</code> Phase 1: Schema-Compatible Verdict</h3>
+      <h3><code class="status">[x]</code> Phase 1: Schema-Compatible Verdict</h3>
       <p>Make Panely’s <code>verdict.json</code> pass the Advisory Board validator while retaining Panely’s richer evidence buckets as extra fields.</p>
       <h4>1.1 Type and Builder Updates</h4>
       <ul class="checklist">
-        <li><code class="status">[]</code> Add required verdict fields: <code>title</code>, <code>date</code>, <code>confidence</code>, <code>unanimous</code>, <code>rounds</code>, <code>board[]</code>.</li>
-        <li><code class="status">[]</code> Add recommended fields: <code>blockers[]</code>, <code>dissent[]</code>, <code>open_questions[]</code>, <code>next_actions[]</code>.</li>
-        <li><code class="status">[]</code> Build each board entry with <code>seat</code>, <code>model</code>, <code>lens</code>, <code>round_verdicts</code>, and <code>dropped</code>.</li>
-        <li><code class="status">[]</code> Parse per-round seat verdicts from seat output, defaulting cautiously to <code>caution</code> only when the seat ran but omitted a verdict.</li>
+        <li><code class="status">[x]</code> Add required verdict fields: <code>title</code>, <code>date</code>, <code>confidence</code>, <code>unanimous</code>, <code>rounds</code>, <code>board[]</code>.</li>
+        <li><code class="status">[x]</code> Add recommended fields: <code>blockers[]</code>, <code>dissent[]</code>, <code>open_questions[]</code>, <code>next_actions[]</code>.</li>
+        <li><code class="status">[x]</code> Build each board entry with <code>seat</code>, <code>model</code>, <code>lens</code>, <code>round_verdicts</code>, and <code>dropped</code>.</li>
+        <li><code class="status">[x]</code> Parse per-round seat verdicts from seat output, defaulting cautiously to <code>caution</code> only when the seat ran but omitted a verdict.</li>
       </ul>
       <h4>1.2 Testing Strategy</h4>
       <p>Use Panely unit tests plus the installed Advisory Board validator.</p>
       <ul class="checklist">
-        <li><code class="status">[]</code><code>npm test -- src/lib/advisory/formal-board.test.ts</code> — verifies verdict shape and compatibility fixtures.</li>
-        <li><code class="status">[]</code> Add a Panely-specific hard gate test proving split-seat completion is invalid: Round 1 A+B and Round 2 B+C must not be considered a valid Formal Board Review.</li>
-        <li><code class="status">[]</code> Ensure invalid split-seat runs do not produce a canonical passing <code>advisory-board/verdict@1</code> artifact; mark insufficient same-seat continuity in Panely state and metadata.</li>
-        <li><code class="status">[]</code><code>python3 $HOME/.codex/skills/advisory-board/scripts/board_verdict.py /tmp/panely-test-verdict.json</code> — proves emitted schema passes the canonical validator.</li>
+        <li><code class="status">[x]</code><code>npm test -- src/lib/advisory/formal-board.test.ts</code> — verifies verdict shape and compatibility fixtures.</li>
+        <li><code class="status">[x]</code> Add a Panely-specific hard gate test proving split-seat completion is invalid: Round 1 A+B and Round 2 B+C must not be considered a valid Formal Board Review.</li>
+        <li><code class="status">[x]</code> Ensure invalid split-seat runs do not produce a canonical passing <code>advisory-board/verdict@1</code> artifact; mark insufficient same-seat continuity in Panely state and metadata.</li>
+        <li><code class="status">[x]</code><code>python3 $HOME/.codex/skills/advisory-board/scripts/board_verdict.py /tmp/panely-test-verdict.json</code> — proves emitted schema passes the canonical validator.</li>
       </ul>
       <div class="loop">Do not exit this phase until a Panely-generated verdict fixture validates with <code>board_verdict.py</code>.</div>
     </div>
 
     <div class="phase">
-      <h3><code class="status">[]</code> Phase 2: Validity, Reasoning Honesty, and Synthesis Neutrality</h3>
+      <h3><code class="status">[x]</code> Phase 2: Validity, Reasoning Honesty, and Synthesis Neutrality</h3>
       <p>Fix the subtle trust bugs: same-seat round completion, Claude effort drift, and chair bias in final synthesis.</p>
       <h4>2.1 Same-Seat Validity</h4>
       <ul class="checklist">
-        <li><code class="status">[]</code> Require the intersection of Round 1 successful seats and Round 2 successful seats to contain at least two seats.</li>
-        <li><code class="status">[]</code> Update validity reason and tests for A+B in Round 1, B+C in Round 2 invalidity.</li>
+        <li><code class="status">[x]</code> Require the intersection of Round 1 successful seats and Round 2 successful seats to contain at least two seats.</li>
+        <li><code class="status">[x]</code> Update validity reason and tests for A+B in Round 1, B+C in Round 2 invalidity.</li>
       </ul>
       <h4>2.2 Claude Thinking Normalization</h4>
       <ul class="checklist">
-        <li><code class="status">[]</code> Verify current <code>claude --help</code>; if <code>xhigh</code> is unavailable, normalize <code>xhigh -> max</code> with a UI/API note.</li>
-        <li><code class="status">[]</code> Keep Codex <code>xhigh</code> and Gemini non-enforced thinking behavior unchanged unless tests show drift.</li>
+        <li><code class="status">[x]</code> Verify current <code>claude --help</code>; if <code>xhigh</code> is unavailable, normalize <code>xhigh -> max</code> with a UI/API note.</li>
+        <li><code class="status">[x]</code> Keep Codex <code>xhigh</code> and Gemini non-enforced thinking behavior unchanged unless tests show drift.</li>
       </ul>
       <h4>2.3 Synthesis Neutrality</h4>
       <ul class="checklist">
-        <li><code class="status">[]</code> Use a non-debating clerk identity for synthesis; it may route through an available model, but it must not be counted as a board seat.</li>
-        <li><code class="status">[]</code> Build the synthesis prompt as a neutral clerk task over board artifacts, not as a continuation of any seat persona.</li>
-        <li><code class="status">[]</code> If the runtime must route the clerk call through a model also used by a debating seat, record that as <code>synthesisNeutrality: model-reused</code> and require an explicit minority-report section.</li>
-        <li><code class="status">[]</code> Include the synthesis producer, model, and neutrality caveat in run metadata and the decision record.</li>
+        <li><code class="status">[x]</code> Use a non-debating clerk identity for synthesis; it may route through an available model, but it must not be counted as a board seat.</li>
+        <li><code class="status">[x]</code> Build the synthesis prompt as a neutral clerk task over board artifacts, not as a continuation of any seat persona.</li>
+        <li><code class="status">[x]</code> If the runtime must route the clerk call through a model also used by a debating seat, record that as <code>synthesisNeutrality: model-reused</code> and require an explicit minority-report section.</li>
+        <li><code class="status">[x]</code> Include the synthesis producer, model, and neutrality caveat in run metadata and the decision record.</li>
       </ul>
       <h4>2.4 Testing Strategy</h4>
       <ul class="checklist">
-        <li><code class="status">[]</code><code>npm test -- src/lib/ai/thinking-levels.test.ts src/lib/advisory/formal-board.test.ts</code> — proves reasoning and validity behavior.</li>
+        <li><code class="status">[x]</code><code>npm test -- src/lib/ai/thinking-levels.test.ts src/lib/advisory/formal-board.test.ts</code> — proves reasoning and validity behavior.</li>
       </ul>
       <div class="loop">Do not exit this phase until the trust bugs have regression tests.</div>
     </div>
 
     <div class="phase">
-      <h3><code class="status">[]</code> Phase 3: Artifact Contract and Isolation Posture</h3>
+      <h3><code class="status">[x]</code> Phase 3: Artifact Contract and Isolation Posture</h3>
       <p>Move Panely closer to the Advisory Board artifact standard without pretending it has full conductor-level isolation yet.</p>
       <h4>3.1 Canonical Artifacts</h4>
       <ul class="checklist">
-        <li><code class="status">[]</code> Write <code>round-1/&lt;seat&gt;.md</code> and <code>round-2/&lt;seat&gt;.md</code> subfolders instead of only flat per-round files.</li>
-        <li><code class="status">[]</code> Write <code>board-packet-round-2.md</code>.</li>
-        <li><code class="status">[]</code> Write <code>run-metadata.md</code> using the updated template fields.</li>
-        <li><code class="status">[]</code> Write <code>handoff-data.json</code> for deterministic rendering.</li>
-        <li><code class="status">[]</code> Write a mandatory self-contained <code>final-consensus.html</code> view; validate it contains no template tokens, no scaffold comments, and no external assets.</li>
+        <li><code class="status">[x]</code> Write <code>round-1/&lt;seat&gt;.md</code> and <code>round-2/&lt;seat&gt;.md</code> subfolders instead of only flat per-round files.</li>
+        <li><code class="status">[x]</code> Write <code>board-packet-round-2.md</code>.</li>
+        <li><code class="status">[x]</code> Write <code>run-metadata.md</code> using the updated template fields.</li>
+        <li><code class="status">[x]</code> Write <code>handoff-data.json</code> for deterministic rendering.</li>
+        <li><code class="status">[x]</code> Write a mandatory self-contained <code>final-consensus.html</code> view; validate it contains no template tokens, no scaffold comments, and no external assets.</li>
       </ul>
       <h4>3.2 Isolation Honesty</h4>
       <ul class="checklist">
-        <li><code class="status">[]</code> Record source access method as <code>single source packet</code> for Formal Board runs.</li>
-        <li><code class="status">[]</code> Record current isolation limits: prompts isolate Round 1; full filesystem isolation is not yet conductor-backed unless/until <code>run_board.py</code> is integrated.</li>
-        <li><code class="status">[]</code> Update user-facing copy/events/README to say <code>prompt-level peer-output isolation over a single source packet</code>, not filesystem/network isolation.</li>
-        <li><code class="status">[]</code> Consider running Round 1 from a neutral temp directory only if it can be done without breaking local CLI auth and streaming.</li>
+        <li><code class="status">[x]</code> Record source access method as <code>single source packet</code> for Formal Board runs.</li>
+        <li><code class="status">[x]</code> Record current isolation limits: prompts isolate Round 1; full filesystem isolation is not yet conductor-backed unless/until <code>run_board.py</code> is integrated.</li>
+        <li><code class="status">[x]</code> Update user-facing copy/events/README to say <code>prompt-level peer-output isolation over a single source packet</code>, not filesystem/network isolation.</li>
+        <li><code class="status">[x]</code> Consider running Round 1 from a neutral temp directory only if it can be done without breaking local CLI auth and streaming.</li>
       </ul>
       <h4>3.3 Testing Strategy</h4>
       <ul class="checklist">
-        <li><code class="status">[]</code><code>npm test -- src/lib/advisory/formal-board.test.ts</code> — validates artifact helpers and metadata rendering.</li>
-        <li><code class="status">[]</code> Add assertions that <code>final-consensus.html</code> has no <code>{{token}}</code>, no remote <code>script/link</code>, and agrees with <code>final-consensus.md</code>.</li>
+        <li><code class="status">[x]</code><code>npm test -- src/lib/advisory/formal-board.test.ts</code> — validates artifact helpers and metadata rendering.</li>
+        <li><code class="status">[x]</code> Add assertions that <code>final-consensus.html</code> has no <code>{{token}}</code>, no remote <code>script/link</code>, and agrees with <code>final-consensus.md</code>.</li>
       </ul>
       <div class="loop">Do not exit this phase until artifact paths and metadata reflect what actually happened.</div>
     </div>
 
     <div class="phase">
-      <h3><code class="status">[]</code> Phase 4: Validation, Adversarial Code Review, Commit, Push</h3>
+      <h3><code class="status">[x]</code> Phase 4: Validation, Adversarial Code Review, Commit, Push</h3>
       <p>Close with automated validation and adversarial review before publishing to GitHub.</p>
       <h4>4.1 Full Validation</h4>
       <ul class="checklist">
-        <li><code class="status">[]</code><code>npm test</code> — all unit tests.</li>
-        <li><code class="status">[]</code><code>npx tsc --noEmit</code> — TypeScript integrity.</li>
-        <li><code class="status">[]</code><code>npm run lint</code> — lint health.</li>
-        <li><code class="status">[]</code><code>npm run build</code> — production build.</li>
-        <li><code class="status">[]</code><code>node scripts/publish-safety-check.mjs</code> — public repo safety.</li>
+        <li><code class="status">[x]</code><code>npm test</code> — all unit tests.</li>
+        <li><code class="status">[x]</code><code>npx tsc --noEmit</code> — TypeScript integrity.</li>
+        <li><code class="status">[x]</code><code>npm run lint</code> — lint health.</li>
+        <li><code class="status">[x]</code><code>npm run build</code> — production build.</li>
+        <li><code class="status">[x]</code><code>node scripts/publish-safety-check.mjs</code> — public repo safety.</li>
       </ul>
       <h4>4.2 Reviews and Publish</h4>
       <ul class="checklist">
-        <li><code class="status">[]</code> Run adversarial subagent review of all code changes before commit.</li>
-        <li><code class="status">[]</code> Fix any blockers and re-run targeted validation.</li>
-        <li><code class="status">[]</code> Commit only intended files; keep local untracked docs out unless explicitly sanitized and requested.</li>
-        <li><code class="status">[]</code> Push to <code>origin main</code>.</li>
+        <li><code class="status">[x]</code> Run adversarial subagent review of all code changes before commit.</li>
+        <li><code class="status">[x]</code> Fix any blockers and re-run targeted validation.</li>
+        <li><code class="status">[x]</code> Commit only intended files; keep local untracked docs out unless explicitly sanitized and requested.</li>
+        <li><code class="status">[x]</code> Push to <code>origin main</code>.</li>
       </ul>
       <div class="loop">Do not commit until the adversarial code review has no blockers.</div>
     </div>
@@ -219,12 +219,12 @@
   <section id="validation">
     <h2>Validation Commands</h2>
     <ul class="checklist">
-      <li><code class="status">[]</code><code>npm test</code> — confirms local unit behavior.</li>
-      <li><code class="status">[]</code><code>npx tsc --noEmit</code> — confirms type contract.</li>
-      <li><code class="status">[]</code><code>npm run lint</code> — confirms style and unused-code health.</li>
-      <li><code class="status">[]</code><code>npm run build</code> — confirms production readiness.</li>
-      <li><code class="status">[]</code><code>node scripts/publish-safety-check.mjs</code> — confirms publish safety, with known warnings for untracked local docs if still present.</li>
-      <li><code class="status">[]</code><code>python3 $HOME/.codex/skills/advisory-board/scripts/board_verdict.py &lt;generated-verdict&gt;</code> — confirms strict Advisory Board schema compatibility.</li>
+      <li><code class="status">[x]</code><code>npm test</code> — confirms local unit behavior.</li>
+      <li><code class="status">[x]</code><code>npx tsc --noEmit</code> — confirms type contract.</li>
+      <li><code class="status">[x]</code><code>npm run lint</code> — confirms style and unused-code health.</li>
+      <li><code class="status">[x]</code><code>npm run build</code> — confirms production readiness.</li>
+      <li><code class="status">[x]</code><code>node scripts/publish-safety-check.mjs</code> — confirms publish safety, with known warnings for untracked local docs if still present.</li>
+      <li><code class="status">[x]</code><code>python3 $HOME/.codex/skills/advisory-board/scripts/board_verdict.py &lt;generated-verdict&gt;</code> — confirms strict Advisory Board schema compatibility.</li>
     </ul>
   </section>
 
