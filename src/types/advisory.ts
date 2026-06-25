@@ -56,6 +56,7 @@ export interface VoteRecord {
 export type AdvisorySessionMode = "roundtable" | "competitive" | "formal-board";
 export type FormalBoardPhase = "preflight" | "round-1" | "round-2" | "round-3" | "synthesis" | "complete";
 export type FormalBoardSeatStatus = "pending" | "ran" | "degraded" | "dropped";
+export type FormalBoardConvergence = "off" | "auto" | "always";
 
 export interface CompetitiveState {
   phase: "pitch" | "critique" | "vote" | "complete";
@@ -86,6 +87,22 @@ export interface FormalBoardRoundArtifact {
   attemptId?: string;
   errorKind?: string;
   generatedAt: string;
+}
+
+export interface FormalBoardResumeLease {
+  id: string;
+  acquiredAt: string;
+  expiresAt: string;
+}
+
+export interface FormalBoardIsolation {
+  mode: "prompt-level" | "source-packet-only" | "temp-workdir" | "conductor-backed";
+  filesystemIsolation: boolean;
+  networkIsolation: boolean;
+  cwdModeByPhase: Partial<Record<FormalBoardPhase, "app-working-directory" | "temporary-source-packet-directory" | "conductor-managed">>;
+  sourceMaterialScope: "source-packet";
+  note: string;
+  updatedAt: string;
 }
 
 export interface FormalBoardVerdict {
@@ -131,6 +148,8 @@ export interface FormalBoardState {
   seats: FormalBoardSeat[];
   rounds: FormalBoardRoundArtifact[];
   verdict?: FormalBoardVerdict;
+  resumeLease?: FormalBoardResumeLease;
+  isolation?: FormalBoardIsolation;
 }
 
 export interface AdvisorySession {
@@ -175,6 +194,7 @@ export interface AdvisorySession {
     providers: string[];
     message: string;
   };
+  formalConvergence?: FormalBoardConvergence;
   moderator?: string;
   modelHealthSnapshot?: unknown;
   runAttempts?: AdvisoryRunAttempt[];
@@ -211,6 +231,7 @@ export interface AdvisoryModelProvenance {
 
 export interface AdvisoryRunStep {
   id: string;
+  key?: string;
   sessionId: string;
   index: number;
   phase: string;

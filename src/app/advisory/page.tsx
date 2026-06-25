@@ -59,6 +59,22 @@ import DeepDiveModal from "@/components/advisory/DeepDiveModal";
 // ─── CSS ─────────────────────────────────────────────────────────────────────
 import "@/styles/advisory.css";
 
+type FormalArtifactManifestItem = {
+  id: string;
+  label: string;
+  kind: string;
+  relativePath: string;
+  exists: boolean;
+  required: boolean;
+  canonical: boolean;
+};
+
+type FormalArtifactManifest = {
+  status: "completed-valid" | "completed-invalid" | "incomplete" | "unavailable";
+  sourcePacketHash?: string;
+  items: FormalArtifactManifestItem[];
+};
+
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function AdvisoryPage() {
@@ -112,6 +128,8 @@ export default function AdvisoryPage() {
   const [continuing, setContinuing] = useState(false);
   const [forking, setForking] = useState(false);
   const [deepDiveAgent, setDeepDiveAgent] = useState<{ id: string; name: string; emoji: string; role: string } | null>(null);
+  const [formalArtifactManifest, setFormalArtifactManifest] = useState<FormalArtifactManifest | null>(null);
+  const [resumingFormalReview, setResumingFormalReview] = useState(false);
 
   const eventsEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -218,6 +236,29 @@ export default function AdvisoryPage() {
       console.error("Failed to load session:", e);
     }
   }, []);
+
+  const loadFormalArtifactManifest = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/advisory/sessions/${id}/formal-artifacts`, { cache: "no-store" });
+      const data = await res.json();
+      if (res.ok && data.manifest) {
+        setFormalArtifactManifest(data.manifest);
+      } else {
+        setFormalArtifactManifest(null);
+      }
+    } catch (e) {
+      console.error("Failed to load formal artifacts:", e);
+      setFormalArtifactManifest(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeSession?.mode === "formal-board") {
+      void loadFormalArtifactManifest(activeSession.id);
+    } else {
+      setFormalArtifactManifest(null);
+    }
+  }, [activeSession?.id, activeSession?.mode, activeSession?.status, activeSession?.formalBoard?.phase, loadFormalArtifactManifest]);
 
   const loadCustomAgents = useCallback(async () => {
     try {
@@ -423,6 +464,33 @@ export default function AdvisoryPage() {
     } catch { /* ignore */ }
   };
 
+  const handleActiveViewChange = useCallback((view: "live" | "history") => {
+    setActiveView(view);
+    const matchesView = (session: AdvisorySession) =>
+      view === "live" ? session.status === "active" : session.status !== "active";
+    const currentMatchesView = activeSession && !activeSession.archived && matchesView(activeSession);
+    const nextSession = currentMatchesView
+      ? activeSession
+      : sessions.find((session) => !session.archived && matchesView(session));
+
+    if (!nextSession) {
+      setActiveSession(null);
+      setEvents([]);
+      setSessionInsights(null);
+      setActionItems([]);
+      return;
+    }
+
+    if (nextSession.id !== activeSession?.id) {
+      setEvents([]);
+      setShowNewMessages(false);
+      setEndSessionConfirm(false);
+      setSessionInsights(null);
+      setActionItems([]);
+      void loadSessionEvents(nextSession.id);
+    }
+  }, [activeSession, loadSessionEvents, sessions]);
+
   const handleLaunch = async (session: AdvisorySession) => {
     setShowLaunchModal(false);
     setMobileSidebarOpen(false);
@@ -559,6 +627,40 @@ export default function AdvisoryPage() {
     a.download = fileName;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const formalArtifactUrl = (artifactId: string, download = false) => {
+    if (!activeSession) return "#";
+    const params = new URLSearchParams({ artifact: artifactId });
+    if (download) params.set("download", "1");
+    return `/api/advisory/sessions/${activeSession.id}/formal-artifacts?${params.toString()}`;
+  };
+
+  const openFormalArtifact = (artifactId: string, download = false) => {
+    if (!activeSession) return;
+    const url = formalArtifactUrl(artifactId, download);
+    if (download) {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "";
+      a.click();
+      return;
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  const handleResumeFormalReview = async () => {
+    if (!activeSession || resumingFormalReview) return;
+    setResumingFormalReview(true);
+    try {
+      const res = await fetch(`/api/advisory/sessions/${activeSession.id}/resume`, { method: "POST" });
+      if (!res.ok) throw new Error(await res.text());
+      await loadSessionEvents(activeSession.id, true);
+    } catch (e) {
+      console.error("Formal resume error:", e);
+    } finally {
+      setResumingFormalReview(false);
+    }
   };
 
   const handleExportPDF = async () => {
@@ -1007,6 +1109,36 @@ export default function AdvisoryPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   const sessionData = activeSession as unknown as Record<string, unknown> | null;
+  const formalArtifactStatusLabel = formalArtifactManifest?.status === "completed-valid"
+    ? "Formal artifacts ready"
+    : formalArtifactManifest?.status === "completed-invalid"
+    ? "Invalid formal artifacts"
+    : formalArtifactManifest?.status === "incomplete"
+    ? "Formal artifacts incomplete"
+    : "Formal artifacts unavailable";
+  const formalArtifactStatusColor = formalArtifactManifest?.status === "completed-valid"
+    ? "#4ade80"
+    : formalArtifactManifest?.status === "completed-invalid"
+    ? "#facc15"
+    : "#a78bfa";
+  const formalArtifactActions = formalArtifactManifest?.items
+    .filter((item) => [
+      "final-consensus-html",
+      "verdict",
+      "run-metadata",
+      "source-packet",
+      "handoff-data",
+    ].includes(item.id)) || [];
+  const formalHasRecoverableStep = Boolean(activeSession?.runSteps?.some((step) =>
+    step.phase.startsWith("formal-") && (step.status === "failed" || step.status === "stale")
+  ));
+  const showFormalResume = Boolean(
+    activeSession?.mode === "formal-board" &&
+    activeSession.status === "active" &&
+    !activeSession.runInProgress &&
+    !isGenerating &&
+    (formalHasRecoverableStep || activeSession.formalBoard?.phase !== "complete")
+  );
 
   return (
     <>
@@ -1053,7 +1185,7 @@ export default function AdvisoryPage() {
             compareSelections={compareSelections}
             mobileSidebarOpen={mobileSidebarOpen}
             onSelectSession={handleSelectSession}
-            onActiveViewChange={setActiveView}
+            onActiveViewChange={handleActiveViewChange}
             onRefresh={handleRefresh}
             onSearchChange={setSearchQuery}
             onFilterAgentChange={setFilterAgent}
@@ -1642,6 +1774,27 @@ export default function AdvisoryPage() {
                     </div>
                   )}
 
+                  {showFormalResume && (
+                    <div style={{ padding: "10px 24px", borderTop: "1px solid rgba(250,204,21,0.24)", backgroundColor: "rgba(250,204,21,0.06)", display: "flex", alignItems: "center", gap: "10px", flexShrink: 0, flexWrap: "wrap" }}>
+                      <div style={{ flex: 1, minWidth: "220px" }}>
+                        <div style={{ color: "#facc15", fontSize: "11px", fontWeight: 800, letterSpacing: "0.3px", textTransform: "uppercase" }}>
+                          Formal review can resume
+                        </div>
+                        <div style={{ color: "var(--text-muted)", fontSize: "10px", marginTop: "2px" }}>
+                          Panely will continue from the next missing formal step without replaying completed seat artifacts.
+                        </div>
+                      </div>
+                      <button
+                        onClick={handleResumeFormalReview}
+                        disabled={resumingFormalReview}
+                        style={{ padding: "7px 13px", borderRadius: "7px", border: "1px solid rgba(250,204,21,0.4)", backgroundColor: "rgba(250,204,21,0.12)", color: "#facc15", cursor: resumingFormalReview ? "not-allowed" : "pointer", fontSize: "11px", fontWeight: 800, display: "flex", alignItems: "center", gap: "6px", opacity: resumingFormalReview ? 0.6 : 1 }}
+                      >
+                        {resumingFormalReview ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
+                        {resumingFormalReview ? "Resuming..." : "Resume Formal Review"}
+                      </button>
+                    </div>
+                  )}
+
                   {/* Human input bar */}
                   {activeSession.status === "active" && (
                     <div className="advisory-input-bar" style={{ padding: "12px 24px 16px", borderTop: "1px solid var(--border)", backgroundColor: "var(--surface)", flexShrink: 0 }}>
@@ -1716,6 +1869,41 @@ export default function AdvisoryPage() {
                         style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid rgba(74,222,128,0.4)", backgroundColor: "rgba(74,222,128,0.08)", color: "#4ade80", cursor: "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 700, textDecoration: "none" }}>
                         <FileText size={12} /> Open Brief
                       </Link>
+                      {activeSession.mode === "formal-board" && formalArtifactManifest && (
+                        <div style={{ flexBasis: "100%", marginTop: "4px", padding: "10px", borderRadius: "8px", border: "1px solid rgba(167,139,250,0.24)", backgroundColor: "rgba(167,139,250,0.06)", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                          <div style={{ minWidth: "190px", flex: "1 1 220px" }}>
+                            <div style={{ color: formalArtifactStatusColor, fontSize: "11px", fontWeight: 800, letterSpacing: "0.3px", textTransform: "uppercase" }}>
+                              {formalArtifactStatusLabel}
+                            </div>
+                            <div style={{ color: "var(--text-muted)", fontSize: "10px", marginTop: "2px" }}>
+                              {formalArtifactManifest.sourcePacketHash ? `source ${formalArtifactManifest.sourcePacketHash.slice(0, 12)}` : "source pending"}
+                            </div>
+                          </div>
+                          {formalArtifactActions.map((item) => {
+                            const label = item.id === "final-consensus-html"
+                              ? "View Handoff"
+                              : item.id === "verdict"
+                              ? item.canonical ? "Export Verdict" : "Export Invalid Verdict"
+                              : item.id === "run-metadata"
+                              ? "Export Metadata"
+                              : item.id === "source-packet"
+                              ? "Export Source"
+                              : "Export Handoff Data";
+                            const download = item.id !== "final-consensus-html";
+                            return (
+                              <button
+                                key={item.id}
+                                onClick={() => openFormalArtifact(item.id, download)}
+                                disabled={!item.exists}
+                                title={item.exists ? `${label}: ${item.relativePath}` : `Missing: ${item.relativePath}`}
+                                style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid rgba(167,139,250,0.36)", backgroundColor: item.exists ? "rgba(167,139,250,0.1)" : "rgba(255,255,255,0.04)", color: item.exists ? "#c4b5fd" : "var(--text-muted)", cursor: item.exists ? "pointer" : "not-allowed", fontSize: "10px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 700, opacity: item.exists ? 1 : 0.56 }}>
+                                {download ? <FileDown size={11} /> : <FileText size={11} />}
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                       <button onClick={handleExportPDF} disabled={exportingPDF} title="Open printable artifact"
                         style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid rgba(139,92,246,0.4)", backgroundColor: exportingPDF ? "rgba(139,92,246,0.2)" : "rgba(139,92,246,0.08)", color: "#a78bfa", cursor: exportingPDF ? "not-allowed" : "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 600, opacity: exportingPDF ? 0.6 : 1 }}>
                         {exportingPDF ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />}

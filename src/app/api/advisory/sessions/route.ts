@@ -7,7 +7,7 @@ import {
   type AdvisorySessionRecord,
 } from "@/lib/advisory-session-store";
 import type { ModelHealthResult } from "@/lib/ai/model-health";
-import { buildProviderDisclosure } from "@/lib/advisory/provider-disclosure";
+import { buildSessionProviderDisclosureForRequest } from "@/lib/advisory/provider-disclosure-gates";
 import { createFormalBoardState } from "@/lib/advisory/formal-board";
 import { buildSourcePacket } from "@/lib/advisory/source-packet";
 import type { AdvisorySessionMode } from "@/types/advisory";
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser();
     const body = await req.json();
-    const { topic, mode, agents, model, personaOverlays, personaOverlaysList, aiPersonas, rounds, pacing, responseLength, extendedThinking, specialist, specialistAgent, forkedFrom, forkedAtEvent, referenceContext, referenceContextBudgetChars, agentModelOverrides, agentPersonalityTraits, agentCommunicationStyles, agentIntensityLevels, agentResponseLengths, agentThinkingLevels, providerDisclosure, moderator, competitiveVoteMode, competitiveTopCount } = body;
+    const { topic, mode, agents, model, personaOverlays, personaOverlaysList, aiPersonas, rounds, pacing, responseLength, extendedThinking, specialist, specialistAgent, forkedFrom, forkedAtEvent, referenceContext, referenceContextBudgetChars, agentModelOverrides, agentPersonalityTraits, agentCommunicationStyles, agentIntensityLevels, agentResponseLengths, agentThinkingLevels, moderator, competitiveVoteMode, competitiveTopCount, formalConvergence } = body;
 
     if (!topic || !mode) {
       return NextResponse.json({ error: "topic and mode are required" }, { status: 400 });
@@ -79,18 +79,9 @@ export async function POST(req: NextRequest) {
     const id = `session-${Date.now()}-${randomUUID().slice(0, 8)}`;
     const now = new Date().toISOString();
     const resolvedReferenceContextBudget = resolveReferenceContextBudget(referenceContextBudgetChars);
-    const disclosure = buildProviderDisclosure({
-      topic: String(topic),
-      attachedFileCount: referenceContext ? 1 : 0,
-      planningModelIds: ["claude-sonnet"],
-      modelIds: selectedModelIds(model, agentModelOverrides),
-    });
-    const acceptedDisclosure =
-      providerDisclosure &&
-      typeof providerDisclosure === "object" &&
-      !Array.isArray(providerDisclosure) &&
-      providerDisclosure.accepted === true;
-    if (disclosure.requiresConsent && !acceptedDisclosure) {
+    const sessionDisclosure = buildSessionProviderDisclosureForRequest(body || {});
+    const { disclosure } = sessionDisclosure;
+    if (!sessionDisclosure.allowed) {
       return NextResponse.json(
         {
           error: "Provider disclosure must be accepted before starting a session with unknown or non-public source material.",
@@ -115,6 +106,7 @@ export async function POST(req: NextRequest) {
 
     const isCompetitive = resolvedMode === "competitive";
     const isFormalBoard = resolvedMode === "formal-board";
+    const resolvedFormalConvergence = formalConvergence === "off" || formalConvergence === "always" ? formalConvergence : "auto";
     const resolvedCompetitiveVoteMode: "agent-winner" | "top-ideas" = competitiveVoteMode === "top-ideas" ? "top-ideas" : "agent-winner";
     const resolvedCompetitiveTopCount = Math.max(1, Math.min(10, Number(competitiveTopCount) || 3));
     const competitiveState = isCompetitive ? {
@@ -180,16 +172,13 @@ export async function POST(req: NextRequest) {
       ...(agentResponseLengths && Object.keys(agentResponseLengths).length > 0 ? { agentResponseLengths } : {}),
       ...(agentThinkingLevels && Object.keys(agentThinkingLevels).length > 0 ? { agentThinkingLevels } : {}),
       providerDisclosure: {
-        accepted: acceptedDisclosure,
-        acceptedAt: acceptedDisclosure && typeof providerDisclosure.acceptedAt === "string" ? providerDisclosure.acceptedAt : undefined,
-        sensitivity: disclosure.sensitivity,
-        providers: disclosure.providers,
-        message: disclosure.message,
+        ...sessionDisclosure.persisted,
       },
       ...(agentModelOverrides && Object.keys(agentModelOverrides).length > 0 ? { agentModelOverrides } : {}),
       ...(competitiveState ? { competitive: competitiveState } : {}),
       ...(formalBoardState ? { formalBoard: formalBoardState } : {}),
       ...(isCompetitive ? { competitiveVoteMode: resolvedCompetitiveVoteMode, competitiveTopCount: resolvedCompetitiveTopCount } : {}),
+      ...(isFormalBoard ? { formalConvergence: resolvedFormalConvergence } : {}),
       ...(moderator ? { moderator } : {}),
       modelHealthSnapshot: modelHealth,
       events: [

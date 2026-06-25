@@ -21,6 +21,20 @@ type ToolStatus = {
   error?: string;
 };
 
+type LocalCliToolId = "claude" | "codex" | "gemini" | "agy";
+
+type ToolUpdateResult = {
+  tool: LocalCliToolId;
+  ok: boolean;
+  command: string;
+  args: string[];
+  stdout?: string;
+  stderr?: string;
+  error?: string;
+  before?: ToolStatus;
+  after?: ToolStatus;
+};
+
 type ModelStatus = {
   id: string;
   name: string;
@@ -87,6 +101,8 @@ export default function AdvisorySettingsPage() {
   const [loading, setLoading] = useState(true);
   const [probing, setProbing] = useState(false);
   const [safetyLoading, setSafetyLoading] = useState(false);
+  const [updatingTool, setUpdatingTool] = useState<LocalCliToolId | null>(null);
+  const [updateResult, setUpdateResult] = useState<ToolUpdateResult | null>(null);
 
   const load = async (probe = false) => {
     if (probe) setProbing(true);
@@ -107,6 +123,37 @@ export default function AdvisorySettingsPage() {
       setSafety(await res.json());
     } finally {
       setSafetyLoading(false);
+    }
+  };
+
+  const updateTool = async (tool: LocalCliToolId) => {
+    const command = data?.tools?.[tool]?.updateCommand;
+    if (command && !window.confirm(`Run local CLI update?\n\n${command}`)) return;
+    setUpdatingTool(tool);
+    setUpdateResult(null);
+    try {
+      const res = await fetch("/api/advisory/model-availability/update", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Panely-Local-Update": "1",
+        },
+        body: JSON.stringify({ tool }),
+      });
+      const data = await res.json();
+      if (data.result) setUpdateResult(data.result);
+      if (!res.ok) throw new Error(data.error || data.result?.error || "CLI update failed");
+      await load(true);
+    } catch (err) {
+      setUpdateResult({
+        tool,
+        ok: false,
+        command: "",
+        args: [],
+        error: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setUpdatingTool(null);
     }
   };
 
@@ -183,14 +230,16 @@ export default function AdvisorySettingsPage() {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "10px" }}>
             {[
-              { id: "claude", label: "Claude" },
-              { id: "codex", label: "Codex" },
-              { id: "gemini", label: "Gemini" },
-              { id: "agy", label: "Antigravity" },
+              { id: "claude" as const, label: "Claude" },
+              { id: "codex" as const, label: "Codex" },
+              { id: "gemini" as const, label: "Gemini" },
+              { id: "agy" as const, label: "Antigravity" },
             ].map((tool) => {
               const toolId = tool.id;
               const status = data?.tools?.[toolId];
               const needsAttention = !status?.available || status?.isOutdated || status?.authStatus === "auth-required";
+              const canUpdate = Boolean(status?.available && status?.isOutdated && status?.updateCommand);
+              const isUpdating = updatingTool === toolId;
               const badge = !status?.available
                 ? "Missing"
                 : status?.authStatus === "auth-required"
@@ -203,9 +252,37 @@ export default function AdvisorySettingsPage() {
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
                     {status?.available && !needsAttention ? <CheckCircle2 size={15} color="#22c55e" /> : <CircleAlert size={15} color="#f59e0b" />}
                     <strong>{tool.label}</strong>
-                    <span style={{ marginLeft: "auto", color: needsAttention ? "#f59e0b" : "#22c55e", fontSize: "10px", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                      {badge}
-                    </span>
+                    {canUpdate ? (
+                      <button
+                        onClick={() => void updateTool(toolId)}
+                        disabled={Boolean(updatingTool)}
+                        title={`Run ${status?.updateCommand}`}
+                        style={{
+                          marginLeft: "auto",
+                          border: "1px solid rgba(245,158,11,0.34)",
+                          background: "rgba(245,158,11,0.1)",
+                          color: "#f59e0b",
+                          borderRadius: "999px",
+                          padding: "3px 7px",
+                          fontSize: "10px",
+                          fontWeight: 900,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.08em",
+                          cursor: updatingTool ? "not-allowed" : "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "5px",
+                          opacity: updatingTool && !isUpdating ? 0.5 : 1,
+                        }}
+                      >
+                        <RefreshCw size={10} className={isUpdating ? "animate-spin" : ""} />
+                        {isUpdating ? "Updating" : "Update"}
+                      </button>
+                    ) : (
+                      <span style={{ marginLeft: "auto", color: needsAttention ? "#f59e0b" : "#22c55e", fontSize: "10px", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                        {badge}
+                      </span>
+                    )}
                   </div>
                   <div style={{ color: "var(--text-muted)", fontSize: "12px", overflowWrap: "anywhere", lineHeight: 1.5 }}>
                     {status?.available ? status.path : "Not detected"}
@@ -221,6 +298,16 @@ export default function AdvisorySettingsPage() {
               );
             })}
           </div>
+          {updateResult ? (
+            <div style={{ marginTop: "12px", border: `1px solid ${updateResult.ok ? "rgba(34,197,94,0.35)" : "rgba(248,113,113,0.35)"}`, borderRadius: "8px", background: updateResult.ok ? "rgba(34,197,94,0.08)" : "rgba(248,113,113,0.08)", padding: "10px", color: "var(--text-secondary)", fontSize: "12px", lineHeight: 1.5 }}>
+              <strong style={{ color: updateResult.ok ? "#22c55e" : "#f87171" }}>
+                {updateResult.ok ? `${updateResult.tool} updated` : `${updateResult.tool} update failed`}
+              </strong>
+              {updateResult.command ? <><br /><code>{[updateResult.command, ...updateResult.args].join(" ")}</code></> : null}
+              {updateResult.error ? <><br />{updateResult.error}</> : null}
+              {updateResult.stderr ? <><br />{updateResult.stderr.slice(0, 400)}</> : null}
+            </div>
+          ) : null}
         </section>
 
         <section style={{ border: "1px solid var(--border)", borderRadius: "10px", background: "var(--surface)", padding: "18px", marginBottom: "18px" }}>

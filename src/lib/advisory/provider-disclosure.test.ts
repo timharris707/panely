@@ -4,11 +4,26 @@ import { buildProviderDisclosure, inferSourceSensitivity, providerLabelsForModel
 
 test("public URLs do not require disclosure consent", () => {
   assert.equal(inferSourceSensitivity({ topic: "https://github.com/timharris707/panely" }), "public");
+  assert.equal(inferSourceSensitivity({ topic: "Review https://github.com/timharris707/panely" }), "public");
   const disclosure = buildProviderDisclosure({
     topic: "https://github.com/timharris707/panely",
     modelIds: ["claude-sonnet", "codex-frontier"],
   });
   assert.equal(disclosure.requiresConsent, false);
+});
+
+test("mixed private text and public URLs require disclosure consent", () => {
+  assert.equal(
+    inferSourceSensitivity({
+      topic: "Our unannounced Q4 launch numbers are 12345; compare https://github.com/timharris707/panely",
+    }),
+    "unknown"
+  );
+  const disclosure = buildProviderDisclosure({
+    topic: "Our unannounced Q4 launch numbers are 12345; compare https://github.com/timharris707/panely",
+    modelIds: ["claude-sonnet"],
+  });
+  assert.equal(disclosure.requiresConsent, true);
 });
 
 test("arbitrary URLs require disclosure consent", () => {

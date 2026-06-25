@@ -21,8 +21,117 @@ function listItems(values: string[]) {
     : "<li>None recorded.</li>";
 }
 
+function markdownList(values: string[]) {
+  return values.length ? values.map((value) => `- ${value}`).join("\n") : "- None recorded.";
+}
+
+function markdownTableCell(value: string | undefined) {
+  return (value || "")
+    .replace(/\|/g, "\\|")
+    .replace(/\n/g, " ")
+    .trim() || "unknown";
+}
+
 export function formalVerdictArtifactName(verdict: FormalBoardVerdict) {
   return verdict.valid ? "verdict.json" : "panely-invalid-verdict.json";
+}
+
+export function renderFormalConsensusMarkdown(input: {
+  title: string;
+  topic: string;
+  state: FormalBoardState;
+  verdict: FormalBoardVerdict;
+  clerkSynthesisMarkdown: string;
+}) {
+  const boardRows = input.verdict.board
+    .slice()
+    .sort((a, b) => a.seat.localeCompare(b.seat))
+    .map((seat) =>
+      `| ${markdownTableCell(seat.seat)} | ${markdownTableCell(seat.lens || "Formal reviewer")} | ${markdownTableCell(seat.model)} | ${seat.dropped ? "dropped/degraded" : "ran"} | ${seat.round_verdicts.map((item) => item.toUpperCase()).join(", ")} |`
+    );
+  const dropped = input.verdict.droppedSeats.map((seat) => `${seat.agentId}${seat.reason ? `: ${seat.reason}` : ""}`);
+  const degraded = input.verdict.degradedSeats.map((seat) => `${seat.agentId}${seat.reason ? `: ${seat.reason}` : ""}`);
+
+  return [
+    `# Formal Board Review — ${input.title}`,
+    "",
+    `Topic: ${input.topic}`,
+    `Date: ${input.verdict.date}`,
+    `Source packet SHA-256: ${input.state.sourcePacketHash}`,
+    `Protocol: ${input.state.protocol}`,
+    "",
+    "## Verdict",
+    "",
+    `- Verdict: ${input.verdict.verdict.toUpperCase()}`,
+    `- Confidence: ${input.verdict.confidence}`,
+    `- Valid: ${input.verdict.valid ? "yes" : "no"}`,
+    `- Unanimous: ${input.verdict.unanimous ? "yes" : "no"}`,
+    `- Rounds: ${input.verdict.rounds}`,
+    `- Same-seat continuity: ${input.verdict.sameSeatContinuity.length ? input.verdict.sameSeatContinuity.join(", ") : "none"}`,
+    ...(input.verdict.validityReason ? [`- Validity note: ${input.verdict.validityReason}`] : []),
+    "",
+    input.verdict.summary,
+    "",
+    "## Board",
+    "",
+    "| Seat | Lens | Model | Status | Round Verdicts |",
+    "| ---- | ---- | ----- | ------ | -------------- |",
+    ...(boardRows.length ? boardRows : ["| none | unknown | unknown | missing | none |"]),
+    "",
+    "## Evidence-backed",
+    "",
+    markdownList(input.verdict.evidenceBacked),
+    "",
+    "## Judgment calls",
+    "",
+    markdownList(input.verdict.judgmentCalls),
+    "",
+    "## Could not verify",
+    "",
+    markdownList(input.verdict.couldntVerify),
+    "",
+    "## Minority report",
+    "",
+    markdownList(input.verdict.minorityReport),
+    "",
+    "## Dropped or degraded seats",
+    "",
+    "### Dropped",
+    markdownList(dropped),
+    "",
+    "### Degraded",
+    markdownList(degraded),
+    "",
+    "## Open questions",
+    "",
+    markdownList(input.verdict.open_questions),
+    "",
+    "## Next actions",
+    "",
+    markdownList(input.verdict.next_actions),
+    "",
+    "## Isolation posture",
+    "",
+    `- Mode: ${input.state.isolation?.mode || "prompt-level"}`,
+    `- Filesystem isolation: ${input.state.isolation?.filesystemIsolation ? "yes" : "no"}`,
+    `- Network isolation: ${input.state.isolation?.networkIsolation ? "yes" : "no"}`,
+    `- Source material scope: ${input.state.isolation?.sourceMaterialScope || "source-packet"}`,
+    `- Note: ${input.state.isolation?.note || "Prompt-level peer-output isolation only."}`,
+    "",
+    "## Artifact manifest",
+    "",
+    `- Source packet: source-packet.md`,
+    `- Verdict: ${formalVerdictArtifactName(input.verdict)}`,
+    `- Run metadata: run-metadata.md`,
+    `- Handoff data: handoff-data.json`,
+    `- Final HTML: final-consensus.html`,
+    `- Clerk synthesis: clerk-synthesis.md`,
+    "",
+    "## Clerk synthesis",
+    "",
+    input.clerkSynthesisMarkdown.trim() || "No clerk synthesis was produced.",
+    "",
+  ].join("\n");
 }
 
 export function buildFormalRunMetadata(input: {
@@ -36,6 +145,7 @@ export function buildFormalRunMetadata(input: {
   synthesisNeutrality?: string;
 }) {
   const roundsRun = input.verdict?.rounds ?? Math.max(1, ...input.state.rounds.map((artifact) => artifact.round));
+  const isolation = input.state.isolation;
   const seats = input.state.seats.map((seat) => {
     const answered = seat.model || "unknown";
     const status = seat.status === "ran"
@@ -69,7 +179,12 @@ export function buildFormalRunMetadata(input: {
     "",
     "## Isolation",
     "",
-    "Round 1 uses prompt-level peer-output isolation over one source packet. Panely does not yet claim conductor-level filesystem or network isolation for Formal Board Review.",
+    `Mode: ${isolation?.mode || "prompt-level"}`,
+    `Source material scope: ${isolation?.sourceMaterialScope || "source-packet"}`,
+    `Filesystem isolation: ${isolation?.filesystemIsolation ? "yes" : "no"}`,
+    `Network isolation: ${isolation?.networkIsolation ? "yes" : "no"}`,
+    `CWD mode by phase: ${JSON.stringify(isolation?.cwdModeByPhase || { "round-1": "app-working-directory", "round-2": "app-working-directory", synthesis: "app-working-directory" })}`,
+    isolation?.note || "Round 1 uses prompt-level peer-output isolation over one source packet. Panely does not yet claim conductor-level filesystem or network isolation for Formal Board Review.",
     "",
     "## Synthesis",
     "",

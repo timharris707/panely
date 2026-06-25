@@ -4,11 +4,32 @@ import type {
   FormalBoardSeatStatus,
   FormalBoardState,
   FormalBoardVerdict,
+  FormalBoardConvergence,
 } from "../../types/advisory.ts";
 import type { SourcePacket } from "./source-packet.ts";
 
 const PROTOCOL_VERSION = "advisory-board/formal@1" as const;
 const VERDICT_SCHEMA = "advisory-board/verdict@1" as const;
+
+export function defaultFormalBoardIsolation() {
+  const updatedAt = new Date().toISOString();
+  return {
+    mode: "prompt-level" as const,
+    filesystemIsolation: false,
+    networkIsolation: false,
+    cwdModeByPhase: {
+      preflight: "app-working-directory" as const,
+      "round-1": "app-working-directory" as const,
+      "round-2": "app-working-directory" as const,
+      "round-3": "app-working-directory" as const,
+      synthesis: "app-working-directory" as const,
+      complete: "app-working-directory" as const,
+    },
+    sourceMaterialScope: "source-packet" as const,
+    note: "Formal Board Review uses prompt-level peer-output isolation and a shared source packet. It does not claim conductor-level filesystem or network isolation.",
+    updatedAt,
+  };
+}
 
 function normalizeLines(text: string, matcher: RegExp, maxItems = 8) {
   return text
@@ -85,6 +106,7 @@ export function createFormalBoardState(input: {
     sourcePacketHash: input.sourcePacket.hash,
     sourcePacketPreview: input.sourcePacket.preview,
     artifactDir: `data/advisory/formal-runs/${input.sessionId}`,
+    isolation: defaultFormalBoardIsolation(),
     seats: input.agents.map((agentId) => ({
       agentId,
       role: input.agentRoles?.[agentId],
@@ -200,6 +222,70 @@ Round 1 board packet:
 ${boardPacket || "No successful Round 1 outputs were recorded."}`;
 }
 
+export function buildFormalRoundThreeSystemPrompt(input: { agentName: string; role?: string; responseInstruction: string }) {
+  return `You are ${input.agentName}, serving as ${input.role || "a formal board reviewer"}.
+
+Round 3 is convergence. You may read the source summary and the prior board packets, but you must preserve meaningful dissent instead of forcing agreement.
+
+Return:
+1. Final position after convergence
+2. Where you changed your mind, if anywhere
+3. Any dissent you still preserve
+4. Evidence/judgment/could-not-verify split
+5. Your final verdict: SHIP, CAUTION, or BLOCK
+
+${input.responseInstruction}`;
+}
+
+export function buildFormalRoundThreeUserPrompt(input: {
+  topic: string;
+  sourcePacketHash: string;
+  artifacts: FormalBoardRoundArtifact[];
+}) {
+  const boardPacket = input.artifacts
+    .filter((artifact) => artifact.status === "ran" && (artifact.round === 1 || artifact.round === 2))
+    .map((artifact) => `## Round ${artifact.round}: ${artifact.agentId}\n${artifact.text}`)
+    .join("\n\n---\n\n");
+
+  return `Topic: ${input.topic}
+
+Source packet SHA-256: ${input.sourcePacketHash}
+
+Prior board packet:
+
+${boardPacket || "No successful prior outputs were recorded."}`;
+}
+
+export function sameSeatContinuityForRounds(state: FormalBoardState, rounds: Array<1 | 2 | 3>) {
+  if (!rounds.length) return [];
+  const seatSets = rounds.map((round) =>
+    new Set(state.rounds.filter((artifact) => artifact.round === round && artifact.status === "ran").map((artifact) => artifact.agentId))
+  );
+  return Array.from(seatSets[0]).filter((agentId) => seatSets.every((seatSet) => seatSet.has(agentId))).sort();
+}
+
+export function shouldRunFormalRoundThree(state: FormalBoardState, convergence: FormalBoardConvergence = "auto") {
+  if (convergence === "off") return { run: false, reason: "Round 3 convergence is off." };
+  const continuity = sameSeatContinuityForRounds(state, [1, 2]);
+  if (continuity.length < 2) return { run: false, reason: "Round 3 requires at least two same-seat reviewers through Round 2." };
+  if (convergence === "always") return { run: true, reason: "Round 3 convergence is set to always." };
+
+  const roundTwo = state.rounds.filter((artifact) => artifact.round === 2 && artifact.status === "ran" && continuity.includes(artifact.agentId));
+  const verdicts = roundTwo.map((artifact) => parseExplicitVerdict(artifact.text));
+  const confidences = roundTwo.map((artifact) => parseConfidence(artifact.text));
+  const uniqueVerdicts = new Set(verdicts);
+  const hasLowConfidence = confidences.includes("low");
+  const hasExplicitDissent = roundTwo.some((artifact) => /dissent|minority|disagree|push back|concern|not convinced/i.test(artifact.text));
+  const hasBlockCautionSplit = verdicts.includes("block") && verdicts.includes("caution");
+  const hasNonUnanimousVerdicts = uniqueVerdicts.size > 1;
+
+  if (hasLowConfidence) return { run: true, reason: "Round 3 auto-triggered by low confidence." };
+  if (hasNonUnanimousVerdicts) return { run: true, reason: "Round 3 auto-triggered by non-unanimous Round 2 verdicts." };
+  if (hasExplicitDissent) return { run: true, reason: "Round 3 auto-triggered by explicit dissent." };
+  if (hasBlockCautionSplit) return { run: true, reason: "Round 3 auto-triggered by block/caution split." };
+  return { run: false, reason: "Round 3 auto did not find disagreement, low confidence, or explicit dissent." };
+}
+
 export function buildFormalSynthesisPrompt(input: { topic: string; sourcePacketHash: string; artifacts: FormalBoardRoundArtifact[]; seats: FormalBoardSeat[] }) {
   const outputs = input.artifacts
     .map((artifact) => `## Round ${artifact.round}: ${artifact.agentId} (${artifact.status})\n${artifact.text}`)
@@ -257,9 +343,8 @@ export function buildFormalVerdict(input: {
   const degradedSeats = input.state.seats
     .filter((seat) => seat.status === "degraded")
     .map((seat) => ({ agentId: seat.agentId, reason: seat.statusReason }));
-  const successfulRoundOneSeats = new Set(input.state.rounds.filter((artifact) => artifact.round === 1 && artifact.status === "ran").map((artifact) => artifact.agentId));
-  const successfulRoundTwoSeats = new Set(input.state.rounds.filter((artifact) => artifact.round === 2 && artifact.status === "ran").map((artifact) => artifact.agentId));
-  const sameSeatContinuity = Array.from(successfulRoundOneSeats).filter((agentId) => successfulRoundTwoSeats.has(agentId)).sort();
+  const roundThreeRan = input.state.rounds.some((artifact) => artifact.round === 3 && artifact.status === "ran");
+  const sameSeatContinuity = sameSeatContinuityForRounds(input.state, roundThreeRan ? [1, 2, 3] : [1, 2]);
   const valid = sameSeatContinuity.length >= 2;
   const roundsRun = Math.max(1, ...input.state.rounds.map((artifact) => artifact.round));
   const board = input.state.seats.map((seat) => {
@@ -299,7 +384,9 @@ export function buildFormalVerdict(input: {
     droppedSeats,
     degradedSeats,
     valid,
-    validityReason: valid ? undefined : "A valid Formal Board Review requires at least two of the same seats to complete independent Round 1 and rebuttal Round 2.",
+    validityReason: valid ? undefined : roundThreeRan
+      ? "A valid Formal Board Review with Round 3 requires at least two of the same seats to complete independent Round 1, rebuttal Round 2, and convergence Round 3."
+      : "A valid Formal Board Review requires at least two of the same seats to complete independent Round 1 and rebuttal Round 2.",
     sameSeatContinuity,
     synthesisNeutrality: input.synthesisNeutrality,
     synthesisProducer: input.synthesisProducer,

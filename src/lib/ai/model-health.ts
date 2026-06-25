@@ -1,9 +1,9 @@
 import fs from "fs";
 import path from "path";
 import { spawnSync } from "child_process";
-import { getProviderModelById, PROVIDERS, type ProviderModel } from "@/lib/ai/providers";
-import { classifyProviderError, sanitizeProviderOutput, type ProviderErrorKind } from "@/lib/ai/provider-errors";
-import { isVersionOutdated } from "@/lib/ai/cli-version";
+import { getProviderModelById, PROVIDERS, type ProviderModel } from "./providers.ts";
+import { classifyProviderError, sanitizeProviderOutput, type ProviderErrorKind } from "./provider-errors.ts";
+import { isVersionOutdated } from "./cli-version.ts";
 
 const MODEL_PROBE_PROMPT = "Reply with exactly: ok";
 const LARGE_CONTEXT_PROBE_PROMPT = `${"Panely local context probe. ".repeat(12000)}\n\nReply with exactly: ok`;
@@ -65,6 +65,19 @@ export interface ModelHealthResult {
   cached?: boolean;
   error?: string;
   errorKind?: ProviderErrorKind;
+}
+
+export interface CliToolUpdateResult {
+  tool: LocalCliName;
+  ok: boolean;
+  command: string;
+  args: string[];
+  statusCode: number | null;
+  stdout: string;
+  stderr: string;
+  before: LocalCliToolStatus;
+  after: LocalCliToolStatus;
+  error?: string;
 }
 
 interface HealthCacheStore {
@@ -161,6 +174,21 @@ function resolveInstallMethod(command: LocalCliName, cliPath?: string): Pick<Loc
     installMethod: "npm",
     updateCommand: packageInfo.updateCommand,
   };
+}
+
+export function buildCliUpdateInvocation(command: LocalCliName, status?: Pick<LocalCliToolStatus, "installMethod">) {
+  if (command === "agy") {
+    return { command: "agy", args: ["update"] };
+  }
+
+  const installMethod = status?.installMethod || "npm";
+  if (installMethod === "homebrew") {
+    return { command: "brew", args: ["upgrade", command === "gemini" ? "gemini-cli" : command] };
+  }
+
+  const packageName = CLI_PACKAGE_INFO[command].packageName;
+  if (!packageName) return null;
+  return { command: "npm", args: ["install", "-g", `${packageName}@latest`] };
 }
 
 function detectAgyAuthStatus() {
@@ -270,6 +298,54 @@ export function detectLocalCliTools(options: { force?: boolean } = {}) {
     codex: detectCli("codex", options),
     gemini: detectCli("gemini", options),
     agy: detectCli("agy", options),
+  };
+}
+
+export function updateLocalCliTool(command: LocalCliName, options: { timeoutMs?: number } = {}): CliToolUpdateResult {
+  const before = buildToolStatus(command, { force: true });
+  const invocation = buildCliUpdateInvocation(command, before);
+  if (!invocation) {
+    const after = buildToolStatus(command, { force: true });
+    updateCache((store) => {
+      store.tools = { ...(store.tools || {}), [command]: after };
+    });
+    return {
+      tool: command,
+      ok: false,
+      command: "",
+      args: [],
+      statusCode: null,
+      stdout: "",
+      stderr: "",
+      before,
+      after,
+      error: "No supported update command is available for this local CLI.",
+    };
+  }
+
+  const result = spawnSync(invocation.command, invocation.args, {
+    encoding: "utf8",
+    timeout: options.timeoutMs ?? 10 * 60 * 1000,
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  const stdout = sanitizeProviderOutput(result.stdout || "");
+  const stderr = sanitizeProviderOutput(result.stderr || "");
+  const after = buildToolStatus(command, { force: true });
+  updateCache((store) => {
+    store.tools = { ...(store.tools || {}), [command]: after };
+  });
+
+  return {
+    tool: command,
+    ok: result.status === 0,
+    command: invocation.command,
+    args: invocation.args,
+    statusCode: result.status,
+    stdout,
+    stderr,
+    before,
+    after,
+    error: result.error ? sanitizeProviderOutput(String(result.error.message || result.error)) : undefined,
   };
 }
 

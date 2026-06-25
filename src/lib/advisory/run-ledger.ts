@@ -9,12 +9,14 @@ export function createRunStep(input: {
   phase: string;
   agentId: string;
   model: string;
+  key?: string;
   attemptId?: string;
   now?: string;
 }): AdvisoryRunStep {
   const now = input.now || new Date().toISOString();
   return {
     id: `step_${input.sessionId}_${input.index}_${input.phase}_${input.agentId}_${Date.now()}`,
+    key: input.key,
     sessionId: input.sessionId,
     index: input.index,
     phase: input.phase,

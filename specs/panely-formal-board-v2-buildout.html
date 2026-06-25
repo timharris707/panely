@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan: Panely Formal Board V2 Buildout</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #080a0f;
+    --panel: #121722;
+    --panel-2: #182130;
+    --panel-3: #0e131d;
+    --text: #f2f6fb;
+    --muted: #a8b3c3;
+    --line: #2c3546;
+    --accent: #65d6ad;
+    --accent-2: #7f8cff;
+    --warn: #f1be63;
+    --danger: #ff7b7b;
+    --code: #090d14;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: radial-gradient(circle at 14% 8%, rgba(101, 214, 173, .12), transparent 28%), radial-gradient(circle at 82% 14%, rgba(127, 140, 255, .12), transparent 30%), var(--bg); color: var(--text); line-height: 1.58; }
+  main { width: min(1180px, calc(100vw - 40px)); margin: 0 auto; padding: 40px 0 76px; }
+  header, section, .phase, figure, details.meta { border: 1px solid var(--line); background: rgba(18, 23, 34, .88); border-radius: 10px; }
+  header { padding: 28px; margin-bottom: 20px; }
+  section, .phase { padding: 24px; margin: 18px 0; }
+  figure { margin: 18px 0; padding: 16px; background: rgba(24, 33, 48, .76); }
+  h1, h2, h3, h4 { margin: 0 0 12px; letter-spacing: 0; }
+  h1 { font-size: clamp(34px, 5vw, 58px); line-height: 1.02; }
+  h2 { font-size: 24px; }
+  h3 { font-size: 20px; }
+  h4 { margin-top: 20px; color: #dbe3ff; font-size: 15px; text-transform: uppercase; letter-spacing: .04em; }
+  p, li, figcaption, dd { color: var(--muted); }
+  ul { margin: 8px 0 0; padding-left: 22px; }
+  li { margin: 7px 0; }
+  code { background: var(--code); color: #dce7ff; border: 1px solid #222a38; border-radius: 5px; padding: 2px 5px; }
+  details.meta { padding: 12px 16px; margin-top: 18px; }
+  summary { cursor: pointer; color: var(--text); font-weight: 800; }
+  dl { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 8px 14px; margin: 12px 0 0; }
+  dt { color: var(--muted); font-weight: 800; }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  .tag { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; margin-right: 8px; font-size: 11px; font-weight: 900; text-transform: uppercase; }
+  .existing { color: #aab4ff; }
+  .new { color: #7eedb4; }
+  .change { color: #f7cf82; }
+  .status { min-width: 38px; display: inline-block; color: var(--accent); font-weight: 900; text-align: center; }
+  .checklist { list-style: none; padding-left: 0; }
+  .checklist li { border-left: 3px solid var(--line); padding-left: 10px; }
+  .loop, .callout { border-left: 4px solid var(--accent-2); background: rgba(127, 140, 255, .09); border-radius: 8px; padding: 14px; color: var(--muted); margin-top: 14px; }
+  .risk { border-left-color: var(--warn); background: rgba(241, 190, 99, .08); }
+  .blocker { border-left-color: var(--danger); background: rgba(255, 123, 123, .08); }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  th, td { border: 1px solid var(--line); padding: 10px; text-align: left; vertical-align: top; }
+  th { color: var(--text); background: var(--panel-2); }
+  td { color: var(--muted); }
+  .visual { width: 100%; max-height: 360px; display: block; border-radius: 8px; background: var(--panel-3); }
+  .visual text { font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+  .evidence-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .evidence-card { border: 1px dashed var(--line); border-radius: 8px; padding: 14px; background: var(--panel-2); }
+  .evidence-card img { width: 100%; max-height: 260px; object-fit: cover; object-position: top left; border: 1px solid var(--line); border-radius: 8px; margin-top: 10px; display: block; }
+  @media (max-width: 760px) { main { width: min(100vw - 24px, 1180px); padding-top: 24px; } dl { grid-template-columns: 1fr; } section, .phase, header { padding: 18px; } }
+</style>
+</head>
+<body>
+<main>
+
+  <header>
+    <h1>Plan: Panely Formal Board V2 Buildout</h1>
+    <details class="meta" open>
+      <summary>Metadata</summary>
+      <dl>
+        <dt>created</dt><dd>2026-06-25T09:52:39-07:00</dd>
+        <dt>modified</dt><dd>2026-06-25T10:58:00-07:00</dd>
+        <dt>commits</dt><dd>pending</dd>
+        <dt>agent name</dt><dd>Codex</dd>
+        <dt>session id</dt><dd>019efcdb-afca-78d2-93fc-220dcdb3c9c0</dd>
+        <dt>back refs</dt><dd>specs/panely-formal-board-trust-roadmap.html, specs/panely-advisory-board-compatibility-closeout.html, commit 0f90c40, user request for items 1 through 7</dd>
+        <dt>forward refs</dt><dd>Implementation commit for Formal Board V2 buildout</dd>
+      </dl>
+    </details>
+  </header>
+
+  <figure>
+    <svg class="visual" viewBox="0 0 1536 760" role="img" aria-label="Formal Board V2 buildout flow">
+      <rect width="1536" height="760" fill="#0e131d"/>
+      <circle cx="212" cy="146" r="120" fill="#65d6ad" opacity=".13"/>
+      <circle cx="1280" cy="188" r="160" fill="#7f8cff" opacity=".13"/>
+      <text x="92" y="92" fill="#f2f6fb" font-size="48" font-weight="800">Formal Board V2</text>
+      <text x="92" y="142" fill="#a8b3c3" font-size="24">Artifacts, resume, convergence, isolation, tests</text>
+      <g transform="translate(96 240)">
+        <rect width="260" height="136" rx="14" fill="#182130" stroke="#2c3546"/>
+        <text x="28" y="56" fill="#65d6ad" font-size="28" font-weight="800">Artifacts</text>
+        <text x="28" y="94" fill="#a8b3c3" font-size="18">Download and browse</text>
+      </g>
+      <g transform="translate(386 240)">
+        <rect width="260" height="136" rx="14" fill="#182130" stroke="#2c3546"/>
+        <text x="28" y="56" fill="#65d6ad" font-size="28" font-weight="800">Resume</text>
+        <text x="28" y="94" fill="#a8b3c3" font-size="18">Continue exact steps</text>
+      </g>
+      <g transform="translate(676 240)">
+        <rect width="260" height="136" rx="14" fill="#182130" stroke="#2c3546"/>
+        <text x="28" y="56" fill="#65d6ad" font-size="28" font-weight="800">Round 3</text>
+        <text x="28" y="94" fill="#a8b3c3" font-size="18">Converge only when needed</text>
+      </g>
+      <g transform="translate(966 240)">
+        <rect width="260" height="136" rx="14" fill="#182130" stroke="#2c3546"/>
+        <text x="28" y="56" fill="#65d6ad" font-size="28" font-weight="800">Isolation</text>
+        <text x="28" y="94" fill="#a8b3c3" font-size="18">Truthful conductor posture</text>
+      </g>
+      <g transform="translate(1256 240)">
+        <rect width="184" height="136" rx="14" fill="#182130" stroke="#2c3546"/>
+        <text x="24" y="56" fill="#65d6ad" font-size="28" font-weight="800">Tests</text>
+        <text x="24" y="94" fill="#a8b3c3" font-size="18">Privacy and UI smoke</text>
+      </g>
+      <path d="M356 308 H386 M646 308 H676 M936 308 H966 M1226 308 H1256" stroke="#7f8cff" stroke-width="5"/>
+      <rect x="96" y="514" width="1344" height="104" rx="14" fill="#121722" stroke="#2c3546"/>
+      <text x="132" y="574" fill="#f2f6fb" font-size="26" font-weight="800">Definition of done: a formal run ends in a visible, durable, auditable deliverable.</text>
+    </svg>
+    <figcaption>Formal Board V2 turns the current protocol work into a product-ready review surface.</figcaption>
+  </figure>
+
+  <section id="purpose">
+    <h2>Purpose</h2>
+    <p>Build the next seven roadmap items for Panely: first-class formal artifact exports, true resumable local execution, optional convergence Round 3, a stronger and more honest isolation posture, provider-disclosure regression tests, browser smoke evidence, and more deterministic final artifact generation.</p>
+  </section>
+
+  <section id="problem">
+    <h2>Problem</h2>
+    <p>Panely now has a useful Formal Board Review mode, but it still leaves too much value in local files that the UI does not expose, cannot resume a partially completed formal run safely, lacks optional convergence, and still relies on a model-authored final markdown artifact more than a deterministic handoff pipeline. Privacy and UI smoke coverage also need stronger regression protection.</p>
+    <figure>
+      <svg class="visual" viewBox="0 0 1536 620" role="img" aria-label="Current gaps">
+        <rect width="1536" height="620" fill="#0e131d"/>
+        <text x="80" y="90" fill="#f2f6fb" font-size="42" font-weight="800">Current gaps</text>
+        <g transform="translate(92 164)">
+          <rect width="300" height="260" rx="12" fill="#182130" stroke="#2c3546"/>
+          <text x="28" y="58" fill="#f1be63" font-size="28" font-weight="800">Hidden files</text>
+          <text x="28" y="104" fill="#a8b3c3" font-size="20">Artifacts exist but are</text>
+          <text x="28" y="134" fill="#a8b3c3" font-size="20">not easy to inspect.</text>
+        </g>
+        <g transform="translate(438 164)">
+          <rect width="300" height="260" rx="12" fill="#182130" stroke="#2c3546"/>
+          <text x="28" y="58" fill="#f1be63" font-size="28" font-weight="800">Interrupted runs</text>
+          <text x="28" y="104" fill="#a8b3c3" font-size="20">Steps are tracked but</text>
+          <text x="28" y="134" fill="#a8b3c3" font-size="20">not resumed.</text>
+        </g>
+        <g transform="translate(784 164)">
+          <rect width="300" height="260" rx="12" fill="#182130" stroke="#2c3546"/>
+          <text x="28" y="58" fill="#f1be63" font-size="28" font-weight="800">Loose finish</text>
+          <text x="28" y="104" fill="#a8b3c3" font-size="20">Final handoff still</text>
+          <text x="28" y="134" fill="#a8b3c3" font-size="20">depends on prose.</text>
+        </g>
+        <g transform="translate(1130 164)">
+          <rect width="300" height="260" rx="12" fill="#182130" stroke="#2c3546"/>
+          <text x="28" y="58" fill="#f1be63" font-size="28" font-weight="800">Test holes</text>
+          <text x="28" y="104" fill="#a8b3c3" font-size="20">Privacy and UI paths</text>
+          <text x="28" y="134" fill="#a8b3c3" font-size="20">need evidence.</text>
+        </g>
+      </svg>
+      <figcaption>The open items are product trust gaps, not cosmetic cleanup.</figcaption>
+    </figure>
+  </section>
+
+  <section id="solution">
+    <h2>Solution</h2>
+    <p>Implement this as seven tightly-scoped phases with a live status tracker. First expose formal artifacts in the UI. Then make formal runs step-aware and resumable. Add optional Round 3 only after the resume contract is stable. Strengthen isolation metadata honestly, add privacy regression tests, capture browser smoke evidence, and finish by making final handoffs deterministic from structured data first.</p>
+    <figure>
+      <svg class="visual" viewBox="0 0 1536 620" role="img" aria-label="Target architecture">
+        <rect width="1536" height="620" fill="#0e131d"/>
+        <text x="78" y="82" fill="#f2f6fb" font-size="42" font-weight="800">Target architecture</text>
+        <rect x="86" y="160" width="340" height="250" rx="14" fill="#182130" stroke="#2c3546"/>
+        <text x="122" y="224" fill="#65d6ad" font-size="30" font-weight="800">Formal runner</text>
+        <text x="122" y="270" fill="#a8b3c3" font-size="20">Step ledger and resume</text>
+        <rect x="598" y="160" width="340" height="250" rx="14" fill="#182130" stroke="#2c3546"/>
+        <text x="634" y="224" fill="#65d6ad" font-size="30" font-weight="800">Artifact store</text>
+        <text x="634" y="270" fill="#a8b3c3" font-size="20">Manifest and downloads</text>
+        <rect x="1110" y="160" width="340" height="250" rx="14" fill="#182130" stroke="#2c3546"/>
+        <text x="1146" y="224" fill="#65d6ad" font-size="30" font-weight="800">Handoff builder</text>
+        <text x="1146" y="270" fill="#a8b3c3" font-size="20">Structured first output</text>
+        <path d="M426 285 H598 M938 285 H1110" stroke="#7f8cff" stroke-width="6"/>
+        <text x="438" y="474" fill="#f2f6fb" font-size="26" font-weight="800">Runner writes facts. Store exposes files. Builder renders the deliverable.</text>
+      </svg>
+      <figcaption>The build should make artifacts durable and easy to use without overclaiming isolation.</figcaption>
+    </figure>
+  </section>
+
+  <section id="files" class="files">
+    <h2>Relevant Files</h2>
+    <h3>Existing Files</h3>
+    <ul>
+      <li><span class="tag existing">existing</span><code>src/app/api/advisory/sessions/[id]/run/route.ts</code> - Formal Board execution, phases, artifacts, run steps, and completion.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/advisory/formal-board.ts</code> - formal prompts, verdict builder, same-seat validity, phase definitions.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/advisory/formal-artifacts.ts</code> - metadata, handoff data, HTML rendering, verdict artifact naming.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/advisory/run-ledger.ts</code> - run step lifecycle and stale-step helpers.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/advisory/provider-disclosure.ts</code> - source sensitivity and provider disclosure helper.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/advisory/decision-record.ts</code> - decision record markdown and formal verdict rendering.</li>
+      <li><span class="tag existing">existing</span><code>src/app/api/advisory/sessions/[id]/brief/route.ts</code> - brief generation endpoint that can link to formal artifacts.</li>
+      <li><span class="tag existing">existing</span><code>src/app/brief/[id]/page.tsx</code> - artifact-oriented post-run page.</li>
+      <li><span class="tag existing">existing</span><code>src/app/api/advisory/sessions/[id]/events/route.ts</code> - event polling and stale step exposure.</li>
+      <li><span class="tag existing">existing</span><code>src/app/api/advisory/session-plan/route.ts</code> - planner disclosure guard and mode planning.</li>
+      <li><span class="tag existing">existing</span><code>src/components/advisory/LaunchWizard.tsx</code> - provider disclosure UI, mode selection, and planning launch path.</li>
+      <li><span class="tag existing">existing</span><code>src/app/advisory/page.tsx</code> - active session UI, completion controls, bottom action bar, and artifact export buttons.</li>
+      <li><span class="tag existing">existing</span><code>src/types/advisory.ts</code> - session, formal board, verdict, run step, artifact, and decision record types.</li>
+    </ul>
+    <h3>New Files</h3>
+    <ul>
+      <li><span class="tag new">new</span><code>src/lib/advisory/formal-resume.ts</code> - pure helpers for next formal step, resumability, artifact presence, and retry eligibility.</li>
+      <li><span class="tag new">new</span><code>src/lib/advisory/formal-resume.test.ts</code> - unit tests for incomplete formal runs and next-step selection.</li>
+      <li><span class="tag new">new</span><code>src/lib/advisory/formal-artifact-manifest.test.ts</code> - tests for manifest generation, valid/invalid verdict naming, and visible downloads.</li>
+      <li><span class="tag new">new</span><code>src/app/api/advisory/sessions/[id]/formal-artifacts/route.ts</code> - local API for artifact manifest and safe artifact reads/downloads.</li>
+      <li><span class="tag new">new</span><code>src/app/api/advisory/sessions/[id]/resume/route.ts</code> - local API to continue an incomplete formal run from the next safe step.</li>
+      <li><span class="tag new">new</span><code>specs/panely-formal-board-v2-buildout.html</code> - this live execution tracker.</li>
+      <li><span class="tag new">new</span><code>specs/panely-formal-board-v2-buildout/</code> - visual evidence output directory for browser screenshots if generated.</li>
+    </ul>
+  </section>
+
+  <section id="phases">
+    <h2>Implementation Phases</h2>
+    <p><strong>IMPORTANT:</strong> update this document before starting a phase, after finishing a phase, and when review findings change scope. Status markers: <code>[]</code> idle, <code>[wip]</code> in progress, <code>[p]</code> partial/deferred, <code>[x]</code> complete, <code>[f]</code> failed.</p>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 0: Plan Review Gate</h3>
+      <p>Formalize and adversarially review this plan before code changes begin.</p>
+      <h4>0.1 Plan Review</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Create this HTML-first live plan with embedded visuals and no template tokens.</li>
+        <li><code class="status">[x]</code> Run adversarial subagent review focused on scope, sequencing, missing risks, and validation gaps.</li>
+        <li><code class="status">[x]</code> Incorporate accepted review feedback into this file before implementation.</li>
+        <li><code class="status">[x]</code> Record plan approval in Amendments after amended-plan confirmation.</li>
+      </ul>
+      <h4>0.2 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code><code>rg -n "\\{\\{|\\}\\}" specs/panely-formal-board-v2-buildout.html</code> - proves no template tokens remain.</li>
+        <li><code class="status">[x]</code><code>open specs/panely-formal-board-v2-buildout.html</code> - proves the plan opens locally for review.</li>
+      </ul>
+      <div class="loop">Do not exit Phase 0 until adversarial plan review is clean or all accepted findings are patched.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 1: Formal Artifact Browser and Downloads</h3>
+      <p>Make the formal artifacts visible and usable from the app, not just written to disk. This must cover valid, invalid, and incomplete/interrupted Formal Board runs without presenting invalid output as canonical.</p>
+      <h4>1.1 Artifact Manifest</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add a manifest builder that lists source packet, round artifacts, board packet, verdict file, metadata, handoff data, final markdown, final HTML, isolation metadata, and current run status.</li>
+        <li><code class="status">[x]</code> Distinguish valid <code>verdict.json</code> from invalid <code>panely-invalid-verdict.json</code>.</li>
+        <li><code class="status">[x]</code> Expose completed-valid, completed-invalid, and interrupted/incomplete manifests with clear status labels.</li>
+        <li><code class="status">[x]</code> Restrict artifact reads to the current session's formal artifact directory and prevent path traversal.</li>
+      </ul>
+      <h4>1.2 UI Exposure</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add formal artifact actions to completed Formal Board sessions: View Handoff, Export Verdict, Export Metadata, Export Source Packet, and Export Full Bundle or manifest.</li>
+        <li><code class="status">[x]</code> Add a compact artifact panel on the brief page or session view showing available files and missing files.</li>
+        <li><code class="status">[x]</code> Keep existing Export MD/PDF behavior intact for roundtable and competitive sessions.</li>
+      </ul>
+      <h4>1.3 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code><code>npm test -- src/lib/advisory/formal-artifact-manifest.test.ts</code> - proves manifest and path safety, including <code>..</code>, encoded traversal, absolute paths, unknown artifact names, invalid session IDs, and realpath containment.</li>
+        <li><code class="status">[x]</code><code>npx tsc --noEmit</code> - proves artifact API/UI types compile.</li>
+      </ul>
+      <div class="loop">Do not exit Phase 1 until a completed formal run exposes its artifact set in the UI/API.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 2: Resumable Formal Execution</h3>
+      <p>Let incomplete Formal Board runs continue from the next safe step without replaying completed independent outputs. This phase must be idempotent under double-clicks, stale process recovery, and partial artifact persistence.</p>
+      <h4>2.1 Formal Step Model</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add pure helpers to determine the next missing formal step from <code>formalBoard.rounds</code>, <code>formalBoard.phase</code>, and <code>runSteps</code>.</li>
+        <li><code class="status">[x]</code> Use canonical step keys in the form <code>formal:&lt;sessionId&gt;:&lt;sourceHash&gt;:&lt;phase&gt;:&lt;agentId|clerk&gt;</code> so resume can identify completed work deterministically.</li>
+        <li><code class="status">[x]</code> Verify source-packet hash and artifact existence before skipping or resuming a step.</li>
+        <li><code class="status">[x]</code> Treat synthesis and artifact rendering as resumable steps after successful Round 2 continuity.</li>
+      </ul>
+      <h4>2.2 Resume Lease, Endpoint, and UI</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add one active resume lease per session stored on the session formal state or run metadata, with a 15-minute TTL; reject or no-op concurrent resume requests while a fresh lease exists.</li>
+        <li><code class="status">[x]</code> Add stale event cleanup rules so abandoned <code>running</code> steps become <code>stale</code> before resume starts.</li>
+        <li><code class="status">[x]</code> Add a resume endpoint that only resumes abandoned, stale, or failed formal runs with persisted state and a matching source hash.</li>
+        <li><code class="status">[x]</code> Add a visible Resume Formal Review action when a session has stale/failed formal steps.</li>
+        <li><code class="status">[x]</code> Preserve manual archive/end behavior for sessions the user does not want resumed.</li>
+      </ul>
+      <h4>2.3 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code><code>npm test -- src/lib/advisory/formal-resume.test.ts src/lib/advisory/run-ledger.test.ts</code> - proves next-step, stale recovery, lease, hash mismatch, artifact-existence, and double-resume behavior.</li>
+        <li><code class="status">[p]</code><code>npm test</code> - focused suite passed; full suite remains in global validation.</li>
+      </ul>
+      <div class="loop">Do not exit Phase 2 until mocked interrupted formal runs resume without duplicating completed seat output.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 3: Optional Round 3 Convergence</h3>
+      <p>Add an optional convergence round for Formal Board Review only, after independent review and rebuttal are complete.</p>
+      <h4>3.1 Protocol and Settings</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add a Formal Board convergence setting: off, auto, or always. Default to auto only for Formal Board Review.</li>
+        <li><code class="status">[x]</code> Define auto convergence as triggered by <code>confidence === "low"</code>, non-unanimous final Round 2 verdicts, explicit dissent, or at least one block/caution split among same-seat continuity reviewers.</li>
+        <li><code class="status">[x]</code> Generate Round 3 prompts that ask only same-seat continuity reviewers to converge, preserve dissent, and produce a final seat verdict.</li>
+        <li><code class="status">[x]</code> Ensure same-seat validity accounts for Round 3 when it runs without invalidating completed two-round runs.</li>
+      </ul>
+      <h4>3.2 Artifact and UI Updates</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Write <code>round-3/&lt;seat&gt;.md</code> artifacts when convergence runs.</li>
+        <li><code class="status">[x]</code> Include Round 3 in manifest, metadata, verdict board entries, and progress UI.</li>
+      </ul>
+      <h4>3.3 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code><code>npm test -- src/lib/advisory/formal-board.test.ts</code> - proves optional Round 3 validity and verdict accounting for off, always, and auto trigger fixtures.</li>
+      </ul>
+      <div class="loop">Do not exit Phase 3 until Round 3 is clearly optional and does not affect roundtable/competitive modes.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 4: Isolation Posture and Conductor Prep</h3>
+      <p>Improve the Formal Board trust posture without claiming full process isolation unless it is actually implemented. The metadata shape introduced here must be available to Phase 1 manifests and Phase 7 deterministic handoffs.</p>
+      <h4>4.1 Isolation Metadata Contract</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add explicit isolation metadata to formal state/artifacts: prompt-level, source-packet-only, temp-workdir, or conductor-backed.</li>
+        <li><code class="status">[x]</code> Record whether each round used full repo cwd, a temp cwd, or another conductor mode.</li>
+        <li><code class="status">[x]</code> Reserve and render isolation metadata in artifact manifests even before temp-workdir execution is enabled.</li>
+        <li><code class="status">[x]</code> Update copy so no surface claims filesystem/network isolation unless a conductor-backed mode exists.</li>
+      </ul>
+      <h4>4.2 Safe Temp Workdir Experiment</h4>
+      <ul class="checklist">
+        <li><code class="status">[p]</code> Evaluate whether formal Round 1 can run from a temp source-packet directory without breaking local CLI auth or streaming.</li>
+        <li><code class="status">[x]</code> If safe, add a conservative temp-workdir mode for Round 1; otherwise document why it remains prompt-level only.</li>
+      </ul>
+      <h4>4.3 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code><code>npm test -- src/lib/advisory/formal-board.test.ts</code> - proves isolation metadata is persisted and rendered.</li>
+        <li><code class="status">[p]</code><code>npm run build</code> - deferred to global validation because this phase did not change actual cwd execution.</li>
+      </ul>
+      <div class="loop">Do not exit Phase 4 until the app is more isolated or more explicit about why it is not.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 5: Provider Disclosure Regression Tests</h3>
+      <p>Turn the privacy behavior into a testable contract.</p>
+      <h4>5.1 API Tests</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add a route-level test proving <code>/api/advisory/session-plan</code> rejects private/unknown source material before planner calls unless disclosure is accepted.</li>
+        <li><code class="status">[x]</code> Add a public GitHub URL case proving public material can plan without extra friction.</li>
+        <li><code class="status">[x]</code> Add a session creation test confirming provider disclosure is persisted on created sessions.</li>
+      </ul>
+      <h4>5.2 UI Contract</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Ensure the Generate advisor plan button is disabled while consent is required.</li>
+        <li><code class="status">[x]</code> Ensure changing topic or attachments resets disclosure acceptance.</li>
+      </ul>
+      <h4>5.3 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code><code>npm test -- src/lib/advisory/provider-disclosure.test.ts src/app/api/advisory/session-plan/route.test.ts src/app/api/advisory/sessions/route.test.ts</code> - proves helper, planner route, and session persistence disclosure rules.</li>
+        <li><code class="status">[p]</code><code>npm test</code> - focused disclosure suite passed; full suite remains in global validation.</li>
+      </ul>
+      <div class="loop">Do not exit Phase 5 until provider disclosure has a regression test that would fail if the planner bypassed consent.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 6: Browser Smoke Evidence</h3>
+      <p>Prepare and capture visual evidence for the user-facing flow, using screenshots stored alongside this plan. The final screenshots must be captured after Phase 7 deterministic handoff changes are complete, not before.</p>
+      <h4>6.1 Browser Checks</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Verify <code>/advisory</code> loads with the launch wizard/session surface and no layout clipping.</li>
+        <li><code class="status">[x]</code> Verify <code>/advisory/settings</code> displays model availability and thinking support.</li>
+        <li><code class="status">[x]</code> Verify completed valid Formal Board sessions show artifact actions and status.</li>
+        <li><code class="status">[x]</code> Verify invalid Formal Board sessions show invalid artifact status without canonical verdict labeling.</li>
+        <li><code class="status">[x]</code> Verify stale/incomplete Formal Board sessions show Resume Formal Review state.</li>
+      </ul>
+      <h4>6.2 Evidence Capture</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Use <code>npm run dev</code> or an existing local dev server, and record the URL used.</li>
+        <li><code class="status">[x]</code> Capture desktop 1440px and mobile 390px evidence for changed user-facing surfaces where practical.</li>
+        <li><code class="status">[x]</code> Record screenshot file path, viewport, command/tool, timestamp, fixture/session ID, and pass/fail note for every evidence card.</li>
+        <li><code class="status">[x]</code> Save screenshots under <code>specs/panely-formal-board-v2-buildout/</code>.</li>
+        <li><code class="status">[x]</code> Embed screenshot links in the Visual Evidence Log below.</li>
+      </ul>
+      <h4>6.3 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code><code>npm run build</code> - production build passed after browser evidence.</li>
+        <li><code class="status">[x]</code> Final browser screenshots after Phase 7 - prove the new user-facing controls and deterministic handoff surfaces render.</li>
+      </ul>
+      <div class="loop">Do not exit Phase 6 until the plan defines the fixture and screenshot matrix. Final screenshot capture is a post-Phase-7 closeout gate; do not mark global validation complete until those screenshots are embedded or a concrete browser blocker is recorded.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 7: Deterministic Final Handoff</h3>
+      <p>Make final outputs primarily structured and deterministic, with model prose used as source material rather than the only artifact.</p>
+      <h4>7.1 Structured Handoff Builder</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Build a deterministic handoff data model and markdown renderer from verdict, board, evidence, dissent, actions, metadata, isolation posture, and artifact manifest.</li>
+        <li><code class="status">[x]</code> Use clerk synthesis as a section inside the handoff, not the whole handoff.</li>
+        <li><code class="status">[x]</code> Ensure final HTML and final markdown are rendered from the same structured handoff model.</li>
+      </ul>
+      <h4>7.2 Validation and Review</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add golden fixture tests for stable markdown and HTML bytes, no placeholders, no remote assets, stable ordering, and shared source data.</li>
+        <li><code class="status">[x]</code> Run adversarial code review before commit.</li>
+        <li><code class="status">[x]</code> Fix accepted blockers and update this plan before staging.</li>
+      </ul>
+      <h4>7.3 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code><code>npm test -- src/lib/advisory/formal-board.test.ts src/lib/advisory/formal-artifact-manifest.test.ts</code> - proves structured artifacts.</li>
+        <li><code class="status">[x]</code><code>npm test</code> - full suite passed, 63/63.</li>
+        <li><code class="status">[x]</code><code>npx tsc --noEmit</code> - type safety passed.</li>
+        <li><code class="status">[x]</code><code>npm run lint</code> - lint passed with no warnings after cleanup.</li>
+        <li><code class="status">[x]</code><code>npm run build</code> - production build passed with webpack.</li>
+        <li><code class="status">[p]</code><code>node scripts/publish-safety-check.mjs</code> - passed with warnings from unrelated untracked <code>docs/</code> files not staged for this commit.</li>
+      </ul>
+      <div class="loop">Do not exit Phase 7 until final artifacts are deterministic, reviewed, and validated.</div>
+    </div>
+  </section>
+
+  <section id="validation">
+    <h2>Global Validation Commands</h2>
+    <ul class="checklist">
+      <li><code class="status">[x]</code><code>npm test</code> - full unit suite, 63/63 passed.</li>
+      <li><code class="status">[x]</code><code>npx tsc --noEmit</code> - TypeScript validation passed.</li>
+      <li><code class="status">[x]</code><code>npm run lint</code> - lint validation passed cleanly.</li>
+      <li><code class="status">[x]</code><code>npm run build</code> - production build passed.</li>
+      <li><code class="status">[p]</code><code>node scripts/publish-safety-check.mjs</code> - passed with three warnings from untracked <code>docs/</code> files outside this commit.</li>
+      <li><code class="status">[x]</code>Adversarial code review - no unresolved blockers before commit.</li>
+      <li><code class="status">[x]</code>Final browser smoke evidence after deterministic handoff changes - screenshots embedded below.</li>
+    </ul>
+  </section>
+
+  <section id="visual-evidence">
+    <h2>Visual Evidence Log</h2>
+    <p>This section is updated during the build. Screenshots below were captured from the local dev server at <code>http://localhost:3000</code> after Phase 7 deterministic handoff changes.</p>
+    <div class="evidence-grid">
+      <div class="evidence-card">
+        <h3><code class="status">[x]</code> Advisory Home</h3>
+        <p>Desktop session surface loaded without layout clipping. Mobile-width check also captured.</p>
+        <p>Path: <code>specs/panely-formal-board-v2-buildout/advisory-home-desktop.png</code><br>Viewport: 1440px desktop<br>Tool: Playwright CLI screenshot<br>Timestamp: 2026-06-25T10:32:00-07:00<br>Fixture/session: <code>session-panely-evidence-resume</code><br>Result: pass</p>
+        <p>Mobile path: <code>specs/panely-formal-board-v2-buildout/advisory-mobile.png</code><br>Viewport: 390px mobile<br>Tool: Playwright CLI screenshot<br>Timestamp: 2026-06-25T10:32:00-07:00<br>Result: pass</p>
+        <img src="panely-formal-board-v2-buildout/advisory-home-desktop.png" alt="Advisory home desktop browser smoke evidence">
+      </div>
+      <div class="evidence-card">
+        <h3><code class="status">[x]</code> Formal Artifacts Valid</h3>
+        <p>Completed valid Formal Board session exposes source, verdict, metadata, handoff data, and handoff actions.</p>
+        <p>Path: <code>specs/panely-formal-board-v2-buildout/formal-artifacts-valid-desktop.png</code><br>Viewport: 1440px desktop<br>Tool: Playwright CLI screenshot<br>Timestamp: 2026-06-25T10:32:00-07:00<br>Fixture/session: <code>session-panely-evidence-valid</code><br>Result: pass</p>
+        <img src="panely-formal-board-v2-buildout/formal-artifacts-valid-desktop.png" alt="Valid formal artifacts browser smoke evidence">
+      </div>
+      <div class="evidence-card">
+        <h3><code class="status">[x]</code> Model Settings</h3>
+        <p>Settings page displays local CLI routing, provider/model health, publish-safety status, and clickable <code>Update</code> buttons for outdated local CLIs. The visible publish-safety warnings are from unrelated untracked <code>docs/</code> files that are not part of this commit.</p>
+        <p>Path: <code>specs/panely-formal-board-v2-buildout/model-settings-desktop.png</code><br>Viewport: 1440px desktop<br>Tool: Playwright CLI screenshot<br>Timestamp: 2026-06-25T10:47:00-07:00<br>Fixture/session: settings page<br>Result: pass with three visible update buttons; buttons were not clicked during smoke because they run real local update commands</p>
+        <img src="panely-formal-board-v2-buildout/model-settings-desktop.png" alt="Model settings browser smoke evidence">
+      </div>
+      <div class="evidence-card">
+        <h3><code class="status">[x]</code> Invalid Artifacts</h3>
+        <p>Invalid Formal Board session is clearly labeled and exports <code>panely-invalid-verdict.json</code> without calling it canonical.</p>
+        <p>Path: <code>specs/panely-formal-board-v2-buildout/formal-artifacts-invalid-desktop.png</code><br>Viewport: 1440px desktop<br>Tool: Playwright CLI screenshot<br>Timestamp: 2026-06-25T10:32:00-07:00<br>Fixture/session: <code>session-panely-evidence-invalid</code><br>Result: pass</p>
+        <img src="panely-formal-board-v2-buildout/formal-artifacts-invalid-desktop.png" alt="Invalid formal artifacts browser smoke evidence">
+      </div>
+      <div class="evidence-card">
+        <h3><code class="status">[x]</code> Resume State</h3>
+        <p>Stale/incomplete Formal Board session shows the Resume Formal Review affordance. Smoke testing found and fixed a sidebar tab-selection bug before this final capture.</p>
+        <p>Path: <code>specs/panely-formal-board-v2-buildout/formal-resume-state-desktop.png</code><br>Viewport: 1440px desktop<br>Tool: Playwright CLI screenshot<br>Timestamp: 2026-06-25T10:32:00-07:00<br>Fixture/session: <code>session-panely-evidence-resume</code><br>Result: pass</p>
+        <img src="panely-formal-board-v2-buildout/formal-resume-state-desktop.png" alt="Formal resume state browser smoke evidence">
+      </div>
+    </div>
+  </section>
+
+  <section id="questionables">
+    <h2>Questionables</h2>
+    <details open>
+      <summary>Should conductor-level isolation be fully implemented in this run?</summary>
+      <p class="qa-answer">Only if it can be done without breaking local CLI authentication and streaming. The safer requirement is to add explicit isolation metadata and, if temp-workdir execution is not safe yet, document prompt-level isolation honestly.</p>
+    </details>
+    <details>
+      <summary>Should Round 3 always run?</summary>
+      <p class="qa-answer">No. Round 3 should be optional or auto-triggered by disagreement, low confidence, or user preference. Running it every time would slow normal formal reviews without always improving the artifact.</p>
+    </details>
+    <details>
+      <summary>Should invalid formal runs expose artifacts?</summary>
+      <p class="qa-answer">Yes, but explicitly. Invalid runs should expose <code>panely-invalid-verdict.json</code>, round outputs, and metadata so the user can debug what happened, while never presenting invalid output as a canonical Advisory Board verdict.</p>
+    </details>
+  </section>
+
+  <section id="notes">
+    <h2>Notes</h2>
+    <div class="callout risk">
+      <strong>Live tracker rule:</strong> this document must be updated before beginning each phase, after each phase completes, after adversarial review findings, and before commit. Stale checklist status is a process bug.
+    </div>
+    <table>
+      <thead>
+        <tr><th>Item</th><th>Priority</th><th>Reason</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Formal artifact browser</td><td>High</td><td>Turns existing files into product value immediately.</td></tr>
+        <tr><td>Resumable execution</td><td>High</td><td>Required for long multi-model reviews to be reliable.</td></tr>
+        <tr><td>Optional Round 3</td><td>Medium</td><td>Improves high-stakes convergence but should not slow every run.</td></tr>
+        <tr><td>Isolation posture</td><td>Medium</td><td>Trust feature; must be honest even if full conductor isolation waits.</td></tr>
+        <tr><td>Disclosure tests</td><td>High</td><td>Small work with strong privacy regression value.</td></tr>
+        <tr><td>Browser evidence</td><td>High</td><td>Prevents invisible layout regressions and proves the UX works.</td></tr>
+        <tr><td>Deterministic handoff</td><td>High</td><td>Makes Panely's final output more auditable and less prose-dependent.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="amendments">
+    <h2>Amendments</h2>
+    <details open>
+      <summary>2026-06-25T09:52:39-07:00 - Initial plan</summary>
+      <p>Created the Formal Board V2 buildout tracker from the seven open roadmap items. Images are self-contained SVGs because the planf3 image-generation script requires an <code>OPENAI_API_KEY</code> that is not available in this shell.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T09:55:40-07:00 - Plan validation started</summary>
+      <p>Validated that the tracker has no template placeholders and opens locally. Phase 0 remains in progress while adversarial plan review runs.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T10:02:00-07:00 - Adversarial plan review requested</summary>
+      <p>Spawned a read-only adversarial reviewer to check the seven-phase plan for scope, sequencing, validation strength, and live evidence requirements before implementation begins.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T10:13:00-07:00 - Adversarial review amendments applied</summary>
+      <p>The reviewer did not approve the original plan. Accepted amendments added explicit resume step keys, one-session resume lease requirements, source-hash and artifact-existence checks, traversal and double-resume tests, invalid/incomplete manifest coverage, defined Round 3 auto triggers, stronger route-level provider-disclosure tests, a final post-handoff browser evidence gate, and expanded screenshot metadata.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T10:21:00-07:00 - Amended plan approved</summary>
+      <p>The second adversarial review reported no remaining blockers and approved the amended plan. Optional clarifications were accepted: low confidence means <code>confidence === "low"</code>, the resume lease will have a 15-minute TTL and explicit storage, and final browser evidence is a post-Phase-7 closeout gate.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T10:23:00-07:00 - Phase 1 started</summary>
+      <p>Started the Formal Artifact Browser and Downloads implementation. First target is a typed manifest builder with containment checks that can support valid, invalid, and incomplete Formal Board sessions.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T10:39:00-07:00 - Phase 1 complete</summary>
+      <p>Added <code>formal-artifact-manifest.ts</code>, manifest/path-safety tests, a <code>/formal-artifacts</code> API route, and a completed-session Formal Artifacts strip in the advisory UI. Focused manifest tests pass and <code>npx tsc --noEmit</code> passes.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T10:57:00-07:00 - Phase 2 complete</summary>
+      <p>Added <code>formal-resume.ts</code>, stable formal step keys, 15-minute resume leases, the <code>/resume</code> API route, stale step marking before resume, source-packet hash protection, idempotent Round 1/Round 2/synthesis skip behavior, and a visible Resume Formal Review bar. Focused resume tests and <code>npx tsc --noEmit</code> pass.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T11:00:00-07:00 - Phase 3 started</summary>
+      <p>Started optional Round 3 convergence. Target is a Formal Board-only setting with off/auto/always behavior, same-seat Round 3 prompts, round-3 artifacts, manifest inclusion, and updated validity accounting.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T11:16:00-07:00 - Phase 3 complete</summary>
+      <p>Added persisted <code>formalConvergence</code>, Round 3 prompt builders, auto-trigger logic, same-seat continuity through Round 3, runner support for <code>round-3/&lt;seat&gt;.md</code>, and resume support for interrupted convergence. Focused Formal Board and resume tests plus <code>npx tsc --noEmit</code> pass.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T11:18:00-07:00 - Phase 4 started</summary>
+      <p>Started isolation posture work. This pass will persist explicit prompt-level/source-packet isolation metadata and avoid claiming conductor-level filesystem or network isolation.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T11:25:00-07:00 - Phase 4 complete</summary>
+      <p>Added <code>FormalBoardIsolation</code>, default prompt-level isolation metadata, old-session backfill, manifest exposure, and run-metadata rendering. Temp workdir execution remains deferred because local CLI auth and streaming are not yet proven under a temp cwd; exported metadata now states that Panely does not claim conductor-level filesystem or network isolation. Focused tests and <code>npx tsc --noEmit</code> pass.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T11:27:00-07:00 - Phase 5 started</summary>
+      <p>Started provider disclosure regression coverage. Target is route/session tests proving private or unknown material is blocked before planner/session creation unless disclosure is accepted.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T11:36:00-07:00 - Phase 5 complete</summary>
+      <p>Added shared provider-disclosure gate helpers, planner/session gate tests, accepted-disclosure persistence tests, and a public GitHub URL-in-topic case. Fixed sensitivity inference so prompts containing a known public URL are treated as public unless they include private or local-file hints. Focused disclosure tests and <code>npx tsc --noEmit</code> pass.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T11:39:00-07:00 - Phase 7 started before final screenshots</summary>
+      <p>Started deterministic handoff work before final Phase 6 screenshot capture. Target is a structured markdown/html handoff where clerk synthesis is one section, not the whole final artifact.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T11:47:00-07:00 - Phase 6 evidence capture started</summary>
+      <p>Started browser smoke evidence after deterministic handoff implementation. Local dev server is running at <code>http://localhost:3000</code>; local-only fixture sessions were created for valid artifacts, invalid artifacts, and stale resume state.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T10:30:00-07:00 - Phase 6 evidence complete and sidebar bug fixed</summary>
+      <p>Captured desktop evidence for advisory home, valid formal artifacts, invalid formal artifacts, resume state, and settings, plus a 390px mobile smoke screenshot. Browser smoke revealed a tab-selection bug where clicking Live while a completed session was selected could leave completed rows visible; <code>handleActiveViewChange</code> now switches to an appropriate session for the selected tab.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T10:36:00-07:00 - Global validation passed</summary>
+      <p>Ran <code>npm test</code> twice after final changes, <code>npx tsc --noEmit</code>, <code>npm run lint</code>, <code>npm run build</code>, and <code>node scripts/publish-safety-check.mjs</code>. Test suite passed 63/63, lint is clean, production build passed, and publish safety passed with three warnings from unrelated untracked <code>docs/</code> files that are not staged for this commit.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T10:44:00-07:00 - Adversarial review blockers fixed</summary>
+      <p>The adversarial review found five issues: public-URL disclosure bypass with mixed private text, incomplete final artifacts blocking resume, local artifact-root exposure/escape risk, missing ownership check on direct <code>/run</code>, and misleading Round 3 resume reporting. Fixes added mixed-content disclosure tests, required-artifact completion checks, contained formal-runs roots with no absolute root in manifests, direct <code>/run</code> ownership checks, and Round 3 resume policy coverage.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T10:48:00-07:00 - CLI update buttons added to settings</summary>
+      <p>Added a local-only <code>/api/advisory/model-availability/update</code> route that accepts only fixed tool ids and executes hardcoded update invocations without shell interpolation. The settings page now renders clickable <code>Update</code> buttons for outdated Claude, Codex, and Gemini local CLIs. Browser smoke confirmed the buttons are present; they were not clicked because they would run real update commands.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T10:51:00-07:00 - Final validation after review fixes passed</summary>
+      <p>After the adversarial-review fixes and CLI update-button feature, reran <code>npm test</code> (63/63), <code>npx tsc --noEmit</code>, <code>npm run lint</code>, <code>node scripts/publish-safety-check.mjs</code>, and <code>npm run build</code>. Build includes the new <code>/api/advisory/model-availability/update</code> route.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T10:55:00-07:00 - CLI update route CSRF blocker fixed</summary>
+      <p>Final adversarial review flagged the clickable CLI update route as a local command trigger needing CSRF/same-origin protection. The route now requires <code>X-Panely-Local-Update: 1</code>, same-origin host matching, and same-origin/none <code>Sec-Fetch-Site</code> behavior. The settings page sends that header only after a confirmation dialog showing the exact fixed command.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T10:58:00-07:00 - Final adversarial review passed</summary>
+      <p>The adversarial reviewer confirmed no blockers remain. The prior protocol/security findings are resolved, and the CLI update route has no arbitrary command or shell-injection path after the same-origin/header guard and fixed argv construction.</p>
+    </details>
+  </section>
+
+</main>
+</body>
+</html>

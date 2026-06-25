@@ -5,7 +5,7 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { buildSourcePacket } from "./source-packet.ts";
-import { formalVerdictArtifactName, renderFormalConsensusHtml } from "./formal-artifacts.ts";
+import { buildFormalRunMetadata, formalVerdictArtifactName, renderFormalConsensusHtml, renderFormalConsensusMarkdown } from "./formal-artifacts.ts";
 import {
   buildFormalRoundOneUserPrompt,
   buildFormalVerdict,
@@ -13,6 +13,7 @@ import {
   createFormalBoardState,
   markFormalSeat,
   recordFormalRoundArtifact,
+  shouldRunFormalRoundThree,
 } from "./formal-board.ts";
 
 const ADVISORY_BOARD_VERDICT_VALIDATOR = path.join(
@@ -44,6 +45,21 @@ test("round one prompt contains source packet but not peer output", () => {
   assert.match(prompt, /Source packet body/);
   assert.doesNotMatch(prompt, /Round 1 board packet/);
   assert.doesNotMatch(prompt, /other reviewers/i);
+});
+
+test("formal board state records honest prompt-level isolation metadata", () => {
+  const sourcePacket = buildSourcePacket({ topic: "Review the plan" });
+  const state = createFormalBoardState({
+    sessionId: "session-test",
+    agents: ["A", "B"],
+    sourcePacket,
+  });
+
+  assert.equal(state.isolation?.mode, "prompt-level");
+  assert.equal(state.isolation?.filesystemIsolation, false);
+  assert.equal(state.isolation?.networkIsolation, false);
+  assert.equal(state.isolation?.cwdModeByPhase["round-1"], "app-working-directory");
+  assert.match(state.isolation?.note || "", /does not claim conductor-level/);
 });
 
 test("formal verdict records dropped and degraded seats", () => {
@@ -163,6 +179,49 @@ test("formal verdict is invalid when different seats complete each round", () =>
   assert.equal(formalVerdictArtifactName(verdict), "panely-invalid-verdict.json");
 });
 
+test("formal round three auto trigger responds to dissent and respects off", () => {
+  const sourcePacket = buildSourcePacket({ topic: "Review the plan" });
+  let state = createFormalBoardState({
+    sessionId: "session-test",
+    agents: ["A", "B"],
+    sourcePacket,
+  });
+  state = recordFormalRoundArtifact(state, { round: 1, agentId: "A", status: "ran", text: "## Verdict\nCAUTION" });
+  state = recordFormalRoundArtifact(state, { round: 1, agentId: "B", status: "ran", text: "## Verdict\nCAUTION" });
+  state = recordFormalRoundArtifact(state, { round: 2, agentId: "A", status: "ran", text: "## Verdict\nSHIP\n\nConfidence: high" });
+  state = recordFormalRoundArtifact(state, { round: 2, agentId: "B", status: "ran", text: "## Verdict\nSHIP\n\nMinority report: I still have a dissenting concern." });
+
+  assert.equal(shouldRunFormalRoundThree(state, "off").run, false);
+  assert.equal(shouldRunFormalRoundThree(state, "auto").run, true);
+  assert.match(shouldRunFormalRoundThree(state, "auto").reason, /dissent/i);
+  assert.equal(shouldRunFormalRoundThree(state, "always").run, true);
+});
+
+test("formal verdict requires same-seat round three continuity only when round three runs", () => {
+  const sourcePacket = buildSourcePacket({ topic: "Review the plan" });
+  let state = createFormalBoardState({
+    sessionId: "session-test",
+    agents: ["A", "B", "C"],
+    sourcePacket,
+  });
+  state = recordFormalRoundArtifact(state, { round: 1, agentId: "A", status: "ran", text: "## Verdict\nCAUTION" });
+  state = recordFormalRoundArtifact(state, { round: 1, agentId: "B", status: "ran", text: "## Verdict\nCAUTION" });
+  state = recordFormalRoundArtifact(state, { round: 2, agentId: "A", status: "ran", text: "## Verdict\nCAUTION" });
+  state = recordFormalRoundArtifact(state, { round: 2, agentId: "B", status: "ran", text: "## Verdict\nCAUTION" });
+  state = recordFormalRoundArtifact(state, { round: 3, agentId: "A", status: "ran", text: "## Verdict\nCAUTION" });
+  state = recordFormalRoundArtifact(state, { round: 3, agentId: "C", status: "ran", text: "## Verdict\nCAUTION" });
+
+  const verdict = buildFormalVerdict({
+    topic: "Review the plan",
+    state,
+    synthesisText: "## Verdict\nCAUTION",
+  });
+
+  assert.equal(verdict.valid, false);
+  assert.deepEqual(verdict.sameSeatContinuity, ["A"]);
+  assert.match(verdict.validityReason || "", /Round 3/);
+});
+
 test("formal verdict validates with the Advisory Board skill schema gate", { skip: !existsSync(ADVISORY_BOARD_VERDICT_VALIDATOR) }, () => {
   const sourcePacket = buildSourcePacket({ topic: "Review the plan" });
   let state = createFormalBoardState({
@@ -215,4 +274,70 @@ test("formal consensus HTML is self-contained and placeholder-free", () => {
   assert.doesNotMatch(html, /<script\b|<link\b|\b(?:src|href)=["']https?:\/\//i);
   assert.match(html, /Formal Board Review/);
   assert.equal(formalVerdictArtifactName(verdict), "verdict.json");
+});
+
+test("formal consensus markdown is deterministic and includes clerk synthesis as section", () => {
+  const sourcePacket = buildSourcePacket({ topic: "Review the plan" });
+  let state = createFormalBoardState({
+    sessionId: "session-test",
+    agents: ["B", "A"],
+    sourcePacket,
+  });
+  for (const round of [1, 2] as const) {
+    state = recordFormalRoundArtifact(state, { round, agentId: "A", status: "ran", text: "## Verdict\nCAUTION" });
+    state = recordFormalRoundArtifact(state, { round, agentId: "B", status: "ran", text: "## Verdict\nCAUTION" });
+  }
+  const clerkSynthesisMarkdown = "## Verdict\nCAUTION\n\n## Evidence-backed\n- Tests exist.";
+  const verdict = buildFormalVerdict({ topic: "Review the plan", state, synthesisText: clerkSynthesisMarkdown });
+
+  const first = renderFormalConsensusMarkdown({
+    title: "Review the plan",
+    topic: "Review the plan",
+    state,
+    verdict,
+    clerkSynthesisMarkdown,
+  });
+  const second = renderFormalConsensusMarkdown({
+    title: "Review the plan",
+    topic: "Review the plan",
+    state,
+    verdict,
+    clerkSynthesisMarkdown,
+  });
+
+  assert.equal(first, second);
+  assert.match(first, /## Artifact manifest/);
+  assert.match(first, /## Clerk synthesis/);
+  assert.match(first, /clerk-synthesis\.md/);
+  assert.match(first, /\| A \|/);
+  assert.match(first, /\| B \|/);
+  assert.ok(first.indexOf("| A |") < first.indexOf("| B |"));
+  assert.doesNotMatch(first, /\{\{[^}]+\}\}/);
+});
+
+test("formal run metadata renders isolation posture", () => {
+  const sourcePacket = buildSourcePacket({ topic: "Review the plan" });
+  let state = createFormalBoardState({
+    sessionId: "session-test",
+    agents: ["A", "B"],
+    sourcePacket,
+  });
+  for (const round of [1, 2] as const) {
+    state = recordFormalRoundArtifact(state, { round, agentId: "A", status: "ran", text: "## Verdict\nCAUTION" });
+    state = recordFormalRoundArtifact(state, { round, agentId: "B", status: "ran", text: "## Verdict\nCAUTION" });
+  }
+  const verdict = buildFormalVerdict({ topic: "Review the plan", state, synthesisText: "## Verdict\nCAUTION" });
+
+  const metadata = buildFormalRunMetadata({
+    title: "Review the plan",
+    topic: "Review the plan",
+    state,
+    verdict,
+    sourcePacketHash: sourcePacket.hash,
+  });
+
+  assert.match(metadata, /Mode: prompt-level/);
+  assert.match(metadata, /Filesystem isolation: no/);
+  assert.match(metadata, /Network isolation: no/);
+  assert.match(metadata, /app-working-directory/);
 });

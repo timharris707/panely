@@ -34,12 +34,71 @@ function isKnownPublicUrl(value: string) {
   }
 }
 
+const BENIGN_PUBLIC_URL_TOPIC_TOKENS = new Set([
+  "a",
+  "about",
+  "against",
+  "an",
+  "analyze",
+  "and",
+  "at",
+  "can",
+  "check",
+  "compare",
+  "docs",
+  "documentation",
+  "evaluate",
+  "for",
+  "from",
+  "github",
+  "it",
+  "link",
+  "look",
+  "of",
+  "on",
+  "page",
+  "please",
+  "project",
+  "public",
+  "read",
+  "repo",
+  "repository",
+  "review",
+  "source",
+  "summarize",
+  "the",
+  "this",
+  "url",
+  "use",
+  "with",
+  "you",
+]);
+
+function hasOnlyBenignPublicUrlContext(topic: string, urls: string[]) {
+  const remainder = urls
+    .reduce((text, url) => text.replace(url, " "), topic)
+    .replace(/[`"'()[\]{}:;,.!?/#_-]+/g, " ")
+    .trim()
+    .toLowerCase();
+  if (!remainder) return true;
+  const tokens = remainder.split(/\s+/).filter(Boolean);
+  return tokens.length > 0 && tokens.every((token) => BENIGN_PUBLIC_URL_TOPIC_TOKENS.has(token));
+}
+
 export function inferSourceSensitivity(input: { topic: string; attachedFileCount?: number }): SourceSensitivity {
   if ((input.attachedFileCount ?? 0) > 0) return "unknown";
   const topic = input.topic.trim();
   if (!topic) return "unknown";
   const publicOnly = /^[^\s]+$/i.test(topic) && isKnownPublicUrl(topic);
-  return publicOnly ? "public" : "unknown";
+  if (publicOnly) return "public";
+
+  const urls = Array.from(topic.matchAll(/https?:\/\/[^\s)\]]+/gi)).map((match) => match[0]);
+  const hasPrivateHints = /\b(private|confidential|non-public|internal|attached file|\/Users\/|file:\/\/)/i.test(topic);
+  if (urls.length > 0 && !hasPrivateHints && urls.every(isKnownPublicUrl) && hasOnlyBenignPublicUrlContext(topic, urls)) {
+    return "public";
+  }
+
+  return "unknown";
 }
 
 export function providerLabelsForModelIds(modelIds: string[]) {

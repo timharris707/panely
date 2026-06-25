@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateText } from "@/lib/ai/router";
 import { getProviderModelById, PROVIDERS, resolveProviderModelId, type ProviderModel } from "@/lib/ai/providers";
 import { probeAllModelHealth } from "@/lib/ai/model-health";
-import { buildProviderDisclosure } from "@/lib/advisory/provider-disclosure";
+import { validateSessionPlanProviderDisclosure } from "@/lib/advisory/provider-disclosure-gates";
 
 type Intent = "decision" | "stress-test" | "compare" | "ideas" | "red-team";
 type PlannedMode = "roundtable" | "competitive" | "formal-board";
@@ -157,17 +157,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Topic is required" }, { status: 400 });
     }
 
-    const plannerDisclosure = buildProviderDisclosure({
-      topic,
-      attachedFileCount: Number(body?.attachedFileCount || 0),
-      planningModelIds: [String(body?.modelId || "claude-sonnet")],
-      modelIds: [],
-    });
-    const disclosureAccepted =
-      body?.providerDisclosure &&
-      typeof body.providerDisclosure === "object" &&
-      body.providerDisclosure.accepted === true;
-    if (plannerDisclosure.requiresConsent && !disclosureAccepted) {
+    const { plannerDisclosure, allowed } = validateSessionPlanProviderDisclosure(body || {});
+    if (!allowed) {
       return NextResponse.json(
         {
           error: "Provider disclosure must be accepted before Panely sends this source material to the AI planner.",
