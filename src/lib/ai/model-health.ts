@@ -8,6 +8,7 @@ import {
   CLI_CAPABILITY_SCHEMA_VERSION,
   deriveCliThinkingCapability,
   fallbackCliThinkingCapability,
+  type CliContextWindowSource,
   type CliThinkingLevel,
 } from "./cli-capabilities.ts";
 
@@ -58,6 +59,7 @@ export interface LocalCliToolStatus {
   thinkingEvidence?: string;
   thinkingNote?: string;
   contextWindow?: number;
+  contextWindowSource?: CliContextWindowSource;
   contextEvidence?: string;
   contextNote?: string;
   capabilityCheckedAt?: string;
@@ -119,9 +121,9 @@ function hasFreshCapabilitySnapshot(command: LocalCliName, status?: LocalCliTool
   if (!Array.isArray(status.supportedThinkingLevels)) return false;
   if (typeof status.thinkingEnforced !== "boolean") return false;
   if (!status.thinkingEvidence || !status.thinkingNote || !status.capabilityCheckedAt) return false;
-  if (typeof status.contextWindow !== "number" || !status.contextEvidence || !status.contextNote) return false;
+  if (!status.contextWindowSource || !status.contextEvidence || !status.contextNote) return false;
+  if (status.contextWindowSource !== "not-reported" && typeof status.contextWindow !== "number") return false;
   if (!isFresh(status.capabilityCheckedAt)) return false;
-  if (command === "claude" && status.supportedThinkingLevels.includes("xhigh")) return false;
   return true;
 }
 
@@ -169,6 +171,48 @@ function getLatestPackageVersion(packageName?: string) {
     return { latestVersion: undefined, error: error || `npm view ${packageName} failed` };
   }
   return { latestVersion: latest.stdout.trim() || undefined, error: undefined };
+}
+
+export function parseHomebrewLatestVersion(infoJson: string) {
+  try {
+    const parsed = JSON.parse(infoJson) as {
+      formulae?: Array<{ versions?: { stable?: string } }>;
+      casks?: Array<{ version?: string }>;
+    };
+    return parsed.formulae?.[0]?.versions?.stable || parsed.casks?.[0]?.version || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function homebrewPackageForCommand(command: LocalCliName) {
+  if (command === "gemini") return "gemini-cli";
+  return command;
+}
+
+function getLatestHomebrewVersion(command: LocalCliName) {
+  const formula = homebrewPackageForCommand(command);
+  const latest = spawnSync("brew", ["info", "--json=v2", formula], {
+    encoding: "utf8",
+    timeout: 5000,
+    maxBuffer: 1024 * 1024,
+  });
+  if (latest.status !== 0) {
+    const error = sanitizeProviderOutput(`${latest.stderr || ""}\n${latest.stdout || ""}`.trim());
+    return { latestVersion: undefined, error: error || `brew info ${formula} failed` };
+  }
+  const latestVersion = parseHomebrewLatestVersion(latest.stdout || "");
+  return { latestVersion, error: latestVersion ? undefined : `brew info ${formula} did not report a stable version` };
+}
+
+function getLatestCliVersion(
+  command: LocalCliName,
+  packageName: string | undefined,
+  install: Pick<LocalCliToolStatus, "installMethod">
+) {
+  if (install.installMethod === "homebrew") return getLatestHomebrewVersion(command);
+  if (install.installMethod === "homebrew-cask") return { latestVersion: undefined, error: undefined };
+  return getLatestPackageVersion(packageName);
 }
 
 function resolveInstallMethod(command: LocalCliName, cliPath?: string): Pick<LocalCliToolStatus, "installMethod" | "updateCommand"> {
@@ -238,7 +282,7 @@ function detectThinkingCapability(command: LocalCliName, checkedAt: string) {
     timeout: 2000,
     maxBuffer: 512 * 1024,
   });
-  const helpText = sanitizeProviderOutput(`${help.stdout || ""}\n${help.stderr || ""}`);
+  const helpText = `${help.stdout || ""}\n${help.stderr || ""}`;
   return deriveCliThinkingCapability({
     command,
     helpText,
@@ -258,6 +302,7 @@ function applyThinkingCapability(status: LocalCliToolStatus, command: LocalCliNa
     thinkingEvidence: capability.thinkingEvidence,
     thinkingNote: capability.thinkingNote,
     contextWindow: capability.contextWindow,
+    contextWindowSource: capability.contextWindowSource,
     contextEvidence: capability.contextEvidence,
     contextNote: capability.contextNote,
     capabilityCheckedAt: capability.capabilityCheckedAt,
@@ -294,10 +339,10 @@ function buildToolStatus(command: LocalCliName, options: { force?: boolean } = {
     timeout: 2000,
   });
   const installedVersion = version.status === 0 ? version.stdout.trim() || version.stderr.trim() : undefined;
-  const latest = getLatestPackageVersion(packageInfo.packageName);
-  const isOutdated = latest.latestVersion ? isVersionOutdated(installedVersion, latest.latestVersion) : undefined;
   const cliPath = located.stdout.trim();
   const install = resolveInstallMethod(command, cliPath);
+  const latest = getLatestCliVersion(command, packageInfo.packageName, install);
+  const isOutdated = latest.latestVersion ? isVersionOutdated(installedVersion, latest.latestVersion) : undefined;
   const authStatus = command === "agy" ? detectAgyAuthStatus() : undefined;
 
   return applyThinkingCapability({

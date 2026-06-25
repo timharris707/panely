@@ -296,6 +296,13 @@ export default function AdvisoryPage() {
     const hiddenFromLiveView = activeView === "live" && activeSession.status !== "active";
 
     if (hiddenFromLiveView) {
+      if (activeSession.status === "abandoned") {
+        setActiveSession(null);
+        setEvents([]);
+        setSessionInsights(null);
+        setActionItems([]);
+        return;
+      }
       setActiveView("history");
       return;
     }
@@ -693,14 +700,23 @@ export default function AdvisoryPage() {
       const data = await res.json();
       if (dismiss) {
         const dismissedSession = (data.session || { ...activeSession, status: "abandoned", archived: false }) as AdvisorySession;
-        setSessions((prev) => prev.map((s) => s.id === activeSession.id ? dismissedSession : s));
-        setActiveView("history");
-        setActiveSession(dismissedSession);
-        setEvents(dismissedSession.events || events);
+        const updatedSessions = sessions.map((s) => s.id === activeSession.id ? dismissedSession : s);
+        const nextLiveSession = updatedSessions.find((s) => !s.archived && s.status === "active" && s.id !== activeSession.id);
+        setSessions(updatedSessions);
+        setActiveView("live");
         setIsGenerating(false);
         setConnectingToAI(false);
         setThinkingAgent(null);
         setIsPaused(true);
+        setSessionInsights(null);
+        setActionItems([]);
+        if (nextLiveSession) {
+          setEvents([]);
+          await loadSessionEvents(nextLiveSession.id);
+        } else {
+          setActiveSession(null);
+          setEvents([]);
+        }
       } else {
         setSessions((prev) => prev.filter((s) => s.id !== activeSession.id));
         setActiveSession(null);

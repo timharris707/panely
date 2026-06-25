@@ -42,6 +42,7 @@ type LocalModelStatus = {
   thinkingEvidence?: string;
   thinkingCapabilityCheckedAt?: string;
   contextWindow?: number;
+  contextWindowSource?: "verified" | "configured" | "not-reported";
   contextEvidence?: string;
   contextNote?: string;
   probe?: {
@@ -185,6 +186,22 @@ function formatBytes(size: number): string {
   return `${Math.round(size / 104857.6) / 10} MB`;
 }
 
+function formatContextValue(contextWindow?: number): string {
+  if (!contextWindow) return "";
+  if (contextWindow >= 1_000_000) return `${contextWindow / 1_000_000}M`;
+  if (contextWindow >= 1_000) return `${Math.round(contextWindow / 1_000)}K`;
+  return String(contextWindow);
+}
+
+function formatModelContextSummary(model?: LocalModelStatus): string {
+  if (!model) return "context checking";
+  if (!model.contextWindow) return "context not reported";
+  const value = formatContextValue(model.contextWindow);
+  if (model.contextWindowSource === "verified") return `${value} verified`;
+  if (model.contextWindowSource === "configured") return `${value} configured`;
+  return "context not reported";
+}
+
 function buildAttachmentContext(files: AttachedFile[], contextBudgetChars: number) {
   if (files.length === 0) return "";
   let remaining = contextBudgetChars;
@@ -285,6 +302,14 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
   const availableModelSet = useMemo(() => new Set(availableModelIds), [availableModelIds]);
   const availableModelOptions = MODELS.filter((option) => availableModelSet.has(option.id));
   const selectedModelIds = plan?.lenses.map((lens) => lens.modelId) ?? availableModelIds;
+  const selectedContextWindows = selectedModelIds
+    .map((modelId) => localModels.find((model) => model.id === modelId)?.contextWindow)
+    .filter((value): value is number => typeof value === "number");
+  const limitingKnownContextWindow = selectedContextWindows.length ? Math.min(...selectedContextWindows) : undefined;
+  const contextBudgetOptions = CONTEXT_BUDGETS.map((item) => ({
+    ...item,
+    disabled: Boolean(limitingKnownContextWindow && item.value > limitingKnownContextWindow),
+  }));
   const providerDisclosure = buildProviderDisclosure({
     topic: topic.trim(),
     attachedFileCount: attachedFiles.length,
@@ -292,6 +317,12 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
     modelIds: selectedModelIds,
   });
   const mustAcceptDisclosure = providerDisclosure.requiresConsent && !providerDisclosureAccepted;
+
+  useEffect(() => {
+    if (!limitingKnownContextWindow || contextBudgetChars <= limitingKnownContextWindow) return;
+    const nextBudget = CONTEXT_BUDGETS.filter((item) => item.value <= limitingKnownContextWindow).at(-1)?.value ?? CONTEXT_BUDGETS[0].value;
+    setContextBudgetChars(nextBudget);
+  }, [contextBudgetChars, limitingKnownContextWindow]);
 
   useEffect(() => {
     if (!plan || localModels.length === 0) return;
@@ -677,18 +708,24 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
             <div className="field">
               <label>Context budget</label>
               <div className="segmented">
-                {CONTEXT_BUDGETS.map((item) => (
+                {contextBudgetOptions.map((item) => (
                   <button
                     key={item.value}
                     type="button"
                     className={contextBudgetChars === item.value ? "selected" : ""}
+                    disabled={item.disabled}
                     onClick={() => setContextBudgetChars(item.value)}
-                    title={item.desc}
+                    title={item.disabled ? `Above the limiting reported/configured selected model context (${formatContextValue(limitingKnownContextWindow)}).` : item.desc}
                   >
                     {item.label}
                   </button>
                 ))}
               </div>
+              <small>
+                {limitingKnownContextWindow
+                  ? `Budgets are capped by the smallest reported or configured selected model context: ${formatContextValue(limitingKnownContextWindow)}.`
+                  : "Selected model CLIs have not reported a context limit; Panely will use this as the source-packet budget only."}
+              </small>
             </div>
 
             <div className="field">
@@ -809,8 +846,8 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
                               </option>
                             ))}
                           </select>
-                          <span title={localModel?.thinkingNote || undefined}>
-                            {model.provider}{localModel?.thinkingEnforced === false ? " · thinking not enforced" : ""}
+                          <span title={[localModel?.contextNote, localModel?.thinkingNote].filter(Boolean).join(" ") || undefined}>
+                            {model.provider} · {formatModelContextSummary(localModel)}{localModel?.thinkingEnforced === false ? " · thinking not enforced" : ""}
                           </span>
                         </div>
                         <button

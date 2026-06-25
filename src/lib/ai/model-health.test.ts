@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCliUpdateInvocation } from "./model-health.ts";
+import { buildCliUpdateInvocation, parseHomebrewLatestVersion } from "./model-health.ts";
 
 test("CLI update invocation uses fixed commands without shell strings", () => {
   assert.deepEqual(buildCliUpdateInvocation("claude", { installMethod: "npm" }), {
@@ -15,4 +15,18 @@ test("CLI update invocation uses fixed commands without shell strings", () => {
     command: "agy",
     args: ["update"],
   });
+});
+
+test("Homebrew latest version parser reads formula stable version", () => {
+  const info = JSON.stringify({
+    formulae: [
+      {
+        name: "gemini-cli",
+        versions: { stable: "0.46.0" },
+      },
+    ],
+    casks: [],
+  });
+
+  assert.equal(parseHomebrewLatestVersion(info), "0.46.0");
 });

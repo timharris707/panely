@@ -149,7 +149,7 @@ Before merging release-bound work, run:
 npm run verify
 ```
 
-This runs lint, typecheck, tests, production build, and the publish-safety scanner.
+This runs lint, tests, production build, typecheck, and the publish-safety scanner.
 
 ## Releases
 
@@ -176,6 +176,12 @@ git push origin v0.5.0
 
 The `.github/workflows/release.yml` workflow creates the GitHub Release from that tag.
 
+Routine GitHub publish language:
+
+- `commit + push` means the code is on `origin/main`.
+- `release` means the code is also tagged with `vX.Y.Z` and has a GitHub Release with notes.
+- When a Panely change is described as deployed or published for users, confirm that both the push and the release tag happened.
+
 Curate `CHANGELOG.md` as part of the milestone PR:
 
 ```md
@@ -185,7 +191,7 @@ Curate `CHANGELOG.md` as part of the milestone PR:
 
 - Added ...
 - Changed ...
-- Verification: lint, typecheck, tests, build, and publish-safety passed.
+- Verification: lint, tests, build, typecheck, and publish-safety passed.
 ```
 
 After publishing, treat tags as immutable. The commands below are an emergency repair path only, not the normal way to create releases. If a release is botched and nobody depends on it yet, fix it by deleting the release and tag, then re-tagging the corrected commit:

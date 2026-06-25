@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, CircleAlert, RefreshCw, ShieldCheck } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CircleAlert, Info, RefreshCw, ShieldCheck } from "lucide-react";
 import "@/styles/advisory.css";
 
 type ToolStatus = {
@@ -22,6 +22,7 @@ type ToolStatus = {
   thinkingNote?: string;
   capabilityCheckedAt?: string;
   contextWindow?: number;
+  contextWindowSource?: "verified" | "configured" | "not-reported";
   contextEvidence?: string;
   contextNote?: string;
   checkedAt?: string;
@@ -55,6 +56,7 @@ type ModelStatus = {
   cliVersion?: string;
   intent?: string;
   contextWindow?: number;
+  contextWindowSource?: "verified" | "configured" | "not-reported";
   contextEvidence?: string;
   contextNote?: string;
   thinkingLevels?: string[];
@@ -80,11 +82,31 @@ type AvailabilityResponse = {
   routing: string;
 };
 
-function formatContextWindow(contextWindow?: number) {
-  if (!contextWindow) return "Context unknown";
-  if (contextWindow >= 1000000) return `${(contextWindow / 1000000).toFixed(0)}M context`;
-  if (contextWindow >= 1000) return `${Math.round(contextWindow / 1000)}K context`;
-  return `${contextWindow} context`;
+type ContextStatus = {
+  contextWindow?: number;
+  contextWindowSource?: "verified" | "configured" | "not-reported";
+  contextEvidence?: string;
+  contextNote?: string;
+};
+
+function formatContextValue(contextWindow?: number) {
+  if (!contextWindow) return "";
+  if (contextWindow >= 1000000) return `${(contextWindow / 1000000).toFixed(0)}M`;
+  if (contextWindow >= 1000) return `${Math.round(contextWindow / 1000)}K`;
+  return `${contextWindow}`;
+}
+
+function formatContextLabel(status?: ContextStatus) {
+  if (!status?.contextWindow) return "Context not reported";
+  const value = formatContextValue(status.contextWindow);
+  if (status.contextWindowSource === "verified") return `${value} context`;
+  return `${value} configured`;
+}
+
+function formatContextSource(status?: ContextStatus) {
+  if (status?.contextWindowSource === "verified") return "Verified context";
+  if (status?.contextWindowSource === "configured") return "Configured context";
+  return "CLI did not report context";
 }
 
 function formatCheckTime(value?: string) {
@@ -196,26 +218,6 @@ export default function AdvisorySettingsPage() {
           </div>
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end" }}>
             <button
-              onClick={() => void load()}
-              disabled={loading || probing}
-              style={{
-                minHeight: "38px",
-                padding: "0 14px",
-                borderRadius: "8px",
-                border: "1px solid var(--border)",
-                background: "var(--surface)",
-                color: "var(--text-secondary)",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "8px",
-                cursor: loading || probing ? "not-allowed" : "pointer",
-                fontWeight: 700,
-              }}
-            >
-              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-              Daily Check
-            </button>
-            <button
               onClick={() => void load(true)}
               disabled={loading || probing}
               style={{
@@ -309,7 +311,7 @@ export default function AdvisorySettingsPage() {
                     {status?.replacementFor ? <><br />Replacement for: {status.replacementFor}</> : null}
                     {status?.authStatus ? <><br />Auth: {status.authStatus}</> : null}
                     {status?.supportedThinkingLevels ? <><br />Thinking: {status.supportedThinkingLevels.length ? status.supportedThinkingLevels.join(", ") : "not enforced"}</> : null}
-                    {status?.contextWindow ? <><br />Context: {formatContextWindow(status.contextWindow)}</> : null}
+                    {status?.contextEvidence ? <><br />Context: {formatContextLabel(status)}</> : null}
                     {status?.checkedAt ? <><br />Checked: {formatCheckTime(status.checkedAt)}</> : null}
                     {needsAttention && status?.updateCommand ? <><br /><code>{status.updateCommand}</code></> : null}
                     {status?.error ? <><br />{status.error}</> : null}
@@ -336,6 +338,12 @@ export default function AdvisorySettingsPage() {
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
                 {safety?.ok ? <ShieldCheck size={18} color="#22c55e" /> : <CircleAlert size={18} color="#f59e0b" />}
                 <strong>Publish safety</strong>
+                <span
+                  title="Publish safety scans Git publish candidate files for secrets, local-only data, private source packets, generated artifacts, and machine-specific paths. It runs locally and does not upload anything."
+                  style={{ display: "inline-flex", color: "var(--text-muted)" }}
+                >
+                  <Info size={15} />
+                </span>
                 <span style={{ color: safety?.ok ? "#22c55e" : "#f59e0b", fontSize: "12px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em" }}>
                   {safety ? (safety.ok ? "Safe to publish" : "Needs review") : "Checking"}
                 </span>
@@ -343,10 +351,15 @@ export default function AdvisorySettingsPage() {
               <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "13px", lineHeight: 1.5 }}>
                 {safety ? `Scanned ${safety.scannedFiles} Git publish candidate files.` : "Checking local data and generated artifacts before GitHub publishing."}
               </p>
+              <p style={{ margin: "6px 0 0", color: "var(--text-muted)", fontSize: "12px", lineHeight: 1.5, maxWidth: "720px" }}>
+                This local check helps keep GitHub publishes clean by flagging secrets, private data, generated board artifacts, and machine-specific paths before they leave the repo.
+              </p>
             </div>
             <button
               onClick={() => void loadSafety()}
               disabled={safetyLoading}
+              title="Run the local publish-safety scanner again."
+              aria-label="Run publish-safety check"
               style={{
                 minHeight: "34px",
                 padding: "0 12px",
@@ -393,13 +406,13 @@ export default function AdvisorySettingsPage() {
                 <span style={{ color: "var(--text-muted)", overflowWrap: "anywhere" }}>{model.cliPath || "No local source configured"}</span>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px" }}>
                   <span style={{ border: "1px solid var(--border)", borderRadius: "999px", padding: "3px 8px", color: "var(--text-secondary)", fontSize: "11px", fontWeight: 800 }}>
-                    {formatContextWindow(model.contextWindow)}
+                    {formatContextLabel(model)}
                   </span>
                   <span
                     title={model.contextNote || model.contextEvidence || undefined}
                     style={{ border: "1px solid var(--border)", borderRadius: "999px", padding: "3px 8px", color: "var(--text-secondary)", fontSize: "11px", fontWeight: 800 }}
                   >
-                    {model.contextEvidence?.startsWith("verified") ? "Verified context" : "Fallback context"}
+                    {formatContextSource(model)}
                   </span>
                   <span
                     title={model.thinkingNote || model.thinkingEvidence || undefined}

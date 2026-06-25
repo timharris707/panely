@@ -1,19 +1,21 @@
 export type CliThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export type CliCapabilityCommand = "claude" | "codex" | "gemini" | "agy";
+export type CliContextWindowSource = "verified" | "configured" | "not-reported";
 
 export interface CliThinkingCapability {
-  schemaVersion: 1;
+  schemaVersion: typeof CLI_CAPABILITY_SCHEMA_VERSION;
   supportedThinkingLevels: CliThinkingLevel[];
   thinkingEnforced: boolean;
   thinkingEvidence: string;
   thinkingNote: string;
   contextWindow?: number;
+  contextWindowSource?: CliContextWindowSource;
   contextEvidence?: string;
   contextNote?: string;
   capabilityCheckedAt: string;
 }
 
-export const CLI_CAPABILITY_SCHEMA_VERSION = 1;
+export const CLI_CAPABILITY_SCHEMA_VERSION = 2;
 
 const THINKING_ORDER: CliThinkingLevel[] = ["minimal", "low", "medium", "high", "xhigh", "max"];
 
@@ -60,9 +62,9 @@ export function fallbackCliThinkingCapability(command: CliCapabilityCommand, che
       thinkingEnforced: true,
       thinkingEvidence: "fallback: Claude Code has historically exposed --effort low, medium, high, max.",
       thinkingNote: "Claude effort levels are using fallback capability data until the local CLI help can be checked.",
-      contextWindow: 200000,
-      contextEvidence: "fallback: configured Claude context estimate.",
-      contextNote: "Context window is a fallback estimate because Claude CLI did not expose a parseable context limit.",
+      contextWindowSource: "not-reported",
+      contextEvidence: "not-reported: Claude CLI did not expose a parseable context limit.",
+      contextNote: "Claude CLI does not report a context window Panely can verify, so Panely does not show a precise context value.",
       capabilityCheckedAt: checkedAt,
     };
   }
@@ -75,8 +77,9 @@ export function fallbackCliThinkingCapability(command: CliCapabilityCommand, che
       thinkingEvidence: "fallback: Codex reasoning effort is passed with model_reasoning_effort.",
       thinkingNote: "Codex reasoning effort is passed to the local CLI; run a force check if this CLI changes.",
       contextWindow: 1000000,
-      contextEvidence: "fallback: configured Codex frontier context estimate.",
-      contextNote: "Context window is a fallback estimate; Panely uses the highest configured Codex context budget unless the CLI reports otherwise.",
+      contextWindowSource: "configured",
+      contextEvidence: "configured: Panely local adapter default for Codex long-context runs; not reported by the CLI.",
+      contextNote: "Context window is a Panely adapter default, not a verified CLI-reported limit.",
       capabilityCheckedAt: checkedAt,
     };
   }
@@ -89,8 +92,9 @@ export function fallbackCliThinkingCapability(command: CliCapabilityCommand, che
       thinkingEvidence: "not-enforceable: Gemini CLI did not expose a stable thinking flag in Panely's current adapter.",
       thinkingNote: "Gemini thinking level is not enforced because Panely has not verified a stable local CLI thinking flag.",
       contextWindow: 1000000,
-      contextEvidence: "fallback: configured Gemini long-context estimate.",
-      contextNote: "Context window is a fallback estimate because Gemini CLI did not expose a parseable context limit.",
+      contextWindowSource: "configured",
+      contextEvidence: "configured: Panely local adapter default for Gemini long-context runs; not reported by the CLI.",
+      contextNote: "Context window is a Panely adapter default because Gemini CLI did not expose a parseable context limit.",
       capabilityCheckedAt: checkedAt,
     };
   }
@@ -102,8 +106,9 @@ export function fallbackCliThinkingCapability(command: CliCapabilityCommand, che
     thinkingEvidence: "not-enforceable: Antigravity is tracked as a fallback tool, not a Panely model route.",
     thinkingNote: "Antigravity is available as a Gemini fallback, but Panely does not expose enforceable thinking levels for it yet.",
     contextWindow: 1000000,
-    contextEvidence: "fallback: Antigravity is treated as a Gemini-family fallback.",
-    contextNote: "Context window is a fallback estimate.",
+    contextWindowSource: "configured",
+    contextEvidence: "configured: Panely local adapter default for the Antigravity Gemini fallback; not reported by the CLI.",
+    contextNote: "Context window is a Panely adapter default, not a verified CLI-reported limit.",
     capabilityCheckedAt: checkedAt,
   };
 }
@@ -125,9 +130,9 @@ export function deriveCliThinkingCapability(input: {
         thinkingEnforced: true,
         thinkingEvidence: `verified: claude --help exposed ${parsed.join(", ")}`,
         thinkingNote: "Claude effort levels were read from the installed CLI.",
-        contextWindow: fallbackCliThinkingCapability("claude", checkedAt).contextWindow,
-        contextEvidence: "fallback: Claude CLI help did not expose a parseable context limit.",
-        contextNote: "Context window is a fallback estimate even though effort levels were verified.",
+        contextWindowSource: "not-reported",
+        contextEvidence: "not-reported: Claude CLI help did not expose a parseable context limit.",
+        contextNote: "Claude CLI effort levels were verified, but the CLI did not report a context window Panely can verify.",
         capabilityCheckedAt: checkedAt,
       };
     }
