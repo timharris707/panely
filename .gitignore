@@ -14,6 +14,7 @@ data/advisory/*.json
 data/advisory/exports/
 data/advisory/packets/
 data/advisory/briefs/
+data/advisory/formal-runs/
 docs/source-material/
 docs/source-packets/
 *source-packet*.txt

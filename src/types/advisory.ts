@@ -53,6 +53,10 @@ export interface VoteRecord {
   reasoning: string;
 }
 
+export type AdvisorySessionMode = "roundtable" | "competitive" | "formal-board";
+export type FormalBoardPhase = "preflight" | "round-1" | "round-2" | "round-3" | "synthesis" | "complete";
+export type FormalBoardSeatStatus = "pending" | "ran" | "degraded" | "dropped";
+
 export interface CompetitiveState {
   phase: "pitch" | "critique" | "vote" | "complete";
   voteMode?: "agent-winner" | "top-ideas";
@@ -64,11 +68,56 @@ export interface CompetitiveState {
   topIdeas?: Array<{ idea: string; votes: number }>;
 }
 
+export interface FormalBoardSeat {
+  agentId: string;
+  role?: string;
+  model?: string;
+  status: FormalBoardSeatStatus;
+  statusReason?: string;
+  roundsCompleted: number;
+}
+
+export interface FormalBoardRoundArtifact {
+  round: 1 | 2 | 3;
+  agentId: string;
+  status: FormalBoardSeatStatus;
+  text: string;
+  model?: string;
+  attemptId?: string;
+  errorKind?: string;
+  generatedAt: string;
+}
+
+export interface FormalBoardVerdict {
+  schema: "advisory-board/verdict@1";
+  verdict: "ship" | "caution" | "block";
+  summary: string;
+  evidenceBacked: string[];
+  judgmentCalls: string[];
+  couldntVerify: string[];
+  minorityReport: string[];
+  droppedSeats: Array<{ agentId: string; reason?: string }>;
+  degradedSeats: Array<{ agentId: string; reason?: string }>;
+  valid: boolean;
+  validityReason?: string;
+}
+
+export interface FormalBoardState {
+  protocol: "advisory-board/formal@1";
+  phase: FormalBoardPhase;
+  sourcePacketHash: string;
+  sourcePacketPreview: string;
+  artifactDir?: string;
+  seats: FormalBoardSeat[];
+  rounds: FormalBoardRoundArtifact[];
+  verdict?: FormalBoardVerdict;
+}
+
 export interface AdvisorySession {
   id: string;
   topic: string;
   title?: string;
-  mode: "roundtable" | "competitive";
+  mode: AdvisorySessionMode;
   agents: string[];
   status: "active" | "completed" | "abandoned";
   createdAt: string;
@@ -90,6 +139,7 @@ export interface AdvisorySession {
   referenceContext?: string;
   referenceContextBudgetChars?: number;
   competitive?: CompetitiveState | null;
+  formalBoard?: FormalBoardState | null;
   competitiveVoteMode?: "agent-winner" | "top-ideas";
   competitiveTopCount?: number;
   agentModelOverrides?: Record<string, string>;
@@ -98,6 +148,13 @@ export interface AdvisorySession {
   agentIntensityLevels?: Record<string, number>;
   agentResponseLengths?: Record<string, string>;
   agentThinkingLevels?: Record<string, string>;
+  providerDisclosure?: {
+    accepted: boolean;
+    acceptedAt?: string;
+    sensitivity: "public" | "unknown" | "non-public";
+    providers: string[];
+    message: string;
+  };
   moderator?: string;
   modelHealthSnapshot?: unknown;
   runAttempts?: AdvisoryRunAttempt[];
@@ -184,7 +241,7 @@ export interface DecisionRecord {
   sessionId: string;
   title: string;
   topic: string;
-  mode: "roundtable" | "competitive";
+  mode: AdvisorySessionMode;
   status: "draft" | "complete";
   generatedAt: string;
   recommendation: string;
@@ -198,6 +255,7 @@ export interface DecisionRecord {
   blindVote?: boolean;
   voteTally?: Record<string, number>;
   voteBreakdown?: VoteRecord[];
+  formalVerdict?: FormalBoardVerdict;
   provenance: DecisionRecordProvenance[];
   transcriptMarkdown: string;
   markdown: string;
@@ -208,7 +266,7 @@ export interface BoardBrief {
   sessionId: string;
   title: string;
   topic: string;
-  mode: "roundtable" | "competitive";
+  mode: AdvisorySessionMode;
   status: "draft" | "complete";
   generatedAt: string;
   decision: string;
@@ -218,6 +276,7 @@ export interface BoardBrief {
   risks: string[];
   actionItems: string[];
   modelProvenance: Array<{ agent: string; model?: string; status?: string; durationMs?: number }>;
+  formalVerdict?: FormalBoardVerdict;
   markdown: string;
 }
 
@@ -236,7 +295,7 @@ export interface SessionTemplate {
   label: string;
   desc: string;
   icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>;
-  mode: "roundtable" | "competitive";
+  mode: AdvisorySessionMode;
   agents: string[];
   responseLength: "concise" | "balanced" | "detailed" | "verbose";
   rounds: number;

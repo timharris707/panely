@@ -60,6 +60,10 @@ function extractOpenQuestions(events: AdvisoryEvent[]) {
 }
 
 function buildDecision(session: AdvisorySession, events: AdvisoryEvent[]) {
+  if (session.mode === "formal-board" && session.formalBoard?.verdict) {
+    return `${session.formalBoard.verdict.verdict.toUpperCase()}: ${session.formalBoard.verdict.summary}`;
+  }
+
   const finalEvent = [...events].reverse().find((event) => event.type === "complete" && event.text);
   if (finalEvent) return summarizeText(finalEvent.text, 900);
 
@@ -72,6 +76,16 @@ function buildDecision(session: AdvisorySession, events: AdvisoryEvent[]) {
 }
 
 function buildOptions(session: AdvisorySession): DecisionRecordOption[] {
+  if (session.mode === "formal-board" && session.formalBoard?.verdict) {
+    const verdict = session.formalBoard.verdict;
+    return [
+      {
+        title: verdict.verdict.toUpperCase(),
+        summary: verdict.summary,
+        rank: 1,
+      },
+    ];
+  }
   if (session.mode !== "competitive" || !session.competitive) return [];
   if (session.competitive.topIdeas?.length) {
     return session.competitive.topIdeas.map((idea, index) => ({
@@ -135,6 +149,7 @@ export function renderDecisionRecordMarkdown(record: Omit<DecisionRecord, "markd
     `- **Generated:** ${record.generatedAt}`,
     `- **Topic:** ${record.topic}`,
     record.voteMode ? `- **Vote mode:** ${record.voteMode}${record.blindVote ? " (blind final vote)" : ""}` : "",
+    record.formalVerdict ? `- **Formal verdict:** ${record.formalVerdict.verdict.toUpperCase()} (${record.formalVerdict.valid ? "valid" : "invalid"})` : "",
     "",
     "## Decision",
     "",
@@ -153,6 +168,29 @@ export function renderDecisionRecordMarkdown(record: Omit<DecisionRecord, "markd
     "## Dissent and Caveats",
     "",
     ...(record.dissent.length ? record.dissent.map((item) => `- ${item.agent}: ${item.summary}`) : ["- No explicit dissent was recorded."]),
+    record.formalVerdict ? "" : "",
+    record.formalVerdict ? "## Formal Board Verdict" : "",
+    record.formalVerdict ? "" : "",
+    ...(record.formalVerdict
+      ? [
+          `- **Schema:** ${record.formalVerdict.schema}`,
+          `- **Verdict:** ${record.formalVerdict.verdict.toUpperCase()}`,
+          `- **Valid:** ${record.formalVerdict.valid ? "yes" : "no"}`,
+          ...(record.formalVerdict.validityReason ? [`- **Validity note:** ${record.formalVerdict.validityReason}`] : []),
+          "",
+          "### Evidence-backed",
+          ...(record.formalVerdict.evidenceBacked.length ? record.formalVerdict.evidenceBacked.map((item) => `- ${item}`) : ["- None extracted."]),
+          "",
+          "### Judgment Calls",
+          ...(record.formalVerdict.judgmentCalls.length ? record.formalVerdict.judgmentCalls.map((item) => `- ${item}`) : ["- None extracted."]),
+          "",
+          "### Could Not Verify",
+          ...(record.formalVerdict.couldntVerify.length ? record.formalVerdict.couldntVerify.map((item) => `- ${item}`) : ["- None extracted."]),
+          "",
+          "### Minority Report",
+          ...(record.formalVerdict.minorityReport.length ? record.formalVerdict.minorityReport.map((item) => `- ${item}`) : ["- No explicit minority report was extracted."]),
+        ]
+      : []),
     "",
     "## Risks",
     "",
@@ -206,6 +244,7 @@ export function buildDecisionRecord(session: AdvisorySession): DecisionRecord {
     blindVote: session.mode === "competitive",
     voteTally: session.competitive?.voteTally,
     voteBreakdown: session.competitive?.votes,
+    formalVerdict: session.formalBoard?.verdict,
     provenance: buildProvenance(session),
     transcriptMarkdown,
   };

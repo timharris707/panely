@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateText } from "@/lib/ai/router";
 import { getProviderModelById, PROVIDERS, resolveProviderModelId, type ProviderModel } from "@/lib/ai/providers";
 import { probeAllModelHealth } from "@/lib/ai/model-health";
+import { buildProviderDisclosure } from "@/lib/advisory/provider-disclosure";
 
 type Intent = "decision" | "stress-test" | "compare" | "ideas" | "red-team";
+type PlannedMode = "roundtable" | "competitive" | "formal-board";
 type ThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
 interface PlannedAdvisor {
@@ -43,9 +45,21 @@ function chooseModel(availableModelIds: string[], preferredIds: string[]) {
   return preferredIds.find((modelId) => available.has(modelId)) ?? availableModelIds[0] ?? "claude-sonnet";
 }
 
-function fallbackPlan(topic: string, availableModelIds = ALLOWED_MODELS): { intent: Intent; mode: "roundtable" | "competitive"; advisors: PlannedAdvisor[] } {
+function inferMode(intent: Intent, topic: string): PlannedMode {
+  const lower = topic.toLowerCase();
+  if (intent === "ideas") return "competitive";
+  if (/(formal board|formal review|high[- ]?stakes|gate|ship\/caution\/block|verdict\.json|independent review|architecture gate|quality gate)/.test(lower)) {
+    return "formal-board";
+  }
+  if ((intent === "stress-test" || intent === "red-team") && /(plan|spec|proposal|architecture|skill|repo|code|release|launch|migration|strategy)/.test(lower)) {
+    return "formal-board";
+  }
+  return "roundtable";
+}
+
+function fallbackPlan(topic: string, availableModelIds = ALLOWED_MODELS): { intent: Intent; mode: PlannedMode; advisors: PlannedAdvisor[] } {
   const intent = inferIntent(topic);
-  const mode = intent === "ideas" ? "competitive" : "roundtable";
+  const mode = inferMode(intent, topic);
   const lower = topic.toLowerCase();
   const advisors: PlannedAdvisor[] = [
     {
@@ -143,6 +157,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Topic is required" }, { status: 400 });
     }
 
+    const plannerDisclosure = buildProviderDisclosure({
+      topic,
+      attachedFileCount: Number(body?.attachedFileCount || 0),
+      planningModelIds: [String(body?.modelId || "claude-sonnet")],
+      modelIds: [],
+    });
+    const disclosureAccepted =
+      body?.providerDisclosure &&
+      typeof body.providerDisclosure === "object" &&
+      body.providerDisclosure.accepted === true;
+    if (plannerDisclosure.requiresConsent && !disclosureAccepted) {
+      return NextResponse.json(
+        {
+          error: "Provider disclosure must be accepted before Panely sends this source material to the AI planner.",
+          providerDisclosure: plannerDisclosure,
+        },
+        { status: 403 }
+      );
+    }
+
     const available = healthyProviderModels();
     if (available.models.length === 0) {
       return NextResponse.json(
@@ -175,7 +209,7 @@ Thinking levels: minimal, low, medium, high, xhigh, max.
 
 Create named advisors specifically for this topic. Do not use existing product agent names. Do not use generic labels like Agent 1. The names should sound like temporary advisory roles, not permanent mascots. Use ONLY the available model IDs listed above.`;
 
-    const prompt = `Topic and source material:
+  const prompt = `Topic and source material:
 ${topic.slice(0, 12000)}
 
 Inferred intent from heuristics: ${fallback.intent}
@@ -183,7 +217,7 @@ Inferred intent from heuristics: ${fallback.intent}
 Return JSON with this exact shape:
 {
   "intent": "decision" | "stress-test" | "compare" | "ideas" | "red-team",
-  "mode": "roundtable" | "competitive",
+  "mode": "roundtable" | "competitive" | "formal-board",
   "advisors": [
     {
       "name": "short role name",
@@ -196,7 +230,12 @@ Return JSON with this exact shape:
   ]
 }
 
-Use 4-6 advisors. If the user asks to review a plan, use stress-test and include at least one skeptical/reality-checking reviewer.`;
+Use 4-6 advisors. If the user asks to review a plan, use stress-test and include at least one skeptical/reality-checking reviewer.
+
+Mode guidance:
+- roundtable: exploratory collaborative judgment.
+- competitive: rival proposals, critique, and voting.
+- formal-board: high-stakes review, independent first round, rebuttal, and a structured ship/caution/block verdict.`;
 
     try {
       const result = await generateText({
@@ -211,14 +250,16 @@ Use 4-6 advisors. If the user asks to review a plan, use stress-test and include
       if (!jsonMatch) throw new Error("Planner returned no JSON object");
       const parsed = JSON.parse(jsonMatch[0]) as {
         intent?: Intent;
-        mode?: "roundtable" | "competitive";
+        mode?: PlannedMode;
         advisors?: Array<Partial<PlannedAdvisor>>;
       };
 
       const intent: Intent = parsed.intent && ["decision", "stress-test", "compare", "ideas", "red-team"].includes(parsed.intent)
         ? parsed.intent
         : fallback.intent;
-      const mode = parsed.mode === "competitive" || intent === "ideas" ? "competitive" : "roundtable";
+      const mode: PlannedMode = parsed.mode === "competitive" || parsed.mode === "formal-board"
+        ? parsed.mode
+        : inferMode(intent, topic);
       const advisors = Array.isArray(parsed.advisors)
         ? parsed.advisors.slice(0, 6).map((advisor, index) => normalizeAdvisor(advisor, index, fallback.advisors, availableModelIds))
         : fallback.advisors;

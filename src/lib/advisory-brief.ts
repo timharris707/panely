@@ -28,6 +28,7 @@ export function buildBoardBrief(session: AdvisorySession): BoardBrief {
       status: item.status,
       durationMs: item.durationMs,
     })),
+    formalVerdict: decisionRecord.formalVerdict,
     markdown: decisionRecord.markdown,
   };
 }

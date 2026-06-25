@@ -7,6 +7,10 @@ import {
   type AdvisorySessionRecord,
 } from "@/lib/advisory-session-store";
 import type { ModelHealthResult } from "@/lib/ai/model-health";
+import { buildProviderDisclosure } from "@/lib/advisory/provider-disclosure";
+import { createFormalBoardState } from "@/lib/advisory/formal-board";
+import { buildSourcePacket } from "@/lib/advisory/source-packet";
+import type { AdvisorySessionMode } from "@/types/advisory";
 
 const DEFAULT_REFERENCE_CONTEXT_BUDGET_CHARS = 50_000;
 const MAX_REFERENCE_CONTEXT_BUDGET_CHARS = 1_000_000;
@@ -34,6 +38,12 @@ function summarizeUnhealthyModels(results: ModelHealthResult[]) {
     .map((result) => `${result.name} (${result.model}): ${result.error || result.status}`);
 }
 
+function normalizeMode(mode: unknown): AdvisorySessionMode | null {
+  return mode === "roundtable" || mode === "competitive" || mode === "formal-board"
+    ? mode
+    : null;
+}
+
 export async function GET() {
   try {
     const user = await getCurrentUser();
@@ -55,19 +65,40 @@ export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser();
     const body = await req.json();
-    const { topic, mode, agents, model, personaOverlays, personaOverlaysList, aiPersonas, rounds, pacing, responseLength, extendedThinking, specialist, specialistAgent, forkedFrom, forkedAtEvent, referenceContext, referenceContextBudgetChars, agentModelOverrides, agentPersonalityTraits, agentCommunicationStyles, agentIntensityLevels, agentResponseLengths, agentThinkingLevels, moderator, competitiveVoteMode, competitiveTopCount } = body;
+    const { topic, mode, agents, model, personaOverlays, personaOverlaysList, aiPersonas, rounds, pacing, responseLength, extendedThinking, specialist, specialistAgent, forkedFrom, forkedAtEvent, referenceContext, referenceContextBudgetChars, agentModelOverrides, agentPersonalityTraits, agentCommunicationStyles, agentIntensityLevels, agentResponseLengths, agentThinkingLevels, providerDisclosure, moderator, competitiveVoteMode, competitiveTopCount } = body;
 
     if (!topic || !mode) {
       return NextResponse.json({ error: "topic and mode are required" }, { status: 400 });
     }
 
-    if (mode !== "roundtable" && mode !== "competitive") {
-      return NextResponse.json({ error: "mode must be roundtable or competitive" }, { status: 400 });
+    const resolvedMode = normalizeMode(mode);
+    if (!resolvedMode) {
+      return NextResponse.json({ error: "mode must be roundtable, competitive, or formal-board" }, { status: 400 });
     }
 
     const id = `session-${Date.now()}-${randomUUID().slice(0, 8)}`;
     const now = new Date().toISOString();
     const resolvedReferenceContextBudget = resolveReferenceContextBudget(referenceContextBudgetChars);
+    const disclosure = buildProviderDisclosure({
+      topic: String(topic),
+      attachedFileCount: referenceContext ? 1 : 0,
+      planningModelIds: ["claude-sonnet"],
+      modelIds: selectedModelIds(model, agentModelOverrides),
+    });
+    const acceptedDisclosure =
+      providerDisclosure &&
+      typeof providerDisclosure === "object" &&
+      !Array.isArray(providerDisclosure) &&
+      providerDisclosure.accepted === true;
+    if (disclosure.requiresConsent && !acceptedDisclosure) {
+      return NextResponse.json(
+        {
+          error: "Provider disclosure must be accepted before starting a session with unknown or non-public source material.",
+          providerDisclosure: disclosure,
+        },
+        { status: 400 }
+      );
+    }
     const { probeSelectedModelHealth } = await import("@/lib/ai/model-health");
     const modelHealth = probeSelectedModelHealth(selectedModelIds(model, agentModelOverrides));
     const unhealthyModels = summarizeUnhealthyModels(modelHealth);
@@ -82,7 +113,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const isCompetitive = mode === "competitive";
+    const isCompetitive = resolvedMode === "competitive";
+    const isFormalBoard = resolvedMode === "formal-board";
     const resolvedCompetitiveVoteMode: "agent-winner" | "top-ideas" = competitiveVoteMode === "top-ideas" ? "top-ideas" : "agent-winner";
     const resolvedCompetitiveTopCount = Math.max(1, Math.min(10, Number(competitiveTopCount) || 3));
     const competitiveState = isCompetitive ? {
@@ -95,15 +127,35 @@ export async function POST(req: NextRequest) {
       voteTally: {} as Record<string, number>,
     } : undefined;
 
+    const sourcePacket = isFormalBoard
+      ? buildSourcePacket({
+          topic: String(topic),
+          referenceContext: referenceContext ? String(referenceContext).slice(0, resolvedReferenceContextBudget) : undefined,
+        })
+      : null;
+    const formalBoardState = sourcePacket
+      ? createFormalBoardState({
+          sessionId: id,
+          agents: Array.isArray(agents) ? agents : [],
+          agentRoles: aiPersonas && Array.isArray(aiPersonas)
+            ? Object.fromEntries(aiPersonas.map((persona: { name?: string; role?: string }) => [persona.name || "", persona.role || "Formal reviewer"]))
+            : undefined,
+          agentModels: agentModelOverrides,
+          sourcePacket,
+        })
+      : undefined;
+
     const startText = isCompetitive
       ? `⚔️ **Competitive Ideation started.**\n\n**Topic:** ${topic}\n\n**Mode:** Competitive Ideation | **Model:** ${model || "claude-sonnet"}\n\n**Competitors:** ${(agents || []).join(", ") || "TBD"}\n\n**Round 1 — PITCH:** Each agent pitches ${resolvedCompetitiveVoteMode === "top-ideas" ? "their top three improvement ideas" : "their boldest idea"}.\n**Round 2 — CRITIQUE:** Agents stress-test the ideas by name.\n**Round 3 — VOTE:** ${resolvedCompetitiveVoteMode === "top-ideas" ? `Each agent votes for the top ${resolvedCompetitiveTopCount} ideas overall.` : "Each agent votes for the best idea (not their own) with reasoning."}\n\nLet the competition begin...`
+      : isFormalBoard
+      ? `🧾 **Formal Board Review started.**\n\n**Topic:** ${topic}\n\n**Mode:** Formal Board Review | **Model:** ${model || "claude-sonnet"}\n\n**Source packet SHA-256:** ${sourcePacket?.hash || "pending"}\n\n**Seats:** ${(agents || []).join(", ") || "TBD"}\n\n**Round 1 — INDEPENDENT REVIEW:** Each seat reviews the same source packet without seeing peer output.\n**Round 2 — REBUTTAL:** Seats receive the Round 1 packet and update or challenge the board.\n**Final — VERDICT:** Panely produces an advisory-board/verdict@1 artifact with evidence, judgment calls, couldn't-verify items, and dissent.\n\nStanding by for formal board inputs...`
       : `🚀 **Session started.**\n\n**Topic:** ${topic}\n\n**Mode:** Roundtable | **Model:** ${model || "claude-sonnet"}\n\n**Participants:** ${(agents || []).join(", ") || "TBD"}\n\nStanding by for agent inputs...`;
 
     const session: AdvisorySessionRecord = {
       id,
       userId: user.id,
       topic,
-      mode,
+      mode: resolvedMode,
       agents: agents || [],
       status: "active",
       createdAt: now,
@@ -127,8 +179,16 @@ export async function POST(req: NextRequest) {
       ...(agentIntensityLevels && Object.keys(agentIntensityLevels).length > 0 ? { agentIntensityLevels } : {}),
       ...(agentResponseLengths && Object.keys(agentResponseLengths).length > 0 ? { agentResponseLengths } : {}),
       ...(agentThinkingLevels && Object.keys(agentThinkingLevels).length > 0 ? { agentThinkingLevels } : {}),
+      providerDisclosure: {
+        accepted: acceptedDisclosure,
+        acceptedAt: acceptedDisclosure && typeof providerDisclosure.acceptedAt === "string" ? providerDisclosure.acceptedAt : undefined,
+        sensitivity: disclosure.sensitivity,
+        providers: disclosure.providers,
+        message: disclosure.message,
+      },
       ...(agentModelOverrides && Object.keys(agentModelOverrides).length > 0 ? { agentModelOverrides } : {}),
       ...(competitiveState ? { competitive: competitiveState } : {}),
+      ...(formalBoardState ? { formalBoard: formalBoardState } : {}),
       ...(isCompetitive ? { competitiveVoteMode: resolvedCompetitiveVoteMode, competitiveTopCount: resolvedCompetitiveTopCount } : {}),
       ...(moderator ? { moderator } : {}),
       modelHealthSnapshot: modelHealth,

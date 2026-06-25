@@ -424,7 +424,11 @@ export function formatMarkdownFileExport(session: AdvisorySession, events: Advis
     }
   }
 
-  const modeLabel = mode === "competitive" ? "Competitive Ideation" : "Roundtable";
+  const modeLabel = mode === "competitive"
+    ? "Competitive Ideation"
+    : mode === "formal-board"
+    ? "Formal Board Review"
+    : "Roundtable";
   const lines: string[] = [
     `# ${topic}`,
     ``,

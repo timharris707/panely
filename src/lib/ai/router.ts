@@ -2,8 +2,9 @@ import { spawn } from "child_process";
 import { mkdtempSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
-import { getProviderModelById, type AIProvider } from "@/lib/ai/providers";
-import { classifyProviderError } from "@/lib/ai/provider-errors";
+import { getProviderModelById, type AIProvider } from "./providers.ts";
+import { classifyProviderError } from "./provider-errors.ts";
+import { codexReasoningEffortArgs, resolveThinkingLevel, type ThinkingLevel } from "./thinking-levels.ts";
 
 export interface GenerateTextInput {
   prompt: string;
@@ -11,7 +12,7 @@ export interface GenerateTextInput {
   systemPrompt?: string;
   maxTokens?: number;
   temperature?: number;
-  thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+  thinkingLevel?: ThinkingLevel;
   timeoutMs?: number;
   onTextChunk?: (chunk: string) => void;
 }
@@ -76,28 +77,32 @@ function composePrompt(prompt: string, systemPrompt?: string) {
   return systemPrompt ? `System instructions:\n${systemPrompt}\n\nUser request:\n${prompt}` : prompt;
 }
 
-function normalizeClaudeEffort(thinkingLevel?: GenerateTextInput["thinkingLevel"]) {
-  if (!thinkingLevel || thinkingLevel === "off" || thinkingLevel === "minimal") return "low";
-  return thinkingLevel === "xhigh" ? "xhigh" : thinkingLevel;
+export interface LocalCliCommand {
+  command: "claude" | "codex" | "gemini";
+  args: string[];
+  input?: string;
+  outputFile?: string;
 }
 
-async function generateWithLocalCli(input: GenerateTextInput, localCli: "claude" | "codex" | "gemini", model: string): Promise<string> {
+export function buildLocalCliCommand(
+  input: GenerateTextInput,
+  localCli: "claude" | "codex" | "gemini",
+  model: string,
+  options: { outputFile?: string } = {}
+): LocalCliCommand {
   const prompt = composePrompt(input.prompt, input.systemPrompt);
-  const derivedTimeoutMs = Math.max(120000, Math.min(300000, (input.maxTokens ?? 2048) * 60));
-  const timeoutMs = input.timeoutMs
-    ? Math.max(30000, Math.min(300000, input.timeoutMs))
-    : derivedTimeoutMs;
 
   if (localCli === "claude") {
-    // Claude CLI accepts the prompt as an argv tail and streams stdout directly.
-    return runCommand(
-      "claude",
-      [
+    const modelConfig = getProviderModelById(input.modelId);
+    const effort = resolveThinkingLevel(modelConfig, input.thinkingLevel).effective ?? "low";
+    return {
+      command: "claude",
+      args: [
         "-p",
         "--model",
         model,
         "--effort",
-        normalizeClaudeEffort(input.thinkingLevel),
+        effort,
         "--tools",
         "",
         "--no-session-persistence",
@@ -105,7 +110,65 @@ async function generateWithLocalCli(input: GenerateTextInput, localCli: "claude"
         "text",
         prompt,
       ],
-      undefined,
+    };
+  }
+
+  if (localCli === "codex") {
+    const modelConfig = getProviderModelById(input.modelId);
+    const reasoningArgs = codexReasoningEffortArgs(resolveThinkingLevel(modelConfig, input.thinkingLevel));
+    const outputFile = options.outputFile;
+    if (!outputFile) {
+      throw new Error("Codex CLI command construction requires an output file.");
+    }
+    return {
+      command: "codex",
+      args: [
+        "exec",
+        "--model",
+        model,
+        ...reasoningArgs,
+        "--sandbox",
+        "read-only",
+        "--cd",
+        process.cwd(),
+        "--output-last-message",
+        outputFile,
+        "--",
+        prompt,
+      ],
+      outputFile,
+    };
+  }
+
+  return {
+    command: "gemini",
+    args: [
+      "--prompt",
+      "",
+      "--model",
+      model,
+      "--output-format",
+      "text",
+      "--approval-mode",
+      "plan",
+    ],
+    input: prompt,
+  };
+}
+
+async function generateWithLocalCli(input: GenerateTextInput, localCli: "claude" | "codex" | "gemini", model: string): Promise<string> {
+  const derivedTimeoutMs = Math.max(120000, Math.min(300000, (input.maxTokens ?? 2048) * 60));
+  const timeoutMs = input.timeoutMs
+    ? Math.max(30000, Math.min(300000, input.timeoutMs))
+    : derivedTimeoutMs;
+
+  if (localCli === "claude") {
+    const command = buildLocalCliCommand(input, localCli, model);
+    // Claude CLI accepts the prompt as an argv tail and streams stdout directly.
+    return runCommand(
+      command.command,
+      command.args,
+      command.input,
       timeoutMs,
       input.onTextChunk,
     );
@@ -116,22 +179,11 @@ async function generateWithLocalCli(input: GenerateTextInput, localCli: "claude"
     const dir = mkdtempSync(path.join(tmpdir(), "panely-codex-"));
     const outputFile = path.join(dir, "last-message.txt");
     try {
+      const command = buildLocalCliCommand(input, localCli, model, { outputFile });
       await runCommand(
-        "codex",
-        [
-          "exec",
-          "--model",
-          model,
-          "--sandbox",
-          "read-only",
-          "--cd",
-          process.cwd(),
-          "--output-last-message",
-          outputFile,
-          "--",
-          prompt,
-        ],
-        undefined,
+        command.command,
+        command.args,
+        command.input,
         timeoutMs,
       );
       return readFileSync(outputFile, "utf8").trim();
@@ -141,19 +193,11 @@ async function generateWithLocalCli(input: GenerateTextInput, localCli: "claude"
   }
 
   // Gemini CLI receives prompts on stdin so large source packets do not exceed argv limits.
+  const command = buildLocalCliCommand(input, localCli, model);
   return runCommand(
-    "gemini",
-    [
-      "--prompt",
-      "",
-      "--model",
-      model,
-      "--output-format",
-      "text",
-      "--approval-mode",
-      "plan",
-    ],
-    prompt,
+    command.command,
+    command.args,
+    command.input,
     timeoutMs,
     input.onTextChunk,
   );

@@ -15,7 +15,21 @@ import {
   selectWinner,
 } from "@/lib/advisory/competitive";
 import { buildRequestedModelProvenance } from "@/lib/advisory/provenance";
-import type { AdvisoryRunAttempt } from "@/types/advisory";
+import {
+  buildFormalRoundOneSystemPrompt,
+  buildFormalRoundOneUserPrompt,
+  buildFormalRoundTwoSystemPrompt,
+  buildFormalRoundTwoUserPrompt,
+  buildFormalSynthesisPrompt,
+  buildFormalVerdict,
+  canRunFormalBoard,
+  createFormalBoardState,
+  recordFormalRoundArtifact,
+  setFormalBoardPhase,
+} from "@/lib/advisory/formal-board";
+import { buildSourcePacket } from "@/lib/advisory/source-packet";
+import { completeRunStep, createRunStep, failRunStep } from "@/lib/advisory/run-ledger";
+import type { AdvisoryRunAttempt, AdvisoryRunStep, FormalBoardState } from "@/types/advisory";
 
 const DATA_DIR = path.join(process.cwd(), "data", "advisory");
 const MEMORY_FILE = path.join(DATA_DIR, "agent-memory.json");
@@ -674,6 +688,51 @@ function completeAttempt(
   return completed as AdvisoryRunAttempt | null;
 }
 
+function beginRunStepRecord(sessionPath: string, input: {
+  sessionId: string;
+  index: number;
+  phase: string;
+  agentId: string;
+  model: string;
+  attemptId?: string;
+}) {
+  const step = createRunStep(input);
+  updateSessionRecord(sessionPath, (session) => {
+    const steps = Array.isArray(session.runSteps) ? (session.runSteps as AdvisoryRunStep[]) : [];
+    session.runSteps = [...steps, step];
+  });
+  return step;
+}
+
+function updateRunStepRecord(
+  sessionPath: string,
+  stepId: string | undefined,
+  updater: (step: AdvisoryRunStep) => AdvisoryRunStep
+) {
+  if (!stepId) return;
+  updateSessionRecord(sessionPath, (session) => {
+    const steps = Array.isArray(session.runSteps) ? (session.runSteps as AdvisoryRunStep[]) : [];
+    session.runSteps = steps.map((step) => step.id === stepId ? updater(step) : step);
+  });
+}
+
+function writeFormalArtifact(state: FormalBoardState, fileName: string, content: string) {
+  if (!state.artifactDir) return;
+  const artifactDir = path.isAbsolute(state.artifactDir)
+    ? state.artifactDir
+    : path.join(process.cwd(), state.artifactDir);
+  fs.mkdirSync(artifactDir, { recursive: true });
+  fs.writeFileSync(path.join(artifactDir, fileName), content);
+}
+
+function writeFormalStateSnapshot(state: FormalBoardState) {
+  writeFormalArtifact(state, "formal-board-state.json", JSON.stringify(state, null, 2));
+}
+
+function safeArtifactName(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "seat";
+}
+
 function eventFailureText(label: string, err: unknown) {
   const classified = classifyProviderError(err);
   return {
@@ -817,6 +876,19 @@ export async function POST(
             sessionAgentModelOverrides as Record<string, string> | undefined,
             sessionAgentThinkingLevels as Record<string, string> | undefined
           );
+        } else if (mode === "formal-board") {
+          await runFormalBoard(
+            filePath, session, topic as string, agents as string[],
+            personaOverlays as Record<string, string> | string[] | undefined,
+            pacing as string, resolvedModel, thinking, resolvedLength,
+            sessionReferenceContext as string | undefined,
+            sessionAgentTraits as Record<string, string[]> | undefined,
+            sessionAgentCommStyles as Record<string, string> | undefined,
+            sessionAgentIntensity as Record<string, number> | undefined,
+            sessionAgentResponseLengths as Record<string, string> | undefined,
+            sessionAgentModelOverrides as Record<string, string> | undefined,
+            sessionAgentThinkingLevels as Record<string, string> | undefined
+          );
         } else {
           throw new Error(`Unsupported advisory session mode: ${String(mode)}`);
         }
@@ -930,6 +1002,401 @@ Use distinct moderator framing in your responses:
 - "I'm going to push back on the emerging consensus here..." to challenge groupthink
 
 You speak with authority but fairness. You don't dominate — you guide. Your job is to extract the best thinking from every participant and synthesize it into actionable conclusions for the user.`;
+}
+
+// ─── FORMAL BOARD REVIEW mode ───────────────────────────────────────────────
+
+async function runFormalBoard(
+  filePath: string,
+  session: Record<string, unknown>,
+  topic: string,
+  agents: string[],
+  _personaOverlays: Record<string, string> | string[] | undefined,
+  pacing: string = "instant",
+  model: string = INFERENCE_MODEL,
+  thinking = false,
+  responseLength: ResponseLength = DEFAULT_RESPONSE_LENGTH,
+  referenceContext?: string,
+  agentPersonalityTraits?: Record<string, string[]>,
+  agentCommunicationStyles?: Record<string, string>,
+  agentIntensityLevels?: Record<string, number>,
+  agentResponseLengths?: Record<string, string>,
+  agentModelOverrides?: Record<string, string>,
+  agentThinkingLevels?: Record<string, string>
+) {
+  const sourcePacket = buildSourcePacket({ topic, referenceContext });
+  const existingFormalBoard = session.formalBoard as FormalBoardState | undefined;
+  let formalBoard = existingFormalBoard?.protocol === "advisory-board/formal@1"
+    ? existingFormalBoard
+    : createFormalBoardState({
+        sessionId: String(session.id || path.basename(filePath, ".json")),
+        agents,
+        agentRoles: Object.fromEntries(agents.map((agentId) => [agentId, getSessionAgentIdentity(session, agentId).role])),
+        agentModels: agentModelOverrides,
+        sourcePacket,
+      });
+
+  updateSessionRecord(filePath, (current) => {
+    current.formalBoard = formalBoard;
+  });
+  writeFormalArtifact(
+    formalBoard,
+    "source-packet.md",
+    `<!-- source-packet-sha256: ${sourcePacket.hash} -->\n\n${sourcePacket.text}\n`
+  );
+  writeFormalStateSnapshot(formalBoard);
+
+  if (!canRunFormalBoard(formalBoard)) {
+    throw new Error("Formal Board Review requires at least two runnable seats.");
+  }
+
+  const updateFormalBoard = (updater: (state: FormalBoardState) => FormalBoardState) => {
+    updateSessionRecord(filePath, (current) => {
+      const state = (current.formalBoard as FormalBoardState | undefined) || formalBoard;
+      formalBoard = updater(state);
+      current.formalBoard = formalBoard;
+    });
+    writeFormalStateSnapshot(formalBoard);
+  };
+
+  const sessionId = String(session.id || path.basename(filePath, ".json"));
+  let stepIndex = Array.isArray(session.runSteps) ? session.runSteps.length : 0;
+
+  appendEvent(filePath, {
+    id: `evt_formal_round1_${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    type: "start",
+    speaker: "System",
+    emoji: "🧾",
+    role: "system",
+    text: `**Formal Board Review — Round 1: Independent Review**\n\nEach seat receives the same source packet only. Peer output is hidden until Round 2.\n\nSource packet SHA-256: \`${sourcePacket.hash}\``,
+    phase: "formal-round-1",
+  });
+  updateFormalBoard((state) => setFormalBoardPhase(state, "round-1"));
+
+  for (const agentId of agents) {
+    const currentRaw = fs.readFileSync(filePath, "utf-8");
+    const currentSession = JSON.parse(currentRaw);
+    if (currentSession.status !== "active") return;
+
+    const identity = getSessionAgentIdentity(session, agentId);
+    const agentLength = (agentResponseLengths?.[agentId] as ResponseLength | undefined) || responseLength;
+    const agentModel = resolveModel(agentModelOverrides?.[agentId] || model).model;
+    const agentThinking = agentThinkingLevels?.[agentId] || (thinking ? "medium" : undefined);
+    const eventId = `evt_formal_r1_${agentId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const systemPrompt = buildFormalRoundOneSystemPrompt({
+      agentName: agentId,
+      role: identity.role,
+      responseInstruction: RESPONSE_LENGTH_CONFIG[agentLength].instruction,
+    });
+    const userPrompt = buildFormalRoundOneUserPrompt(sourcePacket);
+
+    appendEvent(filePath, {
+      id: eventId,
+      timestamp: new Date().toISOString(),
+      type: "worker",
+      speaker: agentId,
+      emoji: identity.emoji,
+      role: "worker",
+      text: "",
+      model: agentModel,
+      modelSource: agentModel,
+      provenance: eventProvenance(agentModel),
+      streaming: true,
+      phase: "formal-round-1",
+    });
+
+    const attemptId = beginAttempt(filePath, { phase: "formal-round-1", agentId, model: agentModel });
+    const step = beginRunStepRecord(filePath, {
+      sessionId,
+      index: stepIndex++,
+      phase: "formal-round-1",
+      agentId,
+      model: agentModel,
+      attemptId,
+    });
+    const streamUpdater = createStreamingTextUpdater(filePath, eventId);
+    setThinkingAgent(filePath, agentId);
+
+    try {
+      const result = await callAgent(
+        systemPrompt,
+        userPrompt,
+        agentModel,
+        agentThinking || false,
+        RESPONSE_LENGTH_CONFIG[agentLength].maxTokens,
+        agentId,
+        streamUpdater.append
+      );
+      const completed = completeAttempt(filePath, attemptId, { status: "succeeded", modelSource: result.model });
+      updateRunStepRecord(filePath, step?.id, (runStep) => completeRunStep({
+        ...runStep,
+        provenance: eventProvenance(agentModel, result.model),
+      }));
+      streamUpdater.finish(result.text, result.model);
+      updateEvent(filePath, eventId, (event) => ({
+        ...event,
+        attemptId,
+        durationMs: completed?.durationMs,
+        phase: "formal-round-1",
+        provenance: eventProvenance(agentModel, result.model),
+      }));
+      updateFormalBoard((state) => recordFormalRoundArtifact(state, {
+        round: 1,
+        agentId,
+        status: "ran",
+        text: result.text,
+        model: result.model,
+        attemptId,
+      }));
+      writeFormalArtifact(formalBoard, `round-1-${safeArtifactName(agentId)}.md`, result.text);
+    } catch (err) {
+      const completed = completeAttempt(filePath, attemptId, { status: "failed", error: err });
+      const failure = eventFailureText("Formal Round 1 failed", err);
+      updateRunStepRecord(filePath, step?.id, (runStep) => failRunStep(runStep, { errorKind: failure.errorKind, error: failure.text }));
+      streamUpdater.fail(failure.text, {
+        errorKind: failure.errorKind,
+        durationMs: completed?.durationMs,
+        attemptId,
+        phase: "formal-round-1",
+      });
+      updateFormalBoard((state) => recordFormalRoundArtifact(state, {
+        round: 1,
+        agentId,
+        status: "degraded",
+        text: failure.text,
+        model: agentModel,
+        attemptId,
+        errorKind: failure.errorKind,
+      }));
+      writeFormalArtifact(formalBoard, `round-1-${safeArtifactName(agentId)}.md`, failure.text);
+    } finally {
+      setThinkingAgent(filePath, null);
+    }
+
+    await new Promise((r) => setTimeout(r, 500));
+    const continueSession = await applyPacing(filePath, pacing);
+    if (!continueSession) return;
+  }
+
+  const successfulRoundOne = formalBoard.rounds.filter((artifact) => artifact.round === 1 && artifact.status === "ran");
+
+  appendEvent(filePath, {
+    id: `evt_formal_round2_${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    type: "start",
+    speaker: "System",
+    emoji: "🔎",
+    role: "system",
+    text: `**Formal Board Review — Round 2: Rebuttal**\n\n${successfulRoundOne.length} independent Round 1 seats completed. Seats now receive the shared Round 1 packet and may update, challenge, or dissent.`,
+    phase: "formal-round-2",
+  });
+  updateFormalBoard((state) => setFormalBoardPhase(state, "round-2"));
+
+  if (successfulRoundOne.length >= 2) {
+    for (const agentId of agents) {
+      const currentRaw = fs.readFileSync(filePath, "utf-8");
+      const currentSession = JSON.parse(currentRaw);
+      if (currentSession.status !== "active") return;
+
+      const identity = getSessionAgentIdentity(session, agentId);
+      const agentLength = (agentResponseLengths?.[agentId] as ResponseLength | undefined) || responseLength;
+      const agentModel = resolveModel(agentModelOverrides?.[agentId] || model).model;
+      const agentThinking = agentThinkingLevels?.[agentId] || (thinking ? "medium" : undefined);
+      const eventId = `evt_formal_r2_${agentId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const systemPrompt = buildFormalRoundTwoSystemPrompt({
+        agentName: agentId,
+        role: identity.role,
+        responseInstruction: RESPONSE_LENGTH_CONFIG[agentLength].instruction,
+      });
+      const userPrompt = buildFormalRoundTwoUserPrompt({
+        topic,
+        sourcePacketHash: sourcePacket.hash,
+        roundOneArtifacts: successfulRoundOne,
+      });
+
+      appendEvent(filePath, {
+        id: eventId,
+        timestamp: new Date().toISOString(),
+        type: "reviewer",
+        speaker: agentId,
+        emoji: identity.emoji,
+        role: "reviewer",
+        text: "",
+        model: agentModel,
+        modelSource: agentModel,
+        provenance: eventProvenance(agentModel),
+        streaming: true,
+        phase: "formal-round-2",
+      });
+
+      const attemptId = beginAttempt(filePath, { phase: "formal-round-2", agentId, model: agentModel });
+      const step = beginRunStepRecord(filePath, {
+        sessionId,
+        index: stepIndex++,
+        phase: "formal-round-2",
+        agentId,
+        model: agentModel,
+        attemptId,
+      });
+      const streamUpdater = createStreamingTextUpdater(filePath, eventId);
+      setThinkingAgent(filePath, agentId);
+
+      try {
+        const result = await callAgent(
+          systemPrompt,
+          userPrompt,
+          agentModel,
+          agentThinking || false,
+          RESPONSE_LENGTH_CONFIG[agentLength].maxTokens,
+          agentId,
+          streamUpdater.append
+        );
+        const completed = completeAttempt(filePath, attemptId, { status: "succeeded", modelSource: result.model });
+        updateRunStepRecord(filePath, step?.id, (runStep) => completeRunStep({
+          ...runStep,
+          provenance: eventProvenance(agentModel, result.model),
+        }));
+        streamUpdater.finish(result.text, result.model);
+        updateEvent(filePath, eventId, (event) => ({
+          ...event,
+          attemptId,
+          durationMs: completed?.durationMs,
+          phase: "formal-round-2",
+          provenance: eventProvenance(agentModel, result.model),
+        }));
+        updateFormalBoard((state) => recordFormalRoundArtifact(state, {
+          round: 2,
+          agentId,
+          status: "ran",
+          text: result.text,
+          model: result.model,
+          attemptId,
+        }));
+        writeFormalArtifact(formalBoard, `round-2-${safeArtifactName(agentId)}.md`, result.text);
+      } catch (err) {
+        const completed = completeAttempt(filePath, attemptId, { status: "failed", error: err });
+        const failure = eventFailureText("Formal Round 2 failed", err);
+        updateRunStepRecord(filePath, step?.id, (runStep) => failRunStep(runStep, { errorKind: failure.errorKind, error: failure.text }));
+        streamUpdater.fail(failure.text, {
+          errorKind: failure.errorKind,
+          durationMs: completed?.durationMs,
+          attemptId,
+          phase: "formal-round-2",
+        });
+        updateFormalBoard((state) => recordFormalRoundArtifact(state, {
+          round: 2,
+          agentId,
+          status: "degraded",
+          text: failure.text,
+          model: agentModel,
+          attemptId,
+          errorKind: failure.errorKind,
+        }));
+        writeFormalArtifact(formalBoard, `round-2-${safeArtifactName(agentId)}.md`, failure.text);
+      } finally {
+        setThinkingAgent(filePath, null);
+      }
+
+      await new Promise((r) => setTimeout(r, 500));
+      const continueSession = await applyPacing(filePath, pacing);
+      if (!continueSession) return;
+    }
+  }
+
+  updateFormalBoard((state) => setFormalBoardPhase(state, "synthesis"));
+  const synthesisPrompt = buildFormalSynthesisPrompt({
+    topic,
+    sourcePacketHash: sourcePacket.hash,
+    artifacts: formalBoard.rounds,
+    seats: formalBoard.seats,
+  });
+  const synthesisAgentId = agents[0];
+  const synthesisModelId = resolveModel(agentModelOverrides?.[synthesisAgentId] || model).model;
+  const synthesisThinking = agentThinkingLevels?.[synthesisAgentId] || (thinking ? "medium" : undefined);
+  const synthesisAttemptId = beginAttempt(filePath, {
+    phase: "formal-synthesis",
+    agentId: synthesisAgentId,
+    model: synthesisModelId,
+  });
+  const synthesisStep = beginRunStepRecord(filePath, {
+    sessionId,
+    index: stepIndex++,
+    phase: "formal-synthesis",
+    agentId: synthesisAgentId,
+    model: synthesisModelId,
+    attemptId: synthesisAttemptId,
+  });
+
+  let synthesisText = "";
+  let synthesisModel = synthesisModelId;
+  let synthesisDurationMs: number | undefined;
+  let synthesisErrorKind: string | undefined;
+  let synthesisError = false;
+  setThinkingAgent(filePath, synthesisAgentId);
+  try {
+    const result = await callAgent(
+      "You are the Formal Board clerk. Synthesize the board faithfully without inventing evidence.",
+      synthesisPrompt,
+      synthesisModelId,
+      synthesisThinking || false,
+      RESPONSE_LENGTH_CONFIG[responseLength].maxTokens,
+      synthesisAgentId
+    );
+    synthesisText = result.text;
+    synthesisModel = result.model;
+    synthesisDurationMs = completeAttempt(filePath, synthesisAttemptId, { status: "succeeded", modelSource: result.model })?.durationMs;
+    updateRunStepRecord(filePath, synthesisStep?.id, (runStep) => completeRunStep({
+      ...runStep,
+      provenance: eventProvenance(synthesisModelId, result.model),
+    }));
+  } catch (err) {
+    const completed = completeAttempt(filePath, synthesisAttemptId, { status: "failed", error: err });
+    const failure = eventFailureText("Could not generate formal synthesis", err);
+    synthesisText = `## Verdict\nCAUTION\n\nFormal synthesis generation failed. Review the transcript and seat outputs manually.\n\n## Could not verify\n- ${failure.text}\n\n## Minority report\n- No model-generated minority report was produced because synthesis failed.`;
+    synthesisErrorKind = failure.errorKind;
+    synthesisDurationMs = completed?.durationMs;
+    synthesisError = true;
+    updateRunStepRecord(filePath, synthesisStep?.id, (runStep) => failRunStep(runStep, { errorKind: failure.errorKind, error: failure.text }));
+  } finally {
+    setThinkingAgent(filePath, null);
+  }
+
+  const verdict = buildFormalVerdict({ topic, synthesisText, state: formalBoard });
+  updateFormalBoard((state) => ({
+    ...setFormalBoardPhase(state, "complete"),
+    verdict,
+  }));
+  writeFormalArtifact(formalBoard, "final-consensus.md", synthesisText);
+  writeFormalArtifact(formalBoard, "verdict.json", JSON.stringify(verdict, null, 2));
+
+  appendEvent(filePath, {
+    id: `evt_formal_verdict_${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    type: "complete",
+    speaker: synthesisAgentId,
+    emoji: "🧾",
+    role: "supervisor",
+    text: `**Formal Board Verdict — ${verdict.verdict.toUpperCase()}**\n\n${synthesisText}\n\n---\n\n\`\`\`json\n${JSON.stringify(verdict, null, 2)}\n\`\`\``,
+    verdict: verdict.verdict,
+    model: synthesisModel,
+    modelSource: synthesisModel,
+    provenance: eventProvenance(synthesisModelId, synthesisError ? undefined : synthesisModel),
+    error: synthesisError || undefined,
+    errorKind: synthesisErrorKind,
+    durationMs: synthesisDurationMs,
+    attemptId: synthesisAttemptId,
+    phase: "formal-synthesis",
+  });
+
+  const completedRaw = fs.readFileSync(filePath, "utf-8");
+  const completedSession = JSON.parse(completedRaw);
+  completedSession.status = "completed";
+  completedSession.completedAt = new Date().toISOString();
+  completedSession.outcome = "formal-board-complete";
+  completedSession.thinkingAgent = null;
+  completedSession.runInProgress = false;
+  fs.writeFileSync(filePath, JSON.stringify(completedSession, null, 2));
 }
 
 // ─── ROUNDTABLE mode ──────────────────────────────────────────────────────────

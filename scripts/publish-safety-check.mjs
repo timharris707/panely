@@ -10,7 +10,7 @@ const repoRoot = spawnSync("git", ["rev-parse", "--show-toplevel"], {
 const protectedPathRules = [
   [/^data\/advisory\/.*\.json$/i, "local-session-json", "Local advisory session JSON must not be published."],
   [/^data\/.*\.sqlite(?:-(?:shm|wal))?$/i, "local-sqlite", "Local SQLite data must not be published."],
-  [/^data\/advisory\/(?:exports|packets|briefs)\//i, "local-advisory-artifact", "Generated advisory artifacts are local by default."],
+  [/^data\/advisory\/(?:exports|packets|briefs|formal-runs)\//i, "local-advisory-artifact", "Generated advisory artifacts are local by default."],
   [/^docs\/source-material\//i, "source-material", "Source material packets may contain private context."],
   [/(?:^|\/)\.env(?:\.|$)/i, "env-file", "Environment files may contain secrets."],
   [/\.pem$/i, "private-key", "Private key files must not be published."],
@@ -22,6 +22,7 @@ const contentRules = [
   [/(?:OPENAI_API_KEY|ANTHROPIC_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY)\s*=\s*\S+/i, "api-key-env-assignment", "Potential API key environment assignment found.", "error"],
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----/, "private-key-content", "Private key material found.", "error"],
   [/\/Users\/[^/\s]+\/(?:\.codex|\.openclaw|\.ssh|\.aws)\//, "private-home-config-path", "Private local config path found.", "warning"],
+  [/\/Users\/[^/\s]+\/[^\s<>"')]+/, "local-home-path", "Developer-specific local path found. Generalize it before publishing.", "warning"],
 ];
 
 function git(args) {

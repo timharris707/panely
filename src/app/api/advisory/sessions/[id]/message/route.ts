@@ -102,9 +102,15 @@ async function triggerFollowUp(
     ? `\n\nReference material provided for this session:\n${currentSession.referenceContext}\n`
     : "";
 
+  const modeLabel = mode === "competitive"
+    ? "competitive ideation session"
+    : mode === "formal-board"
+    ? "Formal Board Review session"
+    : "roundtable discussion";
+
   const systemPrompt = `You are ${respondingAgentId} ${emoji}, the ${role} at Panely.
 
-You are in a ${mode === "competitive" ? "competitive ideation session" : "roundtable discussion"} about: ${topic}${refBlock}
+You are in a ${modeLabel} about: ${topic}${refBlock}
 
 Respond directly to the human's directive. Be helpful, specific, and use your expertise.`;
 

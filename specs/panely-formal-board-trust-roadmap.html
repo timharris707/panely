@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan: Panely Formal Board and Trust Roadmap</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #07090c;
+    --panel: #12161c;
+    --panel-2: #171d25;
+    --text: #eef3f8;
+    --muted: #99a5b4;
+    --line: #28313d;
+    --accent: #7c8cff;
+    --accent-2: #2dd4bf;
+    --warn: #f3c969;
+    --risk: #f472b6;
+    --ok: #45de88;
+    --code: #0d1117;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(circle at 12% 8%, rgba(45, 212, 191, 0.12), transparent 28%),
+      radial-gradient(circle at 84% 12%, rgba(124, 140, 255, 0.13), transparent 32%),
+      var(--bg);
+    color: var(--text);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.55;
+  }
+  main { width: min(1120px, calc(100% - 40px)); margin: 0 auto; padding: 44px 0 72px; }
+  header { border-bottom: 1px solid var(--line); padding-bottom: 22px; margin-bottom: 28px; }
+  h1 { margin: 0 0 14px; font-size: clamp(34px, 6vw, 64px); line-height: 0.98; letter-spacing: 0; }
+  h2 { margin: 0 0 16px; font-size: 26px; }
+  h3 { margin: 26px 0 10px; font-size: 20px; }
+  h4 { margin: 20px 0 8px; font-size: 15px; color: var(--accent-2); text-transform: uppercase; letter-spacing: 0.04em; }
+  p { margin: 0 0 14px; color: var(--muted); }
+  section, .phase, figure, details.meta, details {
+    background: rgba(18, 22, 28, 0.82);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  section { padding: 24px; margin: 18px 0; }
+  figure { margin: 18px 0; padding: 18px; }
+  figcaption { color: var(--muted); font-size: 13px; }
+  .image-placeholder {
+    min-height: 130px;
+    display: grid;
+    place-items: center;
+    border: 1px dashed rgba(124, 140, 255, 0.45);
+    border-radius: 8px;
+    color: var(--accent);
+    background: linear-gradient(135deg, rgba(124, 140, 255, 0.08), rgba(45, 212, 191, 0.06));
+    text-align: center;
+    padding: 18px;
+    font-weight: 800;
+  }
+  details { padding: 14px 16px; margin: 10px 0; }
+  details.meta { padding: 12px 16px; }
+  summary { cursor: pointer; color: var(--text); font-weight: 800; }
+  dl { display: grid; grid-template-columns: 150px 1fr; gap: 8px 14px; margin: 12px 0 0; }
+  dt { color: var(--muted); }
+  dd { margin: 0; }
+  ul { margin: 10px 0 0; padding-left: 20px; color: var(--muted); }
+  li { margin: 7px 0; }
+  code {
+    background: var(--code);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 5px;
+    padding: 2px 5px;
+    color: #dce7ff;
+  }
+  .phase { padding: 20px; margin: 18px 0; }
+  .status { color: var(--warn); font-weight: 900; }
+  .tag { display: inline-flex; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 900; margin-right: 8px; }
+  .existing { color: var(--accent-2); border: 1px solid rgba(45,212,191,0.35); }
+  .new { color: var(--warn); border: 1px solid rgba(243,201,105,0.35); }
+  .change { color: var(--accent); border: 1px solid rgba(124,140,255,0.35); }
+  .loop { margin-top: 14px; padding: 12px 14px; border-left: 3px solid var(--accent); background: rgba(124, 140, 255, 0.08); color: var(--text); }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 10px; text-align: left; vertical-align: top; }
+  th { color: var(--text); }
+  td { color: var(--muted); }
+  .callout { border-left: 3px solid var(--warn); padding: 12px 14px; background: rgba(243, 201, 105, 0.08); color: var(--text); margin: 14px 0; }
+  @media (max-width: 700px) {
+    main { width: min(100% - 24px, 1120px); padding-top: 24px; }
+    dl { grid-template-columns: 1fr; }
+    section, .phase { padding: 18px; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+  <header>
+    <h1>Plan: Panely Formal Board and Trust Roadmap</h1>
+    <details class="meta">
+      <summary>Metadata</summary>
+      <dl>
+        <dt>created</dt><dd>2026-06-25T15:25:30Z</dd>
+        <dt>modified</dt><dd>2026-06-25T15:25:30Z</dd>
+        <dt>commits</dt><dd>e898d84</dd>
+        <dt>agent name</dt><dd>Codex</dd>
+        <dt>session id</dt><dd>current local Panely revival thread</dd>
+        <dt>back refs</dt><dd>Hermes comparison of Advisory Board skill vs Panely; Advisory Board skill protocol; Panely current main branch</dd>
+        <dt>forward refs</dt><dd>Implementation goal for model-routing truthfulness, privacy disclosure, safety polish, build confidence, formal board protocol, structured verdict artifacts, durable local runs</dd>
+      </dl>
+    </details>
+  </header>
+
+  <figure>
+    <div class="image-placeholder">Formal review protocol inside product shell</div>
+    <figcaption>Panely should keep its lively room experience while adding a stricter board protocol for high-stakes review.</figcaption>
+  </figure>
+
+  <section id="purpose">
+    <h2>Purpose</h2>
+    <p>Execute the seven-item trust roadmap that came out of comparing Panely with the Advisory Board skill: make model controls honest, provider disclosure explicit, public safety stronger, builds stricter, and add a true Formal Board Review mode with structured verdict artifacts and a path toward durable local execution.</p>
+  </section>
+
+  <section id="problem">
+    <h2>Problem</h2>
+    <p>Panely is already the stronger product surface, but the Advisory Board skill is still the stronger review protocol. The app currently presents some controls as more precise than the backend enforces, has weaker provider disclosure for non-public source material, lacks a strict formal verdict artifact, and runs long sessions through route-triggered background work that is useful locally but fragile for serious reviews.</p>
+    <figure>
+      <div class="image-placeholder">Product polish without protocol drift</div>
+      <figcaption>The work must strengthen trust without making Panely feel like a folder of scripts.</figcaption>
+    </figure>
+  </section>
+
+  <section id="solution">
+    <h2>Solution</h2>
+    <p>Implement the roadmap in shippable gates. Gate 1 lands the immediate trust fixes: pre-planner consent, truthful model routing, scanner hardening, public path cleanup, and build validation. Gate 2 adds a minimum viable Formal Board Review mode behind explicit protocol data: source packet hash, independent Round 1, rebuttal Round 2, seat status, and artifact storage. Gate 3 adds formal verdict artifacts and extends the existing run ledger toward durable/resumable execution without forcing a heavy queue dependency immediately.</p>
+    <figure>
+      <div class="image-placeholder">Truthful controls, formal artifacts, resumable runs</div>
+      <figcaption>The implementation should produce immediate user-visible improvements and lay rails for the deeper protocol work.</figcaption>
+    </figure>
+  </section>
+
+  <section id="files" class="files">
+    <h2>Relevant Files</h2>
+
+    <h3>Existing Files</h3>
+    <ul>
+      <li><span class="tag existing">existing</span><code>src/lib/ai/router.ts</code> — CLI command construction and thinking-level propagation.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/ai/providers.ts</code> — provider model metadata, available thinking levels, context windows, and provider labels.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/ai/model-health.ts</code> — CLI/model preflight and daily availability checks.</li>
+      <li><span class="tag existing">existing</span><code>src/app/api/advisory/model-availability/route.ts</code> — settings page model availability payload.</li>
+      <li><span class="tag existing">existing</span><code>src/components/advisory/LaunchWizard.tsx</code> — setup flow where source material, disclosure, mode, model plan, context budget, rounds, and pacing are surfaced.</li>
+      <li><span class="tag existing">existing</span><code>src/app/api/advisory/session-plan/route.ts</code> — AI-generated advisor plan and mode recommendation.</li>
+      <li><span class="tag existing">existing</span><code>src/app/api/advisory/sessions/route.ts</code> — session creation payload and initial mode metadata.</li>
+      <li><span class="tag existing">existing</span><code>src/app/api/advisory/sessions/[id]/run/route.ts</code> — roundtable/competitive run orchestration.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/advisory/decision-record.ts</code> — structured decision record generation.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/advisory/run-ledger.ts</code> — existing run-step ledger that should be extended rather than replaced.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/advisory-run-telemetry.ts</code> — existing run telemetry that should be kept consistent with formal board steps.</li>
+      <li><span class="tag existing">existing</span><code>src/app/api/advisory/sessions/[id]/archive/route.ts</code> — transcript export and archive flow.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/publish-safety.ts</code> and <code>scripts/publish-safety-check.mjs</code> — repo safety scanner used before publishing.</li>
+      <li><span class="tag existing">existing</span><code>next.config.mjs</code> — build/type validation configuration.</li>
+      <li><span class="tag existing">existing</span><code>specs/panely-provider-safety-artifacts-telemetry.html</code> — tracked spec with a local absolute path that should be generalized.</li>
+    </ul>
+
+    <h3>New Files</h3>
+    <ul>
+      <li><span class="tag new">new</span><code>src/lib/ai/thinking-levels.ts</code> — single source of truth for provider-specific thinking support, normalization, and CLI argument mapping.</li>
+      <li><span class="tag new">new</span><code>src/lib/advisory/provider-disclosure.ts</code> — provider disclosure summary derived from selected advisors/source material.</li>
+      <li><span class="tag new">new</span><code>src/lib/advisory/formal-board.ts</code> — Formal Board Review protocol types, round sequencing, seat status, and verdict helpers.</li>
+      <li><span class="tag new">new</span><code>src/lib/advisory/formal-board.test.ts</code> — unit coverage for independent round gating, seat accounting, and verdict structure.</li>
+      <li><span class="tag new">new</span><code>src/lib/advisory/verdict.ts</code> — verdict.json schema builder and validation helpers.</li>
+      <li><span class="tag new">new</span><code>src/lib/advisory/verdict.test.ts</code> — structured verdict tests, including dropped/degraded seats and evidence buckets.</li>
+      <li><span class="tag new">new</span><code>src/lib/advisory/source-packet.ts</code> — shared source-packet hashing/redaction helper for formal reviews.</li>
+    </ul>
+  </section>
+
+  <section id="phases">
+    <h2>Implementation Phases</h2>
+    <p><strong>IMPORTANT:</strong> Execute every phase and task step by step, in order, top to bottom.</p>
+    <p>Status markers: <code>[]</code> idle · <code>[wip]</code> in progress · <code>[x]</code> complete · <code>[f]</code> failed. All start as <code>[]</code>; the Build Plan workflow updates them as it works.</p>
+
+    <div class="phase">
+      <h3><code class="status">[]</code> Phase 1: Truthful Model and Thinking Controls</h3>
+      <p>Make Panely's model controls match what the backend actually sends to each CLI. This is the first trust fix because user-visible model labels and thinking levels shape confidence in every run.</p>
+      <figure>
+        <div class="image-placeholder">Provider controls match CLI flags</div>
+        <figcaption>Normalize once, display only supported choices, and pass supported flags where the CLI supports them.</figcaption>
+      </figure>
+
+      <h4>1.1. Provider-specific thinking map</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> Create a helper that maps generic levels to provider-specific levels and records whether a level is actually enforced, normalized, or display-only.</li>
+        <li><code class="status">[]</code> Remove unsupported Claude <code>xhigh</code> display if the installed CLI only supports <code>low</code>, <code>medium</code>, <code>high</code>, and <code>max</code>; otherwise map <code>xhigh</code> to the nearest supported value and disclose that normalization.</li>
+        <li><code class="status">[]</code> Pass Codex reasoning effort explicitly through <code>--config model_reasoning_effort=...</code> or the current CLI-supported equivalent.</li>
+        <li><code class="status">[]</code> For Gemini, either pass a verified CLI thinking setting or mark the thinking control as not CLI-enforced instead of implying it is.</li>
+        <li><code class="status">[]</code> Update model availability/settings payloads so the UI can show supported thinking choices and enforcement status per model.</li>
+      </ul>
+
+      <h4>1.2. UI alignment</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> Update LaunchWizard thinking selectors to use model-specific supported levels.</li>
+        <li><code class="status">[]</code> Add concise copy in settings/plan review that distinguishes enforced thinking, normalized thinking, and unavailable thinking.</li>
+        <li><code class="status">[]</code> Preserve existing sessions; do not rewrite historical metadata.</li>
+      </ul>
+
+      <h4>1.3. Testing Strategy</h4>
+      <p>Unit-test normalization and generated CLI args, then run app-wide checks.</p>
+      <ul class="checklist">
+        <li><code class="status">[]</code> <code>npm test</code> — proves routing helpers and existing advisory logic still pass.</li>
+        <li><code class="status">[]</code> <code>npx tsc --noEmit</code> — proves type-level consistency for new model metadata.</li>
+        <li><code class="status">[]</code> <code>npm run lint</code> — proves UI/helper changes are clean.</li>
+      </ul>
+      <div class="loop">Do not exit this phase until model controls can no longer overclaim backend behavior.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[]</code> Phase 2: Provider Disclosure and Source Material Consent</h3>
+      <p>Add explicit disclosure before any non-public topic/files are sent through Anthropic, OpenAI, or Google CLIs. This must happen before AI session planning because the planner route itself sends the topic/source material to a model.</p>
+      <figure>
+        <div class="image-placeholder">Source leaves machine only after consent</div>
+        <figcaption>Disclosure should be concrete: selected providers, selected models, and source/file sensitivity.</figcaption>
+      </figure>
+
+      <h4>2.1. Disclosure model</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> Add a provider disclosure helper that derives provider names from selected advisor model IDs.</li>
+        <li><code class="status">[]</code> Track source sensitivity as <code>public</code>, <code>non-public</code>, or <code>unknown</code>, defaulting to <code>unknown</code> when files are attached or the user enters arbitrary private context.</li>
+        <li><code class="status">[]</code> Persist disclosure acknowledgement on the session so exports can record the consent state.</li>
+        <li><code class="status">[]</code> Add a pre-planner guard: if sensitivity is unknown/non-public and consent is absent, do not call <code>/api/advisory/session-plan</code>; use a local heuristic preview until consent is granted.</li>
+      </ul>
+
+      <h4>2.2. Launch wizard consent</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> Add a clean disclosure panel immediately after the topic/source step and before AI planning when material is unknown or non-public.</li>
+        <li><code class="status">[]</code> Block both AI planning and launch for unknown/non-public material until the user confirms provider disclosure.</li>
+        <li><code class="status">[]</code> Keep copy short and direct: source material will be sent through selected local CLIs to listed providers.</li>
+      </ul>
+
+      <h4>2.3. Testing Strategy</h4>
+      <p>Test disclosure derivation and UI launch guards; verify no prompt material is logged.</p>
+      <ul class="checklist">
+        <li><code class="status">[]</code> <code>npm test</code> — proves disclosure helper and existing tests pass.</li>
+        <li><code class="status">[]</code> Mocked planner call test — proves unknown/non-public material cannot call the model-backed planner before consent.</li>
+        <li><code class="status">[]</code> Manual browser check of New Session launch — proves the confirmation flow is understandable and not intrusive.</li>
+      </ul>
+      <div class="loop">Do not exit this phase until non-public source material cannot start a provider run without explicit acknowledgement.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[]</code> Phase 3: Public Safety and Build Confidence</h3>
+      <p>Clean public-facing polish and make repository validation stricter so people cloning the app see a healthy project.</p>
+      <figure>
+        <div class="image-placeholder">Public repo hygiene gate</div>
+        <figcaption>Scanner and build behavior should match public repo expectations.</figcaption>
+      </figure>
+
+      <h4>3.1. Safety scanner hardening</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> Add a generic local home-directory path content rule and comparable absolute path checks, likely as a warning unless the path is a protected config path.</li>
+        <li><code class="status">[]</code> Keep existing stronger secret/config path rules as errors or high-signal warnings.</li>
+        <li><code class="status">[]</code> Mirror scanner rules between <code>src/lib/publish-safety.ts</code> and <code>scripts/publish-safety-check.mjs</code> or refactor to a shared script to prevent drift.</li>
+        <li><code class="status">[]</code> Generalize the tracked spec that currently references a developer-specific absolute path.</li>
+      </ul>
+
+      <h4>3.2. Build type validation</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> Remove <code>typescript.ignoreBuildErrors</code> from <code>next.config.mjs</code> if <code>npm run build</code> remains clean.</li>
+        <li><code class="status">[]</code> Keep <code>outputFileTracingExcludes</code> for local data.</li>
+        <li><code class="status">[]</code> Confirm <code>npm run build</code> remains warning-free under the current stable builder.</li>
+      </ul>
+
+      <h4>3.3. Testing Strategy</h4>
+      <p>Run the exact public confidence gates a downloader would run.</p>
+      <ul class="checklist">
+        <li><code class="status">[]</code> <code>node scripts/publish-safety-check.mjs</code> — proves no protected local artifacts or path leaks remain.</li>
+        <li><code class="status">[]</code> <code>npm run build</code> — proves clean production build without ignored type errors.</li>
+        <li><code class="status">[]</code> <code>npx tsc --noEmit</code> — proves standalone TypeScript confidence.</li>
+      </ul>
+      <div class="loop">Do not exit this phase until public repo safety and build output are clean.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[]</code> Phase 4: Formal Board Review Protocol</h3>
+      <p>Add a third session mode that implements the Advisory Board protocol instead of blending it into conversational roundtable. This mode should be intentionally stricter and artifact-first.</p>
+      <figure>
+        <div class="image-placeholder">Independent review, rebuttal, verdict</div>
+        <figcaption>Formal mode is separate from Roundtable and Competitive so the product stays understandable.</figcaption>
+      </figure>
+
+      <h4>4.1. Protocol data model</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> Add <code>formal-board</code> as a first-class mode alongside <code>roundtable</code> and <code>competitive</code>.</li>
+        <li><code class="status">[]</code> Define formal board phases: preflight, independent round 1, rebuttal round 2, optional convergence round 3, synthesis, complete.</li>
+        <li><code class="status">[]</code> Add seat status: <code>pending</code>, <code>ran</code>, <code>degraded</code>, <code>dropped</code>, including reason and model provenance.</li>
+        <li><code class="status">[]</code> Enforce at least two runnable seats for a valid formal board review.</li>
+        <li><code class="status">[]</code> Update all mode unions and compatibility surfaces: session creation, stored session normalization, decision records, briefs, archive/export, event polling, and sidebar filters. Existing sessions must keep loading.</li>
+        <li><code class="status">[]</code> Pin the formal protocol shape to the Advisory Board skill concepts: lens preset, cross-reading mode, source packet hash, neutral synthesis, and artifact paths.</li>
+      </ul>
+
+      <h4>4.2. Independent round execution</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> Build a shared source packet for formal runs and record its stable hash in session metadata and run metadata.</li>
+        <li><code class="status">[]</code> Ensure Round 1 prompts do not include other seats' outputs.</li>
+        <li><code class="status">[]</code> Build Round 2 board packets from Round 1 summaries or full outputs depending on context budget.</li>
+        <li><code class="status">[]</code> Store per-round artifacts under local untracked data, for example <code>data/advisory/formal-runs/&lt;sessionId&gt;/round-1/&lt;seat&gt;.md</code>.</li>
+        <li><code class="status">[]</code> Define concrete prompt templates for Round 1, Round 2 rebuttal, optional Round 3 convergence, and neutral synthesis.</li>
+        <li><code class="status">[]</code> Preserve conversational roundtable behavior separately.</li>
+      </ul>
+
+      <h4>4.3. UI mode presentation</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> Surface Formal Board Review as a distinct option when the planner infers a high-stakes review, audit, plan review, architecture gate, or launch decision.</li>
+        <li><code class="status">[]</code> Explain the mode in product terms, not protocol jargon: independent first pass, rebuttal, verdict artifact.</li>
+        <li><code class="status">[]</code> Show per-seat status during and after the run.</li>
+      </ul>
+
+      <h4>4.4. Testing Strategy</h4>
+      <p>Unit-test protocol invariants before wiring every UI affordance.</p>
+      <ul class="checklist">
+        <li><code class="status">[]</code> <code>npm test</code> — proves formal-board invariants, existing engine logic, and decision records pass.</li>
+        <li><code class="status">[]</code> Mocked formal run test — proves Round 1 prompts exclude other seats' output and Round 2 prompts include only the board packet.</li>
+        <li><code class="status">[]</code> Manual smoke run with a short formal board topic — proves the user can see the mode and completion state.</li>
+      </ul>
+      <div class="loop">Do not exit this phase until Formal Board Review cannot masquerade as a normal roundtable and preserves independent Round 1.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[]</code> Phase 5: Structured Verdict and Deterministic Artifacts</h3>
+      <p>Give formal runs a machine-readable outcome and a deterministic human artifact, not just conversational transcript export.</p>
+      <figure>
+        <div class="image-placeholder">Verdict JSON plus readable handoff</div>
+        <figcaption>The app should produce something you can trust, archive, and gate on.</figcaption>
+      </figure>
+
+      <h4>5.1. Verdict schema</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> Add a <code>verdict.json</code> builder pinned to <code>schema: advisory-board/verdict@1</code>.</li>
+        <li><code class="status">[]</code> Support gate verdicts <code>ship</code>, <code>caution</code>, and <code>block</code>, with confidence and rationale.</li>
+        <li><code class="status">[]</code> Include per-seat and per-round verdicts so the final decision can be audited.</li>
+        <li><code class="status">[]</code> Include evidence-backed findings, judgment calls, couldn't-verify items, dissent, risks, next actions, seat statuses, and model provenance.</li>
+        <li><code class="status">[]</code> Include dropped/degraded seats in the verdict; never silently omit them.</li>
+        <li><code class="status">[]</code> Include a minority report even on apparent consensus.</li>
+      </ul>
+
+      <h4>5.2. Artifact generation</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> Generate <code>final-consensus.md</code> from structured data.</li>
+        <li><code class="status">[]</code> Generate deterministic self-contained HTML from the same structured data or a simple local template, with no remote assets or placeholder tokens.</li>
+        <li><code class="status">[]</code> Validate consistency between <code>verdict.json</code>, <code>final-consensus.md</code>, and <code>final-consensus.html</code>.</li>
+        <li><code class="status">[]</code> Add export affordances for verdict JSON and formal handoff artifacts.</li>
+      </ul>
+
+      <h4>5.3. Testing Strategy</h4>
+      <p>Test artifact consistency and schema fields, especially degraded seats.</p>
+      <ul class="checklist">
+        <li><code class="status">[]</code> <code>npm test</code> — proves verdict builder and artifact helpers pass.</li>
+        <li><code class="status">[]</code> <code>node scripts/publish-safety-check.mjs</code> — proves generated artifact paths are not accidentally publish candidates.</li>
+      </ul>
+      <div class="loop">Do not exit this phase until final artifacts have one source of truth and no hidden seat failures.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[]</code> Phase 6: Durable Local Run Ledger</h3>
+      <p>Move toward resumable local execution without overbuilding a queue. The first step is extending the existing run ledger and session <code>runSteps</code>, not creating a parallel runner.</p>
+      <figure>
+        <div class="image-placeholder">Run steps survive restart</div>
+        <figcaption>Durability starts with persisted step state, not necessarily a separate daemon.</figcaption>
+      </figure>
+
+      <h4>6.1. Existing run ledger extension</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> Extend <code>src/lib/advisory/run-ledger.ts</code> for formal board phases and reuse existing status vocabulary such as queued/running/done/failed/stale.</li>
+        <li><code class="status">[]</code> Keep <code>advisory-run-telemetry.ts</code> and stored session <code>runSteps</code> consistent with the new formal phases.</li>
+        <li><code class="status">[]</code> Add helper functions to resume the next incomplete formal step safely without duplicating completed seat outputs.</li>
+      </ul>
+
+      <h4>6.2. Route integration</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> Keep API-triggered local execution for now, but make it step-aware and resumable.</li>
+        <li><code class="status">[]</code> Avoid introducing a third-party queue unless the app actually needs concurrent multi-user workers.</li>
+        <li><code class="status">[]</code> Surface failed/stale step status in the UI enough for local debugging.</li>
+      </ul>
+
+      <h4>6.3. Testing Strategy</h4>
+      <p>Test ledger transitions and stale recovery deterministically.</p>
+      <ul class="checklist">
+        <li><code class="status">[]</code> <code>npm test</code> — proves ledger state transitions and resume helpers pass.</li>
+        <li><code class="status">[]</code> Mocked restart/resume test — proves incomplete formal runs continue at the next missing step without reusing stale cross-round context.</li>
+        <li><code class="status">[]</code> Manual short run interruption/retry smoke check — proves the UX can recover from a stopped run.</li>
+      </ul>
+      <div class="loop">Do not exit this phase until the code has a clear path to resume incomplete formal board runs.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[]</code> Phase 7: Integration, Documentation, and Adversarial Review</h3>
+      <p>Bring the roadmap together, document mode differences, and run an adversarial code review before committing.</p>
+      <figure>
+        <div class="image-placeholder">Three modes, one trustworthy product</div>
+        <figcaption>The final product story should be clear: exploratory, competitive, formal.</figcaption>
+      </figure>
+
+      <h4>7.1. Documentation and copy</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> Update README or in-app copy to distinguish Roundtable, Competitive, and Formal Board Review.</li>
+        <li><code class="status">[]</code> Document local CLI provider disclosure and what local-first does and does not mean.</li>
+        <li><code class="status">[]</code> Document build/test commands with the now-clean build path.</li>
+      </ul>
+
+      <h4>7.2. Adversarial code review</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> Have an adversarial subagent review the final code for overclaiming, privacy holes, protocol drift, brittle state transitions, and public-repo polish.</li>
+        <li><code class="status">[]</code> Address material findings before commit.</li>
+      </ul>
+
+      <h4>7.3. Testing Strategy</h4>
+      <p>Run every final gate and one browser smoke check.</p>
+      <ul class="checklist">
+        <li><code class="status">[]</code> <code>npm test</code> — full unit suite.</li>
+        <li><code class="status">[]</code> <code>npx tsc --noEmit</code> — TypeScript validation.</li>
+        <li><code class="status">[]</code> <code>npm run lint</code> — lint validation.</li>
+        <li><code class="status">[]</code> <code>npm run build</code> — clean production build.</li>
+        <li><code class="status">[]</code> <code>node scripts/publish-safety-check.mjs</code> — publish safety.</li>
+        <li><code class="status">[]</code> Browser smoke check of launch wizard and settings — verifies user-facing flow.</li>
+      </ul>
+      <div class="loop">Do not exit this phase until the final code has passed adversarial review and all validation commands.</div>
+    </div>
+  </section>
+
+  <section id="validation">
+    <h2>Validation Commands</h2>
+    <p>Execute these commands to validate the entire plan is complete:</p>
+    <ul class="checklist">
+      <li><code class="status">[]</code> <code>npm test</code> — full unit suite including new protocol, verdict, scanner, and run-ledger tests.</li>
+      <li><code class="status">[]</code> <code>npx tsc --noEmit</code> — strict TypeScript validation.</li>
+      <li><code class="status">[]</code> <code>npm run lint</code> — lint validation.</li>
+      <li><code class="status">[]</code> <code>npm run build</code> — warning-free production build through the public script.</li>
+      <li><code class="status">[]</code> <code>node scripts/publish-safety-check.mjs</code> — public safety scan.</li>
+      <li><code class="status">[]</code> Browser smoke check at <code>/advisory</code> and <code>/advisory/settings</code> — verifies the user-facing setup and model settings remain usable.</li>
+    </ul>
+    <div class="loop">The plan is not complete until every box is checked and every command passes. If a step must be deferred, mark it explicitly with a reason and do not pretend it shipped.</div>
+  </section>
+
+  <section id="questionables">
+    <h2>Questionables</h2>
+    <figure>
+      <div class="image-placeholder">Scope control for a large trust roadmap</div>
+      <figcaption>Some items can land immediately; Formal Board Review and durable execution may need an MVP boundary.</figcaption>
+    </figure>
+    <details open>
+      <summary>How large should Formal Board Review be in the first implementation?</summary>
+      <p class="qa-answer">The first implementation should be a minimum viable formal protocol: mode selection, independent Round 1, rebuttal Round 2, dropped/degraded seat accounting, and structured verdict artifacts. A full replacement conductor can come later. The goal is trustable behavior, not a sprawling rewrite.</p>
+    </details>
+    <details>
+      <summary>Should Gemini thinking be hidden if no stable CLI flag exists?</summary>
+      <p class="qa-answer">Yes. If Panely cannot actually enforce Gemini thinking through the CLI, the UI should say the model supports large-context reasoning but not expose a fake thinking control. Truthful controls beat aspirational controls.</p>
+    </details>
+    <details>
+      <summary>Should durable execution use a third-party queue?</summary>
+      <p class="qa-answer">Not yet. For a local-first single-user app, a persisted run ledger with resumable steps is enough. A worker process can be added after the state model is solid.</p>
+    </details>
+  </section>
+
+  <section id="notes">
+    <h2>Notes</h2>
+    <div class="callout">
+      <strong>Product principle:</strong> keep Roundtable and Competitive fun and fast. Make Formal Board Review slower, stricter, and artifact-first by design.
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Mode</th>
+          <th>Primary Use</th>
+          <th>Protocol Strength</th>
+          <th>Artifact Expectation</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Roundtable</td>
+          <td>Exploration, advice, live discussion</td>
+          <td>Conversational; later seats may see prior discussion</td>
+          <td>Transcript and decision record</td>
+        </tr>
+        <tr>
+          <td>Competitive</td>
+          <td>Ideas, pitches, critique, voting</td>
+          <td>Structured competition; not a formal validity gate</td>
+          <td>Top ideas, vote breakdown, transcript</td>
+        </tr>
+        <tr>
+          <td>Formal Board Review</td>
+          <td>High-stakes plan/architecture/strategy review</td>
+          <td>Independent Round 1, rebuttal, convergence, provenance</td>
+          <td>verdict.json, final-consensus.md/html, run metadata</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>The adversarial review should explicitly check for three failure modes: privacy theater, where the planner sends source material before consent; protocol theater, where Panely says "formal" but still allows anchoring/groupthink; and durability theater, where a new ledger exists but does not actually make runs resumable.</p>
+    <p>Implementation should land in reviewable gates rather than one monolithic patch: first pre-consent and model truth, then public safety/build confidence, then Formal Board Review behind a clear mode boundary, then verdict/ledger hardening.</p>
+    <figure>
+      <div class="image-placeholder">Trust is a feature</div>
+      <figcaption>Trust features should be visible in the interface and enforceable in data structures.</figcaption>
+    </figure>
+  </section>
+
+  <section id="amendments">
+    <h2>Amendments</h2>
+    <details>
+      <summary>2026-06-25T15:25:30Z — Initial plan</summary>
+      <p>Created the first implementation plan for the seven-item Panely trust roadmap.</p>
+    </details>
+  </section>
+
+</main>
+</body>
+</html>

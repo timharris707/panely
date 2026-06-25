@@ -5,9 +5,6 @@ const nextConfig = {
   outputFileTracingExcludes: {
     "/*": ["./data/**/*"],
   },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
 };
 
 export default nextConfig;

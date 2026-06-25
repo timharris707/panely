@@ -16,8 +16,11 @@ import {
 import type { AdvisorySession, CustomAgent } from "@/types/advisory";
 import { MODELS, PACING_OPTIONS } from "./constants";
 import { PROVIDERS, type ProviderModel } from "@/lib/ai/providers";
+import { supportedThinkingLevels } from "@/lib/ai/thinking-levels";
+import { buildProviderDisclosure } from "@/lib/advisory/provider-disclosure";
 
 type Intent = "decision" | "stress-test" | "compare" | "ideas" | "red-team";
+type SessionMode = "roundtable" | "competitive" | "formal-board";
 type Stance = "balanced" | "adversarial" | "optimistic" | "skeptical";
 type OutputPerspective = "decision-memo" | "action-plan" | "risk-memo" | "board-brief";
 type ResponseLength = "concise" | "balanced" | "detailed" | "verbose";
@@ -33,6 +36,9 @@ type LocalModelStatus = {
   name: string;
   provider: string;
   model: string;
+  thinkingLevels?: ThinkingLevel[];
+  thinkingEnforced?: boolean;
+  thinkingNote?: string;
   probe?: {
     ok: boolean;
     status: string;
@@ -110,6 +116,12 @@ const INTENT_COPY: Record<Intent, { label: string; desc: string }> = {
   "red-team": { label: "Red team", desc: "The panel will challenge assumptions aggressively." },
 };
 
+const MODE_COPY: Record<SessionMode, { label: string; desc: string }> = {
+  roundtable: { label: "Roundtable", desc: "Collaborative judgment and synthesis." },
+  competitive: { label: "Competitive", desc: "Rival proposals, critique, and voting." },
+  "formal-board": { label: "Formal Board Review", desc: "Independent first round, rebuttal, and a structured verdict." },
+};
+
 const SUPPORTED_FILE_EXTENSIONS = [".md", ".markdown", ".html", ".htm", ".txt", ".json", ".csv", ".tsv", ".yaml", ".yml"] as const;
 const MAX_FILE_CHARS = 1_000_000;
 
@@ -117,6 +129,23 @@ const MODEL_BY_ID = new Map(PROVIDERS.map((model) => [model.id, model]));
 
 function getModel(modelId: string): ProviderModel {
   return MODEL_BY_ID.get(modelId) ?? PROVIDERS[0];
+}
+
+function getThinkingOptions(modelId: string, localModels: LocalModelStatus[]) {
+  const localModel = localModels.find((model) => model.id === modelId);
+  const levels = localModel?.thinkingLevels?.length
+    ? localModel.thinkingLevels
+    : supportedThinkingLevels(getModel(modelId)).filter((level) => level !== "off");
+  return THINKING_LEVELS.filter((level) => levels.includes(level.id));
+}
+
+function normalizeLensThinking(lens: PlannedLens, localModels: LocalModelStatus[]): PlannedLens {
+  const options = getThinkingOptions(lens.modelId, localModels);
+  if (options.some((option) => option.id === lens.thinkingLevel)) return lens;
+  return {
+    ...lens,
+    thinkingLevel: (options.at(-1)?.id ?? "high") as ThinkingLevel,
+  };
 }
 
 function inferIntent(text: string): Intent {
@@ -167,7 +196,7 @@ function buildAttachmentContext(files: AttachedFile[], contextBudgetChars: numbe
 }
 
 function buildPlanContext(params: {
-  mode: "roundtable" | "competitive";
+  mode: SessionMode;
   intent: Intent;
   stance: Stance;
   outputPerspective: OutputPerspective;
@@ -201,7 +230,7 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
   const [responseLength, setResponseLength] = useState<ResponseLength>("balanced");
   const [contextBudgetChars, setContextBudgetChars] = useState(200_000);
   const [pacing, setPacing] = useState("instant");
-  const [plan, setPlan] = useState<{ mode: "roundtable" | "competitive"; lenses: PlannedLens[] } | null>(null);
+  const [plan, setPlan] = useState<{ mode: SessionMode; lenses: PlannedLens[] } | null>(null);
   const [planIntent, setPlanIntent] = useState<Intent | null>(null);
   const [planFallback, setPlanFallback] = useState(false);
   const [localTools, setLocalTools] = useState<Record<string, LocalToolStatus>>({});
@@ -210,6 +239,7 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
   const [planning, setPlanning] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [providerDisclosureAccepted, setProviderDisclosureAccepted] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -234,6 +264,11 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
     () => [topic, ...attachedFiles.map((file) => `${file.name}\n${file.text}`)].join("\n\n"),
     [attachedFiles, topic],
   );
+  useEffect(() => {
+    setProviderDisclosureAccepted(false);
+    setPlan(null);
+    setPlanIntent(null);
+  }, [inferenceText]);
   const intent = useMemo(() => inferIntent(inferenceText), [inferenceText]);
   const activeIntent = planIntent ?? intent;
   const intentInfo = INTENT_COPY[activeIntent];
@@ -244,12 +279,32 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
   const unavailableModels = localModels.filter((model) => model.probe && !model.probe.ok);
   const availableModelSet = useMemo(() => new Set(availableModelIds), [availableModelIds]);
   const availableModelOptions = MODELS.filter((option) => availableModelSet.has(option.id));
+  const selectedModelIds = plan?.lenses.map((lens) => lens.modelId) ?? availableModelIds;
+  const providerDisclosure = buildProviderDisclosure({
+    topic: topic.trim(),
+    attachedFileCount: attachedFiles.length,
+    planningModelIds: ["claude-sonnet"],
+    modelIds: selectedModelIds,
+  });
+  const mustAcceptDisclosure = providerDisclosure.requiresConsent && !providerDisclosureAccepted;
+
+  useEffect(() => {
+    if (!plan || localModels.length === 0) return;
+    const normalized = plan.lenses.map((lens) => normalizeLensThinking(lens, localModels));
+    if (normalized.some((lens, index) => lens.thinkingLevel !== plan.lenses[index].thinkingLevel)) {
+      setPlan({ ...plan, lenses: normalized });
+    }
+  }, [localModels, plan]);
 
   const updateLens = (lensId: string, changes: Partial<PlannedLens>) => {
     if (!plan) return;
     setPlan((current) => ({
       ...current!,
-      lenses: current!.lenses.map((lens) => (lens.id === lensId ? { ...lens, ...changes } : lens)),
+      lenses: current!.lenses.map((lens) => {
+        if (lens.id !== lensId) return lens;
+        const updated = { ...lens, ...changes };
+        return changes.modelId ? normalizeLensThinking(updated, localModels) : updated;
+      }),
     }));
   };
 
@@ -267,6 +322,10 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
       setError("Add a topic, decision, or source file first.");
       return;
     }
+    if (mustAcceptDisclosure) {
+      setError("Confirm provider disclosure before generating an AI advisor plan.");
+      return;
+    }
 
     setError("");
     setPlanning(true);
@@ -274,7 +333,20 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
       const res = await fetch("/api/advisory/session-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: cleanTopic, modelId: "claude-sonnet" }),
+        body: JSON.stringify({
+          topic: cleanTopic,
+          modelId: "claude-sonnet",
+          attachedFileCount: attachedFiles.length,
+          providerDisclosure: providerDisclosureAccepted
+            ? {
+                accepted: true,
+                acceptedAt: new Date().toISOString(),
+                sensitivity: providerDisclosure.sensitivity,
+                providers: providerDisclosure.providers,
+                message: providerDisclosure.message,
+              }
+            : undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to generate plan");
@@ -285,17 +357,18 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
       if (responseAvailableModelIds.length > 0) setAvailableModelIds(responseAvailableModelIds);
       const advisors = Array.isArray(data.advisors) ? data.advisors : [];
       if (advisors.length < 2) throw new Error("The planner did not return enough advisors.");
+      const plannedLenses = advisors.map((advisor: Partial<PlannedLens>, index: number) => normalizeLensThinking({
+        id: `advisor-${index}-${String(advisor.name || "advisor").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
+        name: String(advisor.name || `Advisor ${index + 1}`).slice(0, 36),
+        role: String(advisor.role || "Topic reviewer").slice(0, 90),
+        purpose: String(advisor.purpose || "Reviews the topic from a useful angle.").slice(0, 220),
+        modelId: responseAvailableModelSet.has(String(advisor.modelId)) ? String(advisor.modelId) : responseAvailableModelIds[0] ?? "claude-sonnet",
+        thinkingLevel: (advisor.thinkingLevel || "high") as ThinkingLevel,
+        stance: String(advisor.stance || "balanced").slice(0, 60),
+      }, localModels));
       setPlan({
-        mode: data.mode === "competitive" ? "competitive" : "roundtable",
-        lenses: advisors.map((advisor: Partial<PlannedLens>, index: number) => ({
-          id: `advisor-${index}-${String(advisor.name || "advisor").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
-          name: String(advisor.name || `Advisor ${index + 1}`).slice(0, 36),
-          role: String(advisor.role || "Topic reviewer").slice(0, 90),
-          purpose: String(advisor.purpose || "Reviews the topic from a useful angle.").slice(0, 220),
-          modelId: responseAvailableModelSet.has(String(advisor.modelId)) ? String(advisor.modelId) : responseAvailableModelIds[0] ?? "claude-sonnet",
-          thinkingLevel: (advisor.thinkingLevel || "high") as ThinkingLevel,
-          stance: String(advisor.stance || "balanced").slice(0, 60),
-        })),
+        mode: data.mode === "competitive" || data.mode === "formal-board" ? data.mode : "roundtable",
+        lenses: plannedLenses,
       });
       setPlanIntent((data.intent || intent) as Intent);
       setPlanFallback(Boolean(data.fallback));
@@ -353,6 +426,10 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
       setError("Use at least two perspectives.");
       return;
     }
+    if (mustAcceptDisclosure) {
+      setError("Confirm provider disclosure before starting this session.");
+      return;
+    }
 
     setError("");
     setLoading(true);
@@ -395,6 +472,13 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
           agentIntensityLevels,
           agentResponseLengths,
           agentThinkingLevels,
+          providerDisclosure: {
+            accepted: providerDisclosureAccepted,
+            acceptedAt: providerDisclosureAccepted ? new Date().toISOString() : undefined,
+            sensitivity: providerDisclosure.sensitivity,
+            providers: providerDisclosure.providers,
+            message: providerDisclosure.message,
+          },
           aiPersonas: plan.lenses.map((lens) => ({
             id: lens.id,
             name: lens.name,
@@ -502,7 +586,28 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
               </div>
             </div>
 
-            <button type="button" className="generate-plan-button" onClick={generatePlan} disabled={planning || !inferenceText.trim()}>
+            {providerDisclosure.requiresConsent && (
+              <div className="provider-disclosure">
+                <div>
+                  <AlertCircle size={16} />
+                  <strong>Provider disclosure</strong>
+                </div>
+                <p>{providerDisclosure.message}</p>
+                <p>
+                  This is still local-first storage: Panely keeps sessions on this machine, but selected local CLIs may send prompts and source material to their model providers.
+                </p>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={providerDisclosureAccepted}
+                    onChange={(event) => setProviderDisclosureAccepted(event.target.checked)}
+                  />
+                  I understand and want to continue.
+                </label>
+              </div>
+            )}
+
+            <button type="button" className="generate-plan-button" onClick={generatePlan} disabled={planning || !inferenceText.trim() || mustAcceptDisclosure}>
               {planning ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />}
               {plan ? "Regenerate advisor plan" : "Generate advisor plan"}
             </button>
@@ -610,7 +715,7 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
                 <div className="plan-toolbar">
                   <div>
                     <div className="eyebrow">{planFallback ? "Fallback plan" : "AI-generated plan"}</div>
-                    <h3>{plan.mode === "competitive" ? "Competitive debate" : "Roundtable"}</h3>
+                    <h3>{MODE_COPY[plan.mode].label}</h3>
                   </div>
                   <button type="button" className="secondary-button" onClick={generatePlan} disabled={planning}>
                     {planning ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}
@@ -627,6 +732,23 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
                     <span>
                       {intentInfo.label} · {rounds} rounds · {responseLength} responses · {stance} stance
                     </span>
+                  </div>
+                </div>
+
+                <div className="field">
+                  <label>Session mode</label>
+                  <div className="mode-options">
+                    {(Object.entries(MODE_COPY) as Array<[SessionMode, (typeof MODE_COPY)[SessionMode]]>).map(([modeId, copy]) => (
+                      <button
+                        key={modeId}
+                        type="button"
+                        className={plan.mode === modeId ? "selected" : ""}
+                        onClick={() => setPlan((current) => current ? { ...current, mode: modeId } : current)}
+                      >
+                        <strong>{copy.label}</strong>
+                        <span>{copy.desc}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -648,6 +770,8 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
                 <div className="lens-list">
                   {plan.lenses.map((lens) => {
                     const model = getModel(lens.modelId);
+                    const localModel = localModels.find((item) => item.id === lens.modelId);
+                    const thinkingOptions = getThinkingOptions(lens.modelId, localModels);
                     return (
                       <div className="lens-row" key={lens.id}>
                         <div className="agent-initial" aria-hidden="true">
@@ -671,15 +795,18 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
                           </select>
                           <select
                             value={lens.thinkingLevel}
+                            disabled={thinkingOptions.length === 0}
                             onChange={(event) => updateLens(lens.id, { thinkingLevel: event.target.value as ThinkingLevel })}
                           >
-                            {THINKING_LEVELS.map((level) => (
+                            {(thinkingOptions.length ? thinkingOptions : [{ id: "high" as ThinkingLevel, label: "Not enforced" }]).map((level) => (
                               <option key={level.id} value={level.id}>
                                 {level.label}
                               </option>
                             ))}
                           </select>
-                          <span>{model.provider}</span>
+                          <span title={localModel?.thinkingNote || undefined}>
+                            {model.provider}{localModel?.thinkingEnforced === false ? " · thinking not enforced" : ""}
+                          </span>
                         </div>
                         <button
                           type="button"
@@ -710,7 +837,7 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
           <button type="button" className="ghost-button" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="primary-button" onClick={handleLaunch} disabled={loading || !plan}>
+          <button type="button" className="primary-button" onClick={handleLaunch} disabled={loading || !plan || mustAcceptDisclosure}>
             {loading ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />}
             Start session
           </button>
@@ -985,6 +1112,39 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
           color: var(--accent);
         }
 
+        .provider-disclosure {
+          margin-bottom: 20px;
+          border: 1px solid rgba(245, 158, 11, 0.35);
+          border-radius: 8px;
+          background: rgba(245, 158, 11, 0.08);
+          padding: 14px;
+        }
+
+        .provider-disclosure > div {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: #fbbf24;
+          font-size: 13px;
+        }
+
+        .provider-disclosure p {
+          margin: 8px 0 0;
+          color: var(--text-secondary);
+          font-size: 12px;
+          line-height: 1.5;
+        }
+
+        .provider-disclosure label {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-top: 12px;
+          color: var(--text-primary);
+          font-size: 12px;
+          font-weight: 800;
+        }
+
         .generate-plan-button {
           display: inline-flex;
           align-items: center;
@@ -1010,6 +1170,43 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 8px;
+        }
+
+        .mode-options {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+        }
+
+        .mode-options button {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 4px;
+          min-height: 74px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: var(--surface-elevated);
+          color: var(--text-secondary);
+          padding: 12px;
+          text-align: left;
+          cursor: pointer;
+        }
+
+        .mode-options button.selected {
+          border-color: var(--accent);
+          background: var(--accent-soft);
+        }
+
+        .mode-options strong {
+          color: var(--text-primary);
+          font-size: 12px;
+        }
+
+        .mode-options span {
+          color: var(--text-muted);
+          font-size: 11px;
+          line-height: 1.35;
         }
 
         .segmented-compact {

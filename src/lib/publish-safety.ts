@@ -22,7 +22,7 @@ export interface PublishSafetyReport {
 const PROTECTED_PATH_RULES: Array<{ pattern: RegExp; rule: string; detail: string }> = [
   { pattern: /^data\/advisory\/.*\.json$/i, rule: "local-session-json", detail: "Local advisory session JSON must not be published." },
   { pattern: /^data\/.*\.sqlite(?:-(?:shm|wal))?$/i, rule: "local-sqlite", detail: "Local SQLite data must not be published." },
-  { pattern: /^data\/advisory\/(?:exports|packets|briefs)\//i, rule: "local-advisory-artifact", detail: "Generated advisory artifacts are local by default." },
+  { pattern: /^data\/advisory\/(?:exports|packets|briefs|formal-runs)\//i, rule: "local-advisory-artifact", detail: "Generated advisory artifacts are local by default." },
   { pattern: /^docs\/source-material\//i, rule: "source-material", detail: "Source material packets may contain private context." },
   { pattern: /(?:^|\/)\.env(?:\.|$)/i, rule: "env-file", detail: "Environment files may contain secrets." },
   { pattern: /\.pem$/i, rule: "private-key", detail: "Private key files must not be published." },
@@ -34,6 +34,7 @@ const CONTENT_RULES: Array<{ pattern: RegExp; rule: string; detail: string; seve
   { pattern: /(?:OPENAI_API_KEY|ANTHROPIC_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY)\s*=\s*\S+/i, rule: "api-key-env-assignment", detail: "Potential API key environment assignment found.", severity: "error" },
   { pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----/, rule: "private-key-content", detail: "Private key material found.", severity: "error" },
   { pattern: /\/Users\/[^/\s]+\/(?:\.codex|\.openclaw|\.ssh|\.aws)\//, rule: "private-home-config-path", detail: "Private local config path found.", severity: "warning" },
+  { pattern: /\/Users\/[^/\s]+\/[^\s<>"')]+/, rule: "local-home-path", detail: "Developer-specific local path found. Generalize it before publishing.", severity: "warning" },
 ];
 
 function runGit(repoRoot: string, args: string[]) {

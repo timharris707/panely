@@ -14,6 +14,7 @@ The goal is simple: make high-quality strategic thinking feel like a live adviso
 - Let the AI propose the right advisor lineup for the problem.
 - Run a roundtable when you want collaborative judgment.
 - Run a competitive session when you want sharper disagreement, pitches, critiques, and votes.
+- Run a Formal Board Review when you need independent first-pass review, rebuttal, and a structured `ship` / `caution` / `block` verdict.
 - Choose specific models, providers, thinking levels, response lengths, pacing, and context budgets.
 - Watch the discussion unfold live through local model CLIs.
 - Export the final artifact, vote results, Markdown transcript, and printable PDF view.
@@ -28,6 +29,7 @@ Panely is built around a different pattern:
 - Each advisor has a specific role, model, and reasoning level.
 - The session can unfold over rounds so the panel can challenge itself.
 - Competitive mode forces agents to pitch, critique, and vote.
+- Formal Board Review keeps the first round independent, then produces an explicit evidence / judgment / could-not-verify split.
 - The final output is an artifact you can save, share, or turn into work.
 
 It is especially useful for reviewing plans, pressure-testing product strategy, comparing options, auditing a proposal, or turning a messy question into a clear next move.
@@ -41,7 +43,7 @@ It is especially useful for reviewing plans, pressure-testing product strategy, 
    Panely proposes the advisor roles, model/provider choices, thinking levels, number of rounds, response length, pacing, and context budget.
 
 3. **Run the room**
-   Advisors respond through local subscription-backed CLIs such as Claude Code, Codex, and Gemini CLI. Roundtable mode emphasizes synthesis. Competitive mode emphasizes ideas, critique, and voting.
+   Advisors respond through local subscription-backed CLIs such as Claude Code, Codex, and Gemini CLI. Roundtable mode emphasizes synthesis. Competitive mode emphasizes ideas, critique, and voting. Formal Board Review emphasizes independent review and a structured verdict.
 
 4. **Leave with an artifact**
    The session produces useful output beyond the conversation itself: recommendations, dissent, risks, votes, action items, transcripts, and exportable decision records.
@@ -56,9 +58,9 @@ Panely is intended to run on your machine, using local files and local model CLI
 
 The app is designed to route work through local subscription-backed tools such as Claude Code, Codex, and Gemini CLI. You can see which provider and model each advisor is using.
 
-**Two useful session modes**
+**Three useful session modes**
 
-Roundtable mode is for collaborative judgment. Competitive mode is for forcing sharper ideas: each advisor pitches one proposal, critiques the others, and votes.
+Roundtable mode is for collaborative judgment. Competitive mode is for forcing sharper ideas: each advisor pitches one proposal, critiques the others, and votes. Formal Board Review is for high-stakes review where the first round must be independent and the final output needs a structured verdict.
 
 **AI-generated advisor plans**
 
@@ -101,6 +103,7 @@ Current capabilities include:
 - Local session storage
 - Roundtable sessions
 - Competitive pitch / critique / vote sessions
+- Formal Board Review sessions with independent Round 1, rebuttal, and `advisory-board/verdict@1`
 - AI-planned advisor lineups
 - Per-agent model and thinking-level selection
 - Local CLI model routing
@@ -177,6 +180,7 @@ The repository ignores common local secret and data paths, including:
 - `data/advisory/exports/`
 - `data/advisory/packets/`
 - `data/advisory/briefs/`
+- `data/advisory/formal-runs/`
 - `docs/source-material/`
 - `docs/source-packets/`
 

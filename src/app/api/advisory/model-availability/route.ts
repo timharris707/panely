@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { PROVIDERS } from "@/lib/ai/providers";
 import { detectLocalCliTools, probeModelHealth } from "@/lib/ai/model-health";
+import { supportedThinkingLevels } from "@/lib/ai/thinking-levels";
 
 export async function GET(request: Request) {
   const probeMode = new URL(request.url).searchParams.get("probe");
@@ -19,7 +20,11 @@ export async function GET(request: Request) {
     cliVersion: model.localCli ? tools[model.localCli]?.version : undefined,
     intent: model.intent,
     contextWindow: model.contextWindow,
-    thinkingLevels: model.thinkingLevels,
+    thinkingLevels: supportedThinkingLevels(model).filter((level) => level !== "off"),
+    thinkingEnforced: model.localCli !== "gemini",
+    thinkingNote: model.localCli === "gemini"
+      ? "Gemini CLI thinking level is not enforced because the installed CLI does not expose a stable thinking flag."
+      : "Thinking level is passed to the local CLI.",
     intendedUse: model.intendedUse,
     probe: probeModelHealth(model.id, { force: forceProbe, largeContext }),
   }));

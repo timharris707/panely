@@ -82,6 +82,12 @@ function getRoleLabel(role: string, type: string): string {
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
+function getModeLabel(mode: string): string {
+  if (mode === "competitive") return "Competitive";
+  if (mode === "formal-board") return "Formal Board Review";
+  return "Roundtable";
+}
+
 // ─── Print CSS ───────────────────────────────────────────────────────────────
 
 function getPrintCSS(): string {
@@ -486,7 +492,7 @@ function buildPrintHTML(session: PDFSession, events: PDFEvent[], briefMarkdown?:
   // Build meta chips
   const metaChips: string[] = [];
   metaChips.push(`<span class="pdf-meta-chip">${dateStr}</span>`);
-  metaChips.push(`<span class="pdf-meta-chip">${session.mode === "competitive" ? "Competitive" : "Roundtable"}</span>`);
+  metaChips.push(`<span class="pdf-meta-chip">${getModeLabel(session.mode)}</span>`);
   if (session.responseLength) {
     metaChips.push(`<span class="pdf-meta-chip">${session.responseLength.charAt(0).toUpperCase() + session.responseLength.slice(1)} responses</span>`);
   }
