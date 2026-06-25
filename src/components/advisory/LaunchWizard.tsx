@@ -28,6 +28,18 @@ type LocalToolStatus = {
   version?: string;
 };
 
+type LocalModelStatus = {
+  id: string;
+  name: string;
+  provider: string;
+  model: string;
+  probe?: {
+    ok: boolean;
+    status: string;
+    error?: string;
+  };
+};
+
 type PlannedLens = {
   id: string;
   name: string;
@@ -193,6 +205,8 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
   const [planIntent, setPlanIntent] = useState<Intent | null>(null);
   const [planFallback, setPlanFallback] = useState(false);
   const [localTools, setLocalTools] = useState<Record<string, LocalToolStatus>>({});
+  const [localModels, setLocalModels] = useState<LocalModelStatus[]>([]);
+  const [availableModelIds, setAvailableModelIds] = useState<string[]>(PROVIDERS.map((provider) => provider.id));
   const [planning, setPlanning] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -204,6 +218,10 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
       .then((data) => {
         if (cancelled || !data?.tools) return;
         setLocalTools(data.tools as Record<string, LocalToolStatus>);
+        const models = Array.isArray(data.models) ? (data.models as LocalModelStatus[]) : [];
+        setLocalModels(models);
+        const healthyModelIds = models.filter((model) => model.probe?.ok).map((model) => model.id);
+        if (healthyModelIds.length > 0) setAvailableModelIds(healthyModelIds);
       })
       .catch(() => {});
 
@@ -223,6 +241,9 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
   const detectedTools = Object.entries(localTools)
     .filter(([, status]) => status.available)
     .map(([id]) => id);
+  const unavailableModels = localModels.filter((model) => model.probe && !model.probe.ok);
+  const availableModelSet = useMemo(() => new Set(availableModelIds), [availableModelIds]);
+  const availableModelOptions = MODELS.filter((option) => availableModelSet.has(option.id));
 
   const updateLens = (lensId: string, changes: Partial<PlannedLens>) => {
     if (!plan) return;
@@ -257,6 +278,11 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to generate plan");
+      const responseAvailableModelIds = Array.isArray(data.availableModelIds) && data.availableModelIds.length > 0
+        ? data.availableModelIds.map(String)
+        : availableModelIds;
+      const responseAvailableModelSet = new Set(responseAvailableModelIds);
+      if (responseAvailableModelIds.length > 0) setAvailableModelIds(responseAvailableModelIds);
       const advisors = Array.isArray(data.advisors) ? data.advisors : [];
       if (advisors.length < 2) throw new Error("The planner did not return enough advisors.");
       setPlan({
@@ -266,7 +292,7 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
           name: String(advisor.name || `Advisor ${index + 1}`).slice(0, 36),
           role: String(advisor.role || "Topic reviewer").slice(0, 90),
           purpose: String(advisor.purpose || "Reviews the topic from a useful angle.").slice(0, 220),
-          modelId: String(advisor.modelId || "claude-sonnet"),
+          modelId: responseAvailableModelSet.has(String(advisor.modelId)) ? String(advisor.modelId) : responseAvailableModelIds[0] ?? "claude-sonnet",
           thinkingLevel: (advisor.thinkingLevel || "high") as ThinkingLevel,
           stance: String(advisor.stance || "balanced").slice(0, 60),
         })),
@@ -610,6 +636,14 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
                     ? `Local tools detected: ${detectedTools.map((tool) => tool[0].toUpperCase() + tool.slice(1)).join(", ")}`
                     : "Checking local model tools..."}
                 </div>
+                <div className={unavailableModels.length > 0 ? "availability-note warning" : "availability-note"}>
+                  {availableModelOptions.length > 0
+                    ? `${availableModelOptions.length} local model${availableModelOptions.length === 1 ? "" : "s"} available for this panel.`
+                    : "No local models are available yet."}
+                  {unavailableModels.length > 0
+                    ? ` Unavailable models are hidden from setup: ${unavailableModels.map((model) => model.name).join(", ")}.`
+                    : " Panely will only suggest models that pass local CLI checks."}
+                </div>
 
                 <div className="lens-list">
                   {plan.lenses.map((lens) => {
@@ -629,7 +663,7 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
                         </div>
                         <div className="lens-controls">
                           <select value={lens.modelId} onChange={(event) => updateLens(lens.id, { modelId: event.target.value })}>
-                            {MODELS.map((option) => (
+                            {(availableModelOptions.length ? availableModelOptions : MODELS).map((option) => (
                               <option key={option.id} value={option.id}>
                                 {option.label}
                               </option>
@@ -1106,6 +1140,23 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
 
         .local-status svg {
           color: #22c55e;
+        }
+
+        .availability-note {
+          margin: -6px 0 16px;
+          border: 1px solid rgba(34, 197, 94, 0.25);
+          border-radius: 8px;
+          background: rgba(34, 197, 94, 0.07);
+          color: var(--text-secondary);
+          padding: 10px 12px;
+          font-size: 12px;
+          line-height: 1.45;
+        }
+
+        .availability-note.warning {
+          border-color: rgba(245, 158, 11, 0.28);
+          background: rgba(245, 158, 11, 0.08);
+          color: #fbbf24;
         }
 
         .lens-list {
