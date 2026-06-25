@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser();
     const body = await req.json();
-    const { topic, mode, agents, model, personaOverlays, personaOverlaysList, aiPersonas, rounds, pacing, responseLength, extendedThinking, specialist, specialistAgent, forkedFrom, forkedAtEvent, referenceContext, referenceContextBudgetChars, agentModelOverrides, agentPersonalityTraits, agentCommunicationStyles, agentIntensityLevels, agentResponseLengths, agentThinkingLevels, moderator } = body;
+    const { topic, mode, agents, model, personaOverlays, personaOverlaysList, aiPersonas, rounds, pacing, responseLength, extendedThinking, specialist, specialistAgent, forkedFrom, forkedAtEvent, referenceContext, referenceContextBudgetChars, agentModelOverrides, agentPersonalityTraits, agentCommunicationStyles, agentIntensityLevels, agentResponseLengths, agentThinkingLevels, moderator, competitiveVoteMode, competitiveTopCount } = body;
 
     if (!topic || !mode) {
       return NextResponse.json({ error: "topic and mode are required" }, { status: 400 });
@@ -52,8 +52,12 @@ export async function POST(req: NextRequest) {
     const resolvedReferenceContextBudget = resolveReferenceContextBudget(referenceContextBudgetChars);
 
     const isCompetitive = mode === "competitive";
+    const resolvedCompetitiveVoteMode: "agent-winner" | "top-ideas" = competitiveVoteMode === "top-ideas" ? "top-ideas" : "agent-winner";
+    const resolvedCompetitiveTopCount = Math.max(1, Math.min(10, Number(competitiveTopCount) || 3));
     const competitiveState = isCompetitive ? {
       phase: "pitch" as const,
+      voteMode: resolvedCompetitiveVoteMode,
+      topCount: resolvedCompetitiveTopCount,
       pitches: {} as Record<string, string>,
       votes: [] as Array<{ voter: string; votedFor: string; reasoning: string }>,
       winner: null,
@@ -61,7 +65,7 @@ export async function POST(req: NextRequest) {
     } : undefined;
 
     const startText = isCompetitive
-      ? `⚔️ **Competitive Ideation started.**\n\n**Topic:** ${topic}\n\n**Mode:** Competitive Ideation | **Model:** ${model || "claude-sonnet"}\n\n**Competitors:** ${(agents || []).join(", ") || "TBD"}\n\n**Round 1 — PITCH:** Each agent pitches their boldest idea.\n**Round 2 — CRITIQUE:** Agents tear apart each other's pitches by name.\n**Round 3 — VOTE:** Each agent votes for the best idea (not their own) with reasoning.\n\nLet the competition begin...`
+      ? `⚔️ **Competitive Ideation started.**\n\n**Topic:** ${topic}\n\n**Mode:** Competitive Ideation | **Model:** ${model || "claude-sonnet"}\n\n**Competitors:** ${(agents || []).join(", ") || "TBD"}\n\n**Round 1 — PITCH:** Each agent pitches ${resolvedCompetitiveVoteMode === "top-ideas" ? "their top three improvement ideas" : "their boldest idea"}.\n**Round 2 — CRITIQUE:** Agents stress-test the ideas by name.\n**Round 3 — VOTE:** ${resolvedCompetitiveVoteMode === "top-ideas" ? `Each agent votes for the top ${resolvedCompetitiveTopCount} ideas overall.` : "Each agent votes for the best idea (not their own) with reasoning."}\n\nLet the competition begin...`
       : `🚀 **Session started.**\n\n**Topic:** ${topic}\n\n**Mode:** Roundtable | **Model:** ${model || "claude-sonnet"}\n\n**Participants:** ${(agents || []).join(", ") || "TBD"}\n\nStanding by for agent inputs...`;
 
     const session: AdvisorySessionRecord = {
@@ -94,6 +98,7 @@ export async function POST(req: NextRequest) {
       ...(agentThinkingLevels && Object.keys(agentThinkingLevels).length > 0 ? { agentThinkingLevels } : {}),
       ...(agentModelOverrides && Object.keys(agentModelOverrides).length > 0 ? { agentModelOverrides } : {}),
       ...(competitiveState ? { competitive: competitiveState } : {}),
+      ...(isCompetitive ? { competitiveVoteMode: resolvedCompetitiveVoteMode, competitiveTopCount: resolvedCompetitiveTopCount } : {}),
       ...(moderator ? { moderator } : {}),
       events: [
         {

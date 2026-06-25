@@ -11,6 +11,7 @@ export interface GenerateTextInput {
   maxTokens?: number;
   temperature?: number;
   thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+  timeoutMs?: number;
   onTextChunk?: (chunk: string) => void;
 }
 
@@ -80,7 +81,10 @@ function normalizeClaudeEffort(thinkingLevel?: GenerateTextInput["thinkingLevel"
 
 async function generateWithLocalCli(input: GenerateTextInput, localCli: "claude" | "codex" | "gemini", model: string): Promise<string> {
   const prompt = composePrompt(input.prompt, input.systemPrompt);
-  const timeoutMs = Math.max(120000, Math.min(300000, (input.maxTokens ?? 2048) * 60));
+  const derivedTimeoutMs = Math.max(120000, Math.min(300000, (input.maxTokens ?? 2048) * 60));
+  const timeoutMs = input.timeoutMs
+    ? Math.max(30000, Math.min(300000, input.timeoutMs))
+    : derivedTimeoutMs;
 
   if (localCli === "claude") {
     return runCommand(

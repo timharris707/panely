@@ -35,6 +35,7 @@ export async function spawnAdvisoryAgent(
     maxTokens: options.thinkingLevel && options.thinkingLevel !== "off" ? 4096 : 2048,
     temperature: 0.7,
     thinkingLevel: options.thinkingLevel,
+    timeoutMs: options.timeoutSeconds ? options.timeoutSeconds * 1000 : undefined,
     onTextChunk: options.onTextChunk,
   });
 

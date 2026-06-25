@@ -50,10 +50,13 @@ export interface VoteRecord {
 
 export interface CompetitiveState {
   phase: "pitch" | "critique" | "vote" | "complete";
+  voteMode?: "agent-winner" | "top-ideas";
+  topCount?: number;
   pitches: Record<string, string>;
   votes: VoteRecord[];
   winner: string | null;
   voteTally: Record<string, number>;
+  topIdeas?: Array<{ idea: string; votes: number }>;
 }
 
 export interface AdvisorySession {
@@ -82,6 +85,8 @@ export interface AdvisorySession {
   referenceContext?: string;
   referenceContextBudgetChars?: number;
   competitive?: CompetitiveState | null;
+  competitiveVoteMode?: "agent-winner" | "top-ideas";
+  competitiveTopCount?: number;
   agentModelOverrides?: Record<string, string>;
   agentPersonalityTraits?: Record<string, string[]>;
   agentCommunicationStyles?: Record<string, string>;

@@ -1419,7 +1419,8 @@ export default function AdvisoryPage() {
                           <TypingIndicator agentId={null} overrideLabel="Connecting to AI..." />
                         )}
                         {activeSession?.status === "completed" && sessionData?.competitive && (sessionData.competitive as { phase: string; votes: unknown[]; winner: string | null; voteTally: Record<string, number> }).winner && (() => {
-                          const comp = sessionData.competitive as { phase: string; votes: Array<{ voter: string; votedFor: string; reasoning: string }>; winner: string; voteTally: Record<string, number> };
+                          const comp = sessionData.competitive as { phase: string; voteMode?: string; topCount?: number; votes: Array<{ voter: string; votedFor: string; reasoning: string }>; winner: string; voteTally: Record<string, number> };
+                          const isTopIdeas = comp.voteMode === "top-ideas";
                           const sortedTally = Object.entries(comp.voteTally).sort(([, a], [, b]) => b - a);
                           return (
                             <div style={{ margin: "16px 0", padding: "20px", borderRadius: "12px", border: "1px solid rgba(251,191,36,0.4)", backgroundColor: "rgba(251,191,36,0.06)" }}>
@@ -1427,12 +1428,15 @@ export default function AdvisoryPage() {
                                 <span style={{ fontSize: "22px" }}>🏆</span>
                                 <div>
                                   <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font-heading)" }}>Competition Results</div>
-                                  <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Agents voted on the best idea</div>
+                                  <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                                    {isTopIdeas ? `Agents voted on the top ${comp.topCount || 3} ideas overall` : "Agents voted on the best idea"}
+                                  </div>
                                 </div>
                               </div>
                               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                                 {sortedTally.map(([name, count]) => {
-                                  const isWinner = name === comp.winner;
+                                  const rank = sortedTally.findIndex(([candidate]) => candidate === name);
+                                  const isWinner = isTopIdeas ? rank >= 0 && rank < (comp.topCount || 3) : name === comp.winner;
                                   return (
                                     <div key={name} style={{
                                       display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px",
@@ -1461,7 +1465,7 @@ export default function AdvisoryPage() {
                                           border: "1px solid rgba(251,191,36,0.3)", padding: "2px 8px",
                                           borderRadius: "4px", fontFamily: "var(--font-mono)",
                                         }}>
-                                          WINNER
+                                          {isTopIdeas ? `TOP ${rank + 1}` : "WINNER"}
                                         </span>
                                       )}
                                     </div>
@@ -1477,6 +1481,8 @@ export default function AdvisoryPage() {
                                       const reasoning = v.reasoning
                                         .replace(/^\*\*VOTE:\s*\w+\*\*\s*/i, "")
                                         .replace(/^VOTE:\s*\w+\s*/i, "")
+                                        .replace(/^\*\*VOTE\s+\d+:\s*.+?\*\*\s*/gim, "")
+                                        .replace(/^VOTE\s+\d+:\s*.+?\s*/gim, "")
                                         .trim()
                                         .slice(0, 200);
                                       return (

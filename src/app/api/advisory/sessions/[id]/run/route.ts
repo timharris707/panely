@@ -212,7 +212,7 @@ async function callClaude(
     agentId: agentId || "system",
     systemPrompt,
     userPrompt,
-    timeoutSeconds: 120,
+    timeoutSeconds: 300,
     thinkingLevel,
     model: modelStr,
   });
@@ -239,7 +239,7 @@ async function callAgent(
     agentId: agentId || "system",
     systemPrompt,
     userPrompt,
-    timeoutSeconds: 120,
+    timeoutSeconds: 300,
     thinkingLevel,
     model: modelStr,
     onTextChunk,
@@ -1212,6 +1212,9 @@ async function runCompetitive(
   agentThinkingLevels?: Record<string, string>
 ) {
   const lengthMaxTokens = RESPONSE_LENGTH_CONFIG[responseLength].maxTokens;
+  const competitiveVoteMode = session.competitiveVoteMode === "top-ideas" ? "top-ideas" : "agent-winner";
+  const competitiveTopCount = Math.max(1, Math.min(10, Number(session.competitiveTopCount) || 3));
+  const isTopIdeasVote = competitiveVoteMode === "top-ideas";
 
   const parseCompetitiveVote = (text: string, voter: string) => {
     const voteLine =
@@ -1240,6 +1243,59 @@ async function runCompetitive(
     return cleanedVote;
   };
 
+  const cleanIdeaVote = (value: string) =>
+    value
+      .replace(/\*\*/g, "")
+      .replace(/`/g, "")
+      .replace(/^[-*\d.)\s]+/, "")
+      .replace(/[.。,:;]+$/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 160);
+
+  const normalizeIdeaVoteKey = (value: string) =>
+    cleanIdeaVote(value)
+      .toLowerCase()
+      .replace(/&/g, " and ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const parseTopIdeaVotes = (text: string) => {
+    const votes: string[] = [];
+    const voteLinePattern = /^\s*\*{0,2}VOTE\s*(?:#?\s*)?([1-9])\s*:\s*(.+?)\*{0,2}\s*$/gim;
+    let match: RegExpExecArray | null;
+    while ((match = voteLinePattern.exec(text))) {
+      const idea = cleanIdeaVote(match[2]);
+      if (idea) votes.push(idea);
+    }
+
+    if (votes.length === 0) {
+      const genericVoteLine = text.match(/^\s*\*{0,2}VOTE:\s*(.+?)\*{0,2}\s*$/im)?.[1];
+      if (genericVoteLine) {
+        for (const part of genericVoteLine.split(/\s*(?:;|\||\n)\s*/)) {
+          const idea = cleanIdeaVote(part);
+          if (idea) votes.push(idea);
+        }
+      }
+    }
+
+    return Array.from(new Set(votes)).slice(0, competitiveTopCount);
+  };
+
+  const registerTopIdeaVote = (rawIdea: string) => {
+    const label = cleanIdeaVote(rawIdea);
+    const key = normalizeIdeaVoteKey(label);
+    if (!label || !key) return null;
+
+    const existingLabel = Object.keys(voteTally).find(
+      (candidate) => normalizeIdeaVoteKey(candidate) === key
+    );
+    const tallyLabel = existingLabel || label;
+    voteTally[tallyLabel] = (voteTally[tallyLabel] || 0) + 1;
+    return tallyLabel;
+  };
+
   // Helper: build competitive system prompt per phase
   function buildCompetitiveSystemPrompt(
     agentId: string,
@@ -1262,6 +1318,37 @@ async function runCompetitive(
     );
 
     const baseIdentity = `${agent.persona}\n\n---\n\nYou are ${agent.name} ${agent.emoji}, the ${agent.role} at Panely.\n${overlayLine}${memoryBlock}${referenceBlock}${personalityBlock}`;
+
+    if (phase === "pitch" && isTopIdeasVote) {
+      return `${baseIdentity}
+
+**MODE: COMPETITIVE IDEATION — ROUND 1: TOP-THREE IMPROVEMENT PITCH**
+
+You are competing against other agents to propose the strongest improvements to the advisory-board skill in the source material.
+
+**Rules:**
+- Pitch exactly THREE specific improvement ideas.
+- Give each idea a short, memorable title.
+- Each idea should be independently votable in Round 3.
+- Avoid vague categories like "better docs." Name concrete changes that could be built.
+- Ground your ideas in your unique expertise as ${agent.role}.
+- For each idea, include: what changes, why it matters, implementation shape, and what risk it reduces.
+- You are trying to get individual ideas into the final top three, not trying to win as an agent.
+
+**Format:**
+IDEA 1: [short title]
+[analysis]
+
+IDEA 2: [short title]
+[analysis]
+
+IDEA 3: [short title]
+[analysis]
+
+**Response length:** ${RESPONSE_LENGTH_CONFIG[agentLength].instruction}
+
+Think like a product-minded skill architect. The best improvements should make the skill more reliable, easier to use, more reproducible, or more valuable in real Panely runs.`;
+    }
 
     if (phase === "pitch") {
       return `${baseIdentity}
@@ -1300,6 +1387,7 @@ ${pitchSummary}
 
 **Rules:**
 - You MUST reference each competitor BY NAME (e.g., "Atlas's pitch assumes..." or "The weakness in Scout's proposal is...")
+- ${isTopIdeasVote ? `Focus on the individual improvement ideas. Identify which specific ideas deserve top-three consideration and which should be discarded or merged.` : "Focus on the strongest and weakest pitches."}
 - Attack the idea, not the person. Be intellectually rigorous, not petty.
 - Identify fatal flaws, missing risks, unrealistic assumptions, execution gaps
 - You may defend your own pitch against anticipated criticism — but be honest about its weaknesses too
@@ -1315,6 +1403,31 @@ This is the crucible. The best ideas survive tough criticism. Do your job.`;
     const pitchSummary = Object.entries(pitches)
       .map(([name, pitch]) => `═══ ${name.toUpperCase()}'S PITCH ═══\n${pitch}`)
       .join("\n\n---\n\n");
+
+    if (isTopIdeasVote) {
+      return `${baseIdentity}
+
+**MODE: COMPETITIVE IDEATION — ROUND 3: TOP-THREE IDEA VOTE**
+
+The pitches have been made. The critiques have been heard. Now vote on the top ${competitiveTopCount} individual improvement ideas overall.
+
+**The pitches:**
+
+${pitchSummary}
+
+**Rules:**
+- You MUST vote for exactly ${competitiveTopCount} individual ideas, not agents.
+- Use the idea title as written by the pitching agent whenever possible.
+- You may vote for your own idea only if it genuinely belongs in the top ${competitiveTopCount}; do not pad your own slate.
+- Consider: impact on the skill, implementation clarity, reliability, reproducibility, safety, and usefulness in Panely.
+- Format your vote EXACTLY like this at the top:
+**VOTE 1: [Idea Title]**
+**VOTE 2: [Idea Title]**
+**VOTE 3: [Idea Title]**
+- Then explain the ranking in 3-5 concise sentences.
+
+**Response length:** Concise. Three votes plus short reasoning.`;
+    }
 
     return `${baseIdentity}
 
@@ -1342,8 +1455,10 @@ ${pitchSummary}
   const updatePhase = (phase: string) => {
     const raw = fs.readFileSync(filePath, "utf-8");
     const s = JSON.parse(raw);
-    if (!s.competitive) s.competitive = { phase, pitches: {}, votes: [], winner: null, voteTally: {} };
+    if (!s.competitive) s.competitive = { phase, voteMode: competitiveVoteMode, topCount: competitiveTopCount, pitches: {}, votes: [], winner: null, voteTally: {} };
     s.competitive.phase = phase;
+    s.competitive.voteMode = competitiveVoteMode;
+    s.competitive.topCount = competitiveTopCount;
     fs.writeFileSync(filePath, JSON.stringify(s, null, 2));
   };
 
@@ -1357,7 +1472,9 @@ ${pitchSummary}
     speaker: "System",
     emoji: "🎯",
     role: "supervisor",
-    text: "**⚔️ Round 1 — PITCH**\nEach agent pitches their boldest idea. One idea. Make it count.",
+    text: isTopIdeasVote
+      ? "**⚔️ Round 1 — TOP-THREE IMPROVEMENT PITCH**\nEach agent proposes three concrete improvements. Ideas will be voted on individually."
+      : "**⚔️ Round 1 — PITCH**\nEach agent pitches their boldest idea. One idea. Make it count.",
   });
 
   const pitches: Record<string, string> = {};
@@ -1403,7 +1520,7 @@ ${pitchSummary}
     // Store pitch in session state
     const pitchRaw = fs.readFileSync(filePath, "utf-8");
     const pitchSession = JSON.parse(pitchRaw);
-    if (!pitchSession.competitive) pitchSession.competitive = { phase: "pitch", pitches: {}, votes: [], winner: null, voteTally: {} };
+    if (!pitchSession.competitive) pitchSession.competitive = { phase: "pitch", voteMode: competitiveVoteMode, topCount: competitiveTopCount, pitches: {}, votes: [], winner: null, voteTally: {} };
     pitchSession.competitive.pitches[agentId] = text;
     fs.writeFileSync(filePath, JSON.stringify(pitchSession, null, 2));
 
@@ -1488,12 +1605,16 @@ ${pitchSummary}
     speaker: "System",
     emoji: "🗳️",
     role: "supervisor",
-    text: "**🗳️ Round 3 — VOTE**\nEach agent votes for the best idea (not their own). Format: **VOTE: [Name]**",
+    text: isTopIdeasVote
+      ? `**🗳️ Round 3 — TOP-${competitiveTopCount} IDEA VOTE**\nEach agent votes for the top ${competitiveTopCount} individual ideas overall. Format: **VOTE 1: [Idea Title]**`
+      : "**🗳️ Round 3 — VOTE**\nEach agent votes for the best idea (not their own). Format: **VOTE: [Name]**",
   });
 
   const votes: Array<{ voter: string; votedFor: string; reasoning: string }> = [];
   const voteTally: Record<string, number> = {};
-  for (const a of agents) voteTally[a] = 0;
+  if (!isTopIdeasVote) {
+    for (const a of agents) voteTally[a] = 0;
+  }
 
   for (const agentId of agents) {
     const checkRaw = fs.readFileSync(filePath, "utf-8");
@@ -1505,7 +1626,9 @@ ${pitchSummary}
     const agentModel = resolveModel(agentModelOverrides?.[agentId] || model).model;
     const agentThinking = agentThinkingLevels?.[agentId] || (thinking ? "medium" : undefined);
     const systemPrompt = buildCompetitiveSystemPrompt(agentId, "vote", pitches);
-    const userPrompt = `Topic: ${topic}\n\nFull discussion:\n\n${history}\n\nCast your vote now. Remember: **VOTE: [Agent Name]** on the first line, then your reasoning.`;
+    const userPrompt = isTopIdeasVote
+      ? `Topic: ${topic}\n\nFull discussion:\n\n${history}\n\nCast your top ${competitiveTopCount} idea votes now. Remember: **VOTE 1: [Idea Title]**, **VOTE 2: [Idea Title]**, **VOTE 3: [Idea Title]** at the top, then your reasoning.`
+      : `Topic: ${topic}\n\nFull discussion:\n\n${history}\n\nCast your vote now. Remember: **VOTE: [Agent Name]** on the first line, then your reasoning.`;
 
     setThinkingAgent(filePath, agentId);
     let text = "";
@@ -1520,11 +1643,21 @@ ${pitchSummary}
     setThinkingAgent(filePath, null);
 
     // Parse the vote
-    const votedFor = parseCompetitiveVote(text, agentId);
-    if (votedFor !== "Unknown" && voteTally[votedFor] !== undefined) {
+    const topIdeaVotes = isTopIdeasVote ? parseTopIdeaVotes(text) : [];
+    const votedFor = isTopIdeasVote ? (topIdeaVotes.join("; ") || "Unknown") : parseCompetitiveVote(text, agentId);
+    if (isTopIdeasVote) {
+      const normalizedVotes: string[] = [];
+      for (const idea of topIdeaVotes) {
+        const tallyLabel = registerTopIdeaVote(idea);
+        if (tallyLabel) normalizedVotes.push(tallyLabel);
+      }
+      votes.push({ voter: agentId, votedFor: normalizedVotes.join("; ") || votedFor, reasoning: text });
+    } else if (votedFor !== "Unknown" && voteTally[votedFor] !== undefined) {
       voteTally[votedFor]++;
+      votes.push({ voter: agentId, votedFor, reasoning: text });
+    } else {
+      votes.push({ voter: agentId, votedFor, reasoning: text });
     }
-    votes.push({ voter: agentId, votedFor, reasoning: text });
 
     const agent = getSessionAgentIdentity(session, agentId);
     appendEvent(filePath, {
@@ -1548,19 +1681,26 @@ ${pitchSummary}
   updatePhase("complete");
 
   // Determine winner
-  const maxVotes = Math.max(...Object.values(voteTally));
+  const maxVotes = Math.max(...Object.values(voteTally), 0);
   const winners = Object.entries(voteTally).filter(([, v]) => v === maxVotes).map(([k]) => k);
   const winner = winners[0] || agents[0];
+  const topIdeas = Object.entries(voteTally)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, competitiveTopCount)
+    .map(([idea, voteCount]) => ({ idea, votes: voteCount }));
 
   // Store final competitive state
   const finalStateRaw = fs.readFileSync(filePath, "utf-8");
   const finalStateSession = JSON.parse(finalStateRaw);
   finalStateSession.competitive = {
     phase: "complete",
+    voteMode: competitiveVoteMode,
+    topCount: competitiveTopCount,
     pitches,
     votes,
     winner,
     voteTally,
+    topIdeas,
   };
   fs.writeFileSync(filePath, JSON.stringify(finalStateSession, null, 2));
 
@@ -1568,8 +1708,11 @@ ${pitchSummary}
   const tallyLines = Object.entries(voteTally)
     .sort(([, a], [, b]) => b - a)
     .map(([name, count]) => {
+      const rank = topIdeas.findIndex((idea) => idea.idea === name);
       const isWinner = name === winner;
-      return `${isWinner ? "🏆" : "　"} **${name}** — ${count} vote${count !== 1 ? "s" : ""}${isWinner ? " ← WINNER" : ""}`;
+      const marker = isTopIdeasVote && rank >= 0 ? `#${rank + 1}` : isWinner ? "🏆" : "　";
+      const suffix = isTopIdeasVote && rank >= 0 ? ` ← TOP ${rank + 1}` : isWinner ? " ← WINNER" : "";
+      return `${marker} **${name}** — ${count} vote${count !== 1 ? "s" : ""}${suffix}`;
     });
 
   const voteDetails = votes
@@ -1577,12 +1720,14 @@ ${pitchSummary}
     .join("\n");
 
   // Generate action items from the winning pitch
-  const winnerAgent = getSessionAgentIdentity(session, winner);
   const summarySystemPrompt = `You are Henry ⚡, Chief of Staff at Panely. A competitive ideation session just concluded.
 
-The winning idea was pitched by ${winner} (${winnerAgent.role || "Agent"}). Your job is to:
-1. Declare the winner and summarize why they won
-2. Synthesize the best elements from ALL pitches (not just the winner)
+${isTopIdeasVote ? `The agents voted on the top ${competitiveTopCount} individual ideas overall. The top ideas are:
+${topIdeas.map((idea, index) => `${index + 1}. ${idea.idea} (${idea.votes} vote${idea.votes !== 1 ? "s" : ""})`).join("\n")}` : `The winning idea was pitched by ${winner}.`}
+
+Your job is to:
+1. ${isTopIdeasVote ? `Declare the top ${competitiveTopCount} ideas and summarize why they won` : "Declare the winner and summarize why they won"}
+2. Synthesize the best elements from ALL pitches
 3. Extract 3-5 concrete action items with owners and timelines
 4. Note any risks or open questions that came up during critique
 
@@ -1596,8 +1741,9 @@ ${tallyLines.join("\n")}
 **Vote Details:**
 ${voteDetails}
 
-**Winning Pitch (${winner}):**
-${pitches[winner] || "N/A"}
+${isTopIdeasVote ? `**Top Ideas:**
+${topIdeas.map((idea, index) => `${index + 1}. ${idea.idea} — ${idea.votes} vote${idea.votes !== 1 ? "s" : ""}`).join("\n")}` : `**Winning Pitch (${winner}):**
+${pitches[winner] || "N/A"}`}
 
 **All Pitches:**
 ${Object.entries(pitches).map(([name, pitch]) => `[${name}]: ${pitch.slice(0, 500)}`).join("\n\n")}
@@ -1626,7 +1772,7 @@ Deliver the final verdict and action plan.`;
     speaker: "Henry",
     emoji: "🏆",
     role: "supervisor",
-    text: `**🏆 Competition Results**\n\n${tallyLines.join("\n")}\n\n---\n\n${summaryText}`,
+    text: `${isTopIdeasVote ? `**🏆 Top ${competitiveTopCount} Idea Results**` : "**🏆 Competition Results**"}\n\n${tallyLines.join("\n")}\n\n---\n\n${summaryText}`,
     verdict: "approve",
     model: summaryModel,
     modelSource: summaryModel,
@@ -1638,6 +1784,6 @@ Deliver the final verdict and action plan.`;
   completedSession.status = "completed";
   completedSession.completedAt = new Date().toISOString();
   completedSession.outcome = "competitive-complete";
-  completedSession.competitive = { phase: "complete", pitches, votes, winner, voteTally };
+  completedSession.competitive = { phase: "complete", voteMode: competitiveVoteMode, topCount: competitiveTopCount, pitches, votes, winner, voteTally, topIdeas };
   fs.writeFileSync(filePath, JSON.stringify(completedSession, null, 2));
 }
