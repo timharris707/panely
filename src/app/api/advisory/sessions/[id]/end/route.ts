@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import { sessionFileStore as fs } from "@/lib/advisory-session-store";
 import { spawnAdvisoryAgentWithRetry } from "@/lib/advisory-agent";
+import { buildHistoryString } from "@/lib/advisory-history";
+import { appendEventLocked, updateSessionLocked } from "@/lib/advisory/session-mutations";
+import { buildRequestedModelProvenance } from "@/lib/advisory/provenance";
+import type { AdvisoryEvent } from "@/types/advisory";
 
 const DATA_DIR = path.join(process.cwd(), "data", "advisory");
 const CUSTOM_AGENTS_FILE = path.join(DATA_DIR, "custom-agents.json");
@@ -37,19 +41,6 @@ const AGENT_DEFS: Record<string, { name: string; emoji: string; role: string }> 
   Counsel: { name: "Counsel", emoji: "⚖️", role: "Legal Expert Agent" },
 };
 
-function appendEvent(sessionPath: string, event: Record<string, unknown>) {
-  const raw = fs.readFileSync(sessionPath, "utf-8");
-  const session = JSON.parse(raw);
-  session.events = [...(session.events || []), event];
-  fs.writeFileSync(sessionPath, JSON.stringify(session, null, 2));
-}
-
-function buildHistoryString(events: Array<{ speaker: string; text: string; type: string }>): string {
-  const relevant = events.filter((e) => e.type !== "start" && e.type !== "complete" && e.text);
-  if (relevant.length === 0) return "No prior discussion yet.";
-  return relevant.map((e) => `**${e.speaker}:** ${e.text.replace(/\*\*/g, "")}`).join("\n\n");
-}
-
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
 export async function POST(
@@ -73,7 +64,11 @@ export async function POST(
   // Immediately set aborted flag so any in-flight agent generation discards its response
   session.aborted = true;
   session.status = "completed";
-  fs.writeFileSync(filePath, JSON.stringify(session, null, 2));
+  await updateSessionLocked(id, (currentSession) => ({
+    ...currentSession,
+    aborted: true,
+    status: "completed",
+  }));
 
   const { topic, agents = [], personaOverlays = {} } = session;
 
@@ -140,6 +135,7 @@ Be direct, specific, and crisp. No filler. Reference the actual content of the d
   const doEnd = async () => {
     let synthText = "";
     let spawnedModel = "model-router";
+    let failed = false;
     try {
       const result = await spawnAdvisoryAgentWithRetry({
         sessionId: id,
@@ -152,9 +148,10 @@ Be direct, specific, and crisp. No filler. Reference the actual content of the d
       spawnedModel = result.model;
     } catch (err) {
       synthText = `⚠️ Could not generate synthesis: ${String(err)}\n\nSession has been marked as completed.`;
+      failed = true;
     }
 
-    appendEvent(filePath, {
+    const completeEvent: AdvisoryEvent = {
       id: `evt_synthesis_${Date.now()}`,
       timestamp: new Date().toISOString(),
       type: "complete",
@@ -165,16 +162,19 @@ Be direct, specific, and crisp. No filler. Reference the actual content of the d
       verdict: "approve",
       model: spawnedModel,
       modelSource: spawnedModel,
-    });
+      provenance: buildRequestedModelProvenance(undefined, failed ? undefined : spawnedModel),
+      error: failed || undefined,
+    };
+    await appendEventLocked(id, completeEvent);
 
     // Mark session completed
-    const freshRaw = fs.readFileSync(filePath, "utf-8");
-    const freshSession = JSON.parse(freshRaw);
-    freshSession.status = "completed";
-    freshSession.completedAt = new Date().toISOString();
-    freshSession.outcome = "ended-by-user";
-    freshSession.paused = false;
-    fs.writeFileSync(filePath, JSON.stringify(freshSession, null, 2));
+    await updateSessionLocked(id, (freshSession) => ({
+      ...freshSession,
+      status: "completed",
+      completedAt: new Date().toISOString(),
+      outcome: "ended-by-user",
+      paused: false,
+    }));
 
     // Auto-extract insights
     try {

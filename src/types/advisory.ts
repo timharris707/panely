@@ -12,6 +12,7 @@ export interface AdvisoryEvent {
   verdict?: string;
   model?: string;
   modelSource?: string;
+  provenance?: AdvisoryModelProvenance;
   streaming?: boolean;
   error?: boolean;
   errorKind?: string;
@@ -101,6 +102,8 @@ export interface AdvisorySession {
   modelHealthSnapshot?: unknown;
   runAttempts?: AdvisoryRunAttempt[];
   brief?: BoardBrief;
+  decisionRecord?: DecisionRecord;
+  runSteps?: AdvisoryRunStep[];
 }
 
 export interface AdvisoryRunAttempt {
@@ -116,6 +119,88 @@ export interface AdvisoryRunAttempt {
   attempt: number;
   errorKind?: string;
   error?: string;
+}
+
+export interface AdvisoryModelProvenance {
+  requestedModelId: string;
+  requestedModel: string;
+  requestedProvider: string;
+  localCli?: string;
+  routedModel?: string;
+  observedModel?: string;
+  verificationStatus: "requested-only" | "reported-by-cli" | "unknown";
+  note: string;
+}
+
+export interface AdvisoryRunStep {
+  id: string;
+  sessionId: string;
+  index: number;
+  phase: string;
+  agentId: string;
+  model: string;
+  status: "queued" | "running" | "done" | "failed" | "stale";
+  attemptId?: string;
+  startedAt?: string;
+  heartbeatAt?: string;
+  completedAt?: string;
+  errorKind?: string;
+  error?: string;
+  provenance?: AdvisoryModelProvenance;
+}
+
+export interface DecisionRecordOption {
+  title: string;
+  summary: string;
+  votes?: number;
+  rank?: number;
+  sourceAgent?: string;
+}
+
+export interface DecisionRecordDissent {
+  agent: string;
+  summary: string;
+  model?: string;
+  phase?: string;
+}
+
+export interface DecisionRecordActionItem {
+  title: string;
+  owner?: string;
+  priority?: "high" | "medium" | "low";
+  source?: string;
+}
+
+export interface DecisionRecordProvenance {
+  agent: string;
+  model?: string;
+  status?: string;
+  durationMs?: number;
+  provenance?: AdvisoryModelProvenance;
+}
+
+export interface DecisionRecord {
+  id: string;
+  sessionId: string;
+  title: string;
+  topic: string;
+  mode: "roundtable" | "competitive";
+  status: "draft" | "complete";
+  generatedAt: string;
+  recommendation: string;
+  decision: string;
+  optionsConsidered: DecisionRecordOption[];
+  dissent: DecisionRecordDissent[];
+  risks: string[];
+  openQuestions: string[];
+  actionItems: DecisionRecordActionItem[];
+  voteMode?: "agent-winner" | "top-ideas";
+  blindVote?: boolean;
+  voteTally?: Record<string, number>;
+  voteBreakdown?: VoteRecord[];
+  provenance: DecisionRecordProvenance[];
+  transcriptMarkdown: string;
+  markdown: string;
 }
 
 export interface BoardBrief {

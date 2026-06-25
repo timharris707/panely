@@ -6,10 +6,23 @@ import { spawnAdvisoryAgentWithRetry, type SpawnAdvisoryAgentResult } from "@/li
 import { resolveProviderModelId } from "@/lib/ai/providers";
 import { classifyProviderError } from "@/lib/ai/provider-errors";
 import { finishRunAttempt, startRunAttempt, type RunAttemptStartInput } from "@/lib/advisory-run-telemetry";
+import {
+  buildTopIdeasFromTally,
+  filterBlindVoteEvents,
+  parseCompetitiveVote,
+  parseTopIdeaVotes,
+  registerTopIdeaVote,
+  selectWinner,
+} from "@/lib/advisory/competitive";
+import { buildRequestedModelProvenance } from "@/lib/advisory/provenance";
 import type { AdvisoryRunAttempt } from "@/types/advisory";
 
 const DATA_DIR = path.join(process.cwd(), "data", "advisory");
 const MEMORY_FILE = path.join(DATA_DIR, "agent-memory.json");
+
+function eventProvenance(requestedModel?: string, observedModel?: string) {
+  return buildRequestedModelProvenance(requestedModel, observedModel);
+}
 
 // ─── Agent memory ─────────────────────────────────────────────────────────────
 
@@ -1020,6 +1033,7 @@ Open the session now. Frame the agenda: what are the key questions we need to an
       text: openingText,
       model: openingModel,
       modelSource: openingModel,
+      provenance: eventProvenance(model, openingError ? undefined : openingModel),
       error: openingError || undefined,
       errorKind: openingErrorKind,
       durationMs: openingDurationMs,
@@ -1088,6 +1102,7 @@ Open the session now. Frame the agenda: what are the key questions we need to an
         text: "",
         model: agentModel,
         modelSource: agentModel,
+        provenance: eventProvenance(agentModel),
         streaming: true,
       });
 
@@ -1115,6 +1130,7 @@ Open the session now. Frame the agenda: what are the key questions we need to an
           attemptId,
           phase: `roundtable-round-${round}`,
           durationMs: completed?.durationMs,
+          provenance: eventProvenance(agentModel, result.model),
         }));
       } catch (err) {
         const completed = completeAttempt(filePath, attemptId, { status: "failed", error: err });
@@ -1199,6 +1215,7 @@ Open the session now. Frame the agenda: what are the key questions we need to an
         text: interjectText,
         model: interjectModel,
         modelSource: interjectModel,
+        provenance: eventProvenance(model, interjectError ? undefined : interjectModel),
         error: interjectError || undefined,
         errorKind: interjectErrorKind,
         durationMs: interjectDurationMs,
@@ -1294,6 +1311,7 @@ Open the session now. Frame the agenda: what are the key questions we need to an
     verdict: "approve",
     model: summaryModel,
     modelSource: summaryModel,
+    provenance: eventProvenance(summaryModelId, summaryError ? undefined : summaryModel),
     error: summaryError || undefined,
     errorKind: summaryErrorKind,
     durationMs: summaryDurationMs,
@@ -1337,86 +1355,6 @@ async function runCompetitive(
   const competitiveVoteMode = session.competitiveVoteMode === "top-ideas" ? "top-ideas" : "agent-winner";
   const competitiveTopCount = Math.max(1, Math.min(10, Number(session.competitiveTopCount) || 3));
   const isTopIdeasVote = competitiveVoteMode === "top-ideas";
-
-  const parseCompetitiveVote = (text: string, voter: string) => {
-    const voteLine =
-      text.match(/^\s*\*{0,2}VOTE:\s*([^*\n\r]+)\*{0,2}/im)?.[1] ||
-      text.match(/VOTE:\s*([^*\n\r]+)/i)?.[1] ||
-      "";
-    const cleanedVote = voteLine
-      .replace(/\*\*/g, "")
-      .replace(/[.。,:;]+$/g, "")
-      .trim();
-    if (!cleanedVote) return "Unknown";
-
-    const eligibleAgents = agents.filter((candidate) => candidate !== voter);
-    const exactMatch = eligibleAgents.find(
-      (candidate) => candidate.toLowerCase() === cleanedVote.toLowerCase()
-    );
-    if (exactMatch) return exactMatch;
-
-    const prefixMatch = eligibleAgents.find(
-      (candidate) =>
-        candidate.toLowerCase().startsWith(cleanedVote.toLowerCase()) ||
-        cleanedVote.toLowerCase().startsWith(candidate.toLowerCase())
-    );
-    if (prefixMatch) return prefixMatch;
-
-    return cleanedVote;
-  };
-
-  const cleanIdeaVote = (value: string) =>
-    value
-      .replace(/\*\*/g, "")
-      .replace(/`/g, "")
-      .replace(/^[-*\d.)\s]+/, "")
-      .replace(/[.。,:;]+$/g, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 160);
-
-  const normalizeIdeaVoteKey = (value: string) =>
-    cleanIdeaVote(value)
-      .toLowerCase()
-      .replace(/&/g, " and ")
-      .replace(/[^a-z0-9]+/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-
-  const parseTopIdeaVotes = (text: string) => {
-    const votes: string[] = [];
-    const voteLinePattern = /^\s*\*{0,2}VOTE\s*(?:#?\s*)?([1-9])\s*:\s*(.+?)\*{0,2}\s*$/gim;
-    let match: RegExpExecArray | null;
-    while ((match = voteLinePattern.exec(text))) {
-      const idea = cleanIdeaVote(match[2]);
-      if (idea) votes.push(idea);
-    }
-
-    if (votes.length === 0) {
-      const genericVoteLine = text.match(/^\s*\*{0,2}VOTE:\s*(.+?)\*{0,2}\s*$/im)?.[1];
-      if (genericVoteLine) {
-        for (const part of genericVoteLine.split(/\s*(?:;|\||\n)\s*/)) {
-          const idea = cleanIdeaVote(part);
-          if (idea) votes.push(idea);
-        }
-      }
-    }
-
-    return Array.from(new Set(votes)).slice(0, competitiveTopCount);
-  };
-
-  const registerTopIdeaVote = (rawIdea: string) => {
-    const label = cleanIdeaVote(rawIdea);
-    const key = normalizeIdeaVoteKey(label);
-    if (!label || !key) return null;
-
-    const existingLabel = Object.keys(voteTally).find(
-      (candidate) => normalizeIdeaVoteKey(candidate) === key
-    );
-    const tallyLabel = existingLabel || label;
-    voteTally[tallyLabel] = (voteTally[tallyLabel] || 0) + 1;
-    return tallyLabel;
-  };
 
   // Helper: build competitive system prompt per phase
   function buildCompetitiveSystemPrompt(
@@ -1651,6 +1589,7 @@ ${pitchSummary}
       text,
       model: spawnedModel,
       modelSource: spawnedModel,
+      provenance: eventProvenance(agentModel, failed ? undefined : spawnedModel),
       error: failed || undefined,
       errorKind,
       durationMs,
@@ -1699,7 +1638,7 @@ ${pitchSummary}
     const checkSession = JSON.parse(checkRaw);
     if (checkSession.status !== "active") return;
 
-    const currentEvents = checkSession.events || [];
+    const currentEvents = (checkSession.events || []) as Array<{ id?: string; speaker: string; text: string; type: string }>;
     const history = buildHistoryString(currentEvents);
     const agentLength = (agentResponseLengths?.[agentId] as ResponseLength | undefined) || responseLength;
     const agentModel = resolveModel(agentModelOverrides?.[agentId] || model).model;
@@ -1744,6 +1683,7 @@ ${pitchSummary}
       text,
       model: spawnedModel,
       modelSource: spawnedModel,
+      provenance: eventProvenance(agentModel, failed ? undefined : spawnedModel),
       error: failed || undefined,
       errorKind,
       durationMs,
@@ -1783,10 +1723,8 @@ ${pitchSummary}
     const checkSession = JSON.parse(checkRaw);
     if (checkSession.status !== "active") return;
 
-    const currentEvents = checkSession.events || [];
-    const blindVoteEvents = currentEvents.filter(
-      (event: { id?: string }) => !String(event.id || "").startsWith("evt_vote_")
-    );
+    const currentEvents = (checkSession.events || []) as Array<{ id?: string; speaker: string; text: string; type: string }>;
+    const blindVoteEvents = filterBlindVoteEvents(currentEvents);
     const history = buildHistoryString(blindVoteEvents);
     const agentModel = resolveModel(agentModelOverrides?.[agentId] || model).model;
     const agentThinking = agentThinkingLevels?.[agentId] || (thinking ? "medium" : undefined);
@@ -1822,12 +1760,12 @@ ${pitchSummary}
     setThinkingAgent(filePath, null);
 
     // Parse the vote
-    const topIdeaVotes = !failed && isTopIdeasVote ? parseTopIdeaVotes(text) : [];
-    const votedFor = failed ? "Provider failed" : isTopIdeasVote ? (topIdeaVotes.join("; ") || "Unknown") : parseCompetitiveVote(text, agentId);
+    const topIdeaVotes = !failed && isTopIdeasVote ? parseTopIdeaVotes(text, competitiveTopCount) : [];
+    const votedFor = failed ? "Provider failed" : isTopIdeasVote ? (topIdeaVotes.join("; ") || "Unknown") : parseCompetitiveVote(text, agentId, agents);
     if (!failed && isTopIdeasVote) {
       const normalizedVotes: string[] = [];
       for (const idea of topIdeaVotes) {
-        const tallyLabel = registerTopIdeaVote(idea);
+        const tallyLabel = registerTopIdeaVote(voteTally, idea);
         if (tallyLabel) normalizedVotes.push(tallyLabel);
       }
       votes.push({ voter: agentId, votedFor: normalizedVotes.join("; ") || votedFor, reasoning: text });
@@ -1850,6 +1788,7 @@ ${pitchSummary}
       verdict: "approve",
       model: spawnedModel,
       modelSource: spawnedModel,
+      provenance: eventProvenance(agentModel, failed ? undefined : spawnedModel),
       error: failed || undefined,
       errorKind,
       durationMs,
@@ -1865,13 +1804,9 @@ ${pitchSummary}
   updatePhase("complete");
 
   // Determine winner
-  const maxVotes = Math.max(...Object.values(voteTally), 0);
-  const winners = Object.entries(voteTally).filter(([, v]) => v === maxVotes).map(([k]) => k);
-  const winner = winners[0] || agents[0];
-  const topIdeas = Object.entries(voteTally)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, competitiveTopCount)
-    .map(([idea, voteCount]) => ({ idea, votes: voteCount }));
+  const winner = selectWinner(voteTally, agents[0]);
+  const topIdeas = buildTopIdeasFromTally(voteTally, competitiveTopCount)
+    .map(({ idea, votes: voteCount }) => ({ idea, votes: voteCount }));
 
   // Store final competitive state
   const finalStateRaw = fs.readFileSync(filePath, "utf-8");
@@ -1974,6 +1909,7 @@ Deliver the final verdict and action plan.`;
     verdict: "approve",
     model: summaryModel,
     modelSource: summaryModel,
+    provenance: eventProvenance(summaryModelId, summaryError ? undefined : summaryModel),
     error: summaryError || undefined,
     errorKind: summaryErrorKind,
     durationMs: summaryDurationMs,

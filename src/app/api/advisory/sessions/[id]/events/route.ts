@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdvisorySession } from "@/lib/advisory-session-store";
+import { getActiveStaleRunSteps } from "@/lib/advisory/run-ledger";
 
 export async function GET(
   req: NextRequest,
@@ -11,6 +12,8 @@ export async function GET(
     if (!session) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
+    const staleRunSteps = getActiveStaleRunSteps(session.runSteps || []);
+    const staleRun = staleRunSteps.length > 0;
 
     const url = new URL(req.url);
     const after = url.searchParams.get("after");
@@ -31,6 +34,9 @@ export async function GET(
       paused: session.paused ?? false,
       thinkingAgent: session.thinkingAgent ?? null,
       runInProgress: session.runInProgress ?? false,
+      staleRun,
+      staleRunSteps,
+      runSteps: session.runSteps || [],
       title: session.title ?? null,
     });
   } catch (err) {

@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan: Panely Session Engine, Decision Records, and Run Ledger</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #08090b;
+    --surface: #14161a;
+    --surface-2: #1c2027;
+    --border: #303643;
+    --text: #eef2f7;
+    --muted: #9aa4b2;
+    --accent: #7c8cff;
+    --accent-2: #20c997;
+    --warn: #f5b84b;
+    --danger: #ff6b6b;
+    --code: #0f1117;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); line-height: 1.6; }
+  main { max-width: 1120px; margin: 0 auto; padding: 40px 24px 80px; }
+  header { border: 1px solid var(--border); background: linear-gradient(135deg, rgba(124,140,255,0.16), rgba(32,201,151,0.08)); border-radius: 14px; padding: 28px; margin-bottom: 24px; }
+  h1 { margin: 0 0 12px; font-size: 34px; letter-spacing: 0; }
+  h2 { margin: 34px 0 12px; font-size: 24px; }
+  h3 { margin: 24px 0 8px; font-size: 19px; }
+  h4 { margin: 22px 0 8px; color: var(--text); }
+  p { color: var(--muted); }
+  section, .phase, details.meta { border: 1px solid var(--border); background: var(--surface); border-radius: 12px; padding: 22px; margin: 18px 0; }
+  .phase { background: var(--surface-2); }
+  .meta summary { cursor: pointer; color: var(--accent); font-weight: 700; }
+  dl { display: grid; grid-template-columns: 150px 1fr; gap: 8px 14px; }
+  dt { color: var(--muted); }
+  dd { margin: 0; }
+  code { background: var(--code); border: 1px solid var(--border); border-radius: 6px; padding: 2px 6px; color: #c7d2fe; }
+  pre { background: var(--code); border: 1px solid var(--border); border-radius: 10px; padding: 14px; overflow-x: auto; }
+  ul { padding-left: 22px; }
+  li { margin: 8px 0; color: var(--muted); }
+  .checklist li { list-style: none; margin-left: -20px; }
+  .status { color: var(--accent-2); font-weight: 800; }
+  .tag { display: inline-block; border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; margin-right: 6px; font-size: 12px; font-weight: 800; }
+  .existing { color: #93c5fd; }
+  .new { color: #86efac; }
+  .changed { color: #fcd34d; }
+  .loop, .gate { border-left: 4px solid var(--accent); background: rgba(124,140,255,0.08); padding: 12px 14px; border-radius: 8px; color: var(--muted); margin-top: 14px; }
+  .gate { border-left-color: var(--warn); background: rgba(245,184,75,0.08); }
+  .diagram { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 18px 0; }
+  .node { min-height: 84px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,0.035); padding: 12px; }
+  .node strong { display: block; color: var(--text); margin-bottom: 6px; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  th, td { border: 1px solid var(--border); padding: 10px; text-align: left; color: var(--muted); vertical-align: top; }
+  th { color: var(--text); background: rgba(255,255,255,0.04); }
+  @media (max-width: 860px) { .diagram { grid-template-columns: 1fr; } dl { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Plan: Panely Session Engine, Decision Records, and Run Ledger</h1>
+    <details class="meta" open>
+      <summary>Metadata</summary>
+      <dl>
+        <dt>created</dt><dd>2026-06-25T09:36:39Z</dd>
+        <dt>modified</dt><dd>2026-06-25T10:04:30Z</dd>
+        <dt>commits</dt><dd>pending GitHub commit for this implementation</dd>
+        <dt>agent name</dt><dd>Codex</dd>
+        <dt>session id</dt><dd>019efcdb-afca-78d2-93fc-220dcdb3c9c0</dd>
+        <dt>back refs</dt><dd>specs/panely-provider-safety-artifacts-telemetry.html, commit 75b8471</dd>
+        <dt>forward refs</dt><dd>follow-up: Turbopack NFT trace warning cleanup, fuller UI surfacing for run ledger details</dd>
+      </dl>
+    </details>
+  </header>
+
+  <section id="purpose">
+    <h2>Purpose</h2>
+    <p>Implement the next five Panely product hardening priorities: one shared session engine, a structured decision record, a persisted run ledger with recovery semantics, tighter model provenance, and a focused test harness. The goal is to reduce route drift, make artifacts more durable, and make long local-first sessions recoverable and defensible.</p>
+    <div class="diagram">
+      <div class="node"><strong>Engine</strong><span>One state machine for turns, phases, prompts, voting, and completion.</span></div>
+      <div class="node"><strong>Record</strong><span>A typed output spine for recommendations, dissent, risks, and actions.</span></div>
+      <div class="node"><strong>Ledger</strong><span>Durable step records with queued, running, done, failed, and heartbeat state.</span></div>
+      <div class="node"><strong>Provenance</strong><span>Requested and observed model/source data in events and exports.</span></div>
+      <div class="node"><strong>Tests</strong><span>Harness coverage for competitive, failure, export, and recovery flows.</span></div>
+    </div>
+  </section>
+
+  <section id="problem">
+    <h2>Problem</h2>
+    <p>Panely is now useful, but its orchestration is still fragmented. Session behavior is spread across several API routes, prompt assembly is duplicated, some routes use locks while others still do raw state mutation, and final artifacts are derived from prose and event streams rather than a durable decision object. This makes future product work riskier than it needs to be.</p>
+  </section>
+
+  <section id="solution">
+    <h2>Solution</h2>
+    <p>Introduce a small shared domain layer under <code>src/lib/advisory/</code>. Routes remain Next.js API handlers, but they delegate session behavior to engine, decision-record, ledger, provenance, and test helpers. Keep the migration incremental: first extract behavior without changing user-visible flow, then route more code through it, then add tests and adversarial review before commit.</p>
+  </section>
+
+  <section id="files" class="files">
+    <h2>Relevant Files</h2>
+    <h3>Existing Files</h3>
+    <ul>
+      <li><span class="tag existing">existing</span><code>src/app/api/advisory/sessions/[id]/run/route.ts</code> - main instant-run orchestration for roundtable and competitive sessions.</li>
+      <li><span class="tag existing">existing</span><code>src/app/api/advisory/sessions/[id]/next-agent/route.ts</code> - manual/step route with duplicated prompt and history logic.</li>
+      <li><span class="tag existing">existing</span><code>src/app/api/advisory/sessions/[id]/full-round/route.ts</code> - full-round route with duplicated system prompt behavior.</li>
+      <li><span class="tag existing">existing</span><code>src/app/api/advisory/sessions/[id]/end/route.ts</code> - final synthesis route that should emit/update the decision record.</li>
+      <li><span class="tag existing">existing</span><code>src/app/api/advisory/sessions/[id]/events/route.ts</code> - polling route that can expose ledger recovery and heartbeat state.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/advisory-brief.ts</code> - current board brief baseline, to be layered over the structured decision record.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/advisory-run-telemetry.ts</code> - current attempt telemetry, to be connected to the durable ledger.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/advisory-history.ts</code> - shared history cap, to become the only prompt-history path.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/session-lock.ts</code> - in-memory lock used by some routes; plan must route all session writes through it or an equivalent helper.</li>
+      <li><span class="tag existing">existing</span><code>src/types/advisory.ts</code> - session, event, competitive, brief, and telemetry types.</li>
+      <li><span class="tag existing">existing</span><code>src/components/advisory/EventBubble.tsx</code> - event UI that should show provenance, failures, and retry affordances.</li>
+      <li><span class="tag existing">existing</span><code>src/components/AdvisoryPDFExport.tsx</code> - export path that should render decision records and provenance.</li>
+    </ul>
+
+    <h3>New Files</h3>
+    <ul>
+      <li><span class="tag new">new</span><code>src/lib/advisory/engine.ts</code> - shared session engine with phase, turn, prompt, and completion helpers.</li>
+      <li><span class="tag new">new</span><code>src/lib/advisory/prompts.ts</code> - shared persona, prompt, and response-length utilities extracted from routes.</li>
+      <li><span class="tag new">new</span><code>src/lib/advisory/competitive.ts</code> - shared competitive pitch, critique, vote parsing, tally, and top-idea helpers.</li>
+      <li><span class="tag new">new</span><code>src/lib/advisory/decision-record.ts</code> - typed decision record derivation and markdown rendering.</li>
+      <li><span class="tag new">new</span><code>src/lib/advisory/run-ledger.ts</code> - persistent run step, heartbeat, stuck detection, and recovery helpers.</li>
+      <li><span class="tag new">new</span><code>src/lib/advisory/provenance.ts</code> - requested versus observed model provenance utilities.</li>
+      <li><span class="tag new">new</span><code>src/lib/advisory/session-mutations.ts</code> - locked read-modify-write helpers for session updates.</li>
+      <li><span class="tag new">new</span><code>src/lib/advisory/__tests__/*.test.ts</code> - focused tests for engine, competitive voting, records, ledger, and provenance.</li>
+    </ul>
+  </section>
+
+  <section id="phases">
+    <h2>Implementation Phases</h2>
+    <p><strong>IMPORTANT:</strong> Execute every phase in order. Do not commit until the adversarial code-review gate has passed.</p>
+    <p>Status markers: <code>[]</code> idle, <code>[wip]</code> in progress, <code>[x]</code> complete, <code>[f]</code> failed.</p>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 0: Plan Review Gate</h3>
+      <p>Before writing implementation code, have a subagent review this plan for scope, ordering, missing risks, and likely codebase hazards.</p>
+      <h4>0.1 Subagent Plan Review</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Spawn a reviewer subagent with this plan path and ask for blockers, sequencing risks, and missing validation.</li>
+        <li><code class="status">[x]</code> Incorporate accepted feedback into this plan before creating the build goal.</li>
+        <li><code class="status">[x]</code> Record the review result in the Amendments section.</li>
+      </ul>
+      <h4>0.2 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code>Run a placeholder scan against this plan file - proves no template placeholders remain.</li>
+      </ul>
+      <div class="loop">Do not exit Phase 0 until the subagent has reviewed the plan.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 1: Test Harness and Pure Engine Helpers</h3>
+      <p>Add a small test harness first, then extract pure helper logic that can be validated without invoking local CLIs. This phase deliberately avoids broad manual-route parity.</p>
+      <h4>1.1 Add Minimal Test Harness</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add the smallest test runner that works cleanly with this repo, preferably Node's built-in test runner if TypeScript compilation is enough.</li>
+        <li><code class="status">[x]</code> Add <code>npm test</code> and make it non-optional in validation.</li>
+        <li><code class="status">[x]</code> Keep tests focused on pure domain helpers, not browser or live CLI calls.</li>
+      </ul>
+      <h4>1.2 Extract Competitive Helpers</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Move top-ideas parsing, agent-winner parsing, vote tallying, winner selection, and blind-vote event filtering into <code>src/lib/advisory/competitive.ts</code>.</li>
+        <li><code class="status">[x]</code> Reuse the helpers in <code>run/route.ts</code> immediately.</li>
+        <li><code class="status">[x]</code> Add tests for top-three parsing, tallying, self-vote handling, and blind-vote event filtering.</li>
+      </ul>
+      <h4>1.3 Add Engine Skeleton</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add <code>src/lib/advisory/engine.ts</code> with pure helpers for next phase, next agent, completion status, and progress summary.</li>
+        <li><code class="status">[x]</code> Add <code>src/lib/advisory/prompts.ts</code> only for shared low-risk prompt helpers; do not attempt full manual-route parity in this goal.</li>
+        <li><code class="status">[x]</code> Make the main <code>run</code> route use the pure competitive helpers.</li>
+        <li><code class="status">[x]</code> Keep API route changes thin and conservative in this pass.</li>
+      </ul>
+      <h4>1.4 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code><code>npm test</code> - proves the new pure helper tests pass.</li>
+        <li><code class="status">[x]</code><code>npm run lint</code> - proves extraction compiles under lint rules.</li>
+        <li><code class="status">[x]</code><code>npx tsc --noEmit</code> - proves route/helper type boundaries compile.</li>
+      </ul>
+      <div class="loop">Do not exit Phase 1 until the test harness exists and pure competitive helpers are covered.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 2: Locked Mutations and Route Safety</h3>
+      <p>Make session updates safer before adding more state. This phase reduces whole-document overwrite risk and creates the foundation required for ledger fields.</p>
+      <h4>2.1 Locked Mutation Helper</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add <code>src/lib/advisory/session-mutations.ts</code> with <code>updateSessionLocked</code> and <code>appendEventLocked</code>.</li>
+        <li><code class="status">[x]</code> Use the helper in high-risk mutation paths first: <code>end</code>, <code>next-agent</code>, and new ledger/record writes.</li>
+        <li><code class="status">[x]</code> Avoid broad rewrites of unrelated route logic.</li>
+      </ul>
+      <h4>2.2 Shared History and Prompt Safety</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Replace local history builders in touched routes with <code>src/lib/advisory-history.ts</code> where feasible.</li>
+        <li><code class="status">[x]</code> Preserve existing dynamic AI personas, custom agent metadata, response length, overlays, and thinking-level behavior.</li>
+        <li><code class="status">[x]</code> Document that full manual competitive parity remains follow-up work unless safely completed in this pass.</li>
+      </ul>
+      <h4>2.3 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code><code>npm test</code> - proves locked mutation helper tests pass if covered.</li>
+        <li><code class="status">[x]</code><code>npm run lint</code> - proves route updates lint.</li>
+        <li><code class="status">[x]</code><code>npx tsc --noEmit</code> - proves mutation helper types compile.</li>
+      </ul>
+      <div class="loop">Do not exit Phase 2 until high-risk route writes are safer and no behavior regression is introduced.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 3: Provenance Hardening</h3>
+      <p>Make artifacts honest about what was requested, what was observed, and where the model call came from. This must come before decision records because records depend on accurate provenance.</p>
+      <h4>3.1 Model Provenance Utilities</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add <code>src/lib/advisory/provenance.ts</code> with a normalized provenance object for requested provider, requested model, local CLI, routed source, observed model if available, and verification status.</li>
+        <li><code class="status">[x]</code> Use explicit wording for local CLI calls: requested model is known; observed model may be unavailable unless the CLI reports it.</li>
+        <li><code class="status">[x]</code> Store provenance on events, run attempts, run steps, decision records, and exports where applicable.</li>
+      </ul>
+      <h4>3.2 UI and Export Wording</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Update event/model badges only if needed to avoid overstating verification.</li>
+        <li><code class="status">[x]</code> Update Markdown/PDF/brief output to include provenance notes.</li>
+      </ul>
+      <h4>3.3 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code><code>npm test</code> - proves provenance rendering tests pass.</li>
+        <li><code class="status">[x]</code><code>npm run lint</code> - proves provenance updates lint.</li>
+        <li><code class="status">[x]</code><code>npx tsc --noEmit</code> - proves provenance types compile.</li>
+        <li><code class="status">[x]</code><code>node scripts/publish-safety-check.mjs</code> - proves provenance additions did not introduce sensitive content.</li>
+      </ul>
+      <div class="loop">Do not exit Phase 3 until exports no longer imply stronger model verification than Panely can prove.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 4: Run Ledger and Stale-State Recovery</h3>
+      <p>Represent every agent turn and make stale local run states visible. Do not promise true automatic resume in this pass.</p>
+      <h4>4.1 Add Run Step Model</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add <code>AdvisoryRunStep</code> to <code>src/types/advisory.ts</code> with id, sessionId, index, phase, agentId, model, status, attemptId, startedAt, heartbeatAt, completedAt, errorKind, and error.</li>
+        <li><code class="status">[x]</code> Add <code>runSteps?: AdvisoryRunStep[]</code> to <code>AdvisorySession</code>.</li>
+        <li><code class="status">[x]</code> Connect run attempts to run steps without removing existing telemetry fields.</li>
+      </ul>
+      <h4>4.2 Stuck Detection</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add <code>src/lib/advisory/run-ledger.ts</code> with step creation, heartbeat timestamp, completion, failure, and stale-state helpers.</li>
+        <li><code class="status">[x]</code> Ensure stale sessions do not leave <code>runInProgress</code> true forever without visible status.</li>
+        <li><code class="status">[x]</code> Keep automatic requeue out of scope; expose stale state and manual retry direction instead.</li>
+      </ul>
+      <h4>4.3 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code><code>npm test</code> - proves stale ledger tests pass.</li>
+        <li><code class="status">[x]</code><code>npm run lint</code> - proves ledger helpers and route updates lint.</li>
+        <li><code class="status">[x]</code><code>npx tsc --noEmit</code> - proves ledger types compile.</li>
+      </ul>
+      <div class="loop">Do not exit Phase 4 until a stale running state can be represented distinctly from a healthy active model call.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 5: Decision Record and Final Review</h3>
+      <p>Upgrade the current board brief into a structured decision object after tests, mutation safety, provenance, and ledger state are in place.</p>
+      <h4>5.1 Define and Generate Records</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add <code>DecisionRecord</code>, <code>DecisionRecordOption</code>, <code>DecisionRecordDissent</code>, <code>DecisionRecordActionItem</code>, and <code>DecisionRecordProvenance</code> to <code>src/types/advisory.ts</code>.</li>
+        <li><code class="status">[x]</code> Add <code>decisionRecord?: DecisionRecord</code> to <code>AdvisorySession</code>.</li>
+        <li><code class="status">[x]</code> Add <code>src/lib/advisory/decision-record.ts</code> with deterministic extraction from events, competitive state, existing insights, run attempts, run steps, and provenance.</li>
+        <li><code class="status">[x]</code> Keep <code>BoardBrief</code> compatibility by deriving it from <code>DecisionRecord</code> where possible.</li>
+        <li><code class="status">[x]</code> Update brief route and export code to prefer the decision record.</li>
+      </ul>
+      <h4>5.2 Adversarial Code Review Gate</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Spawn an adversarial subagent after implementation and before commit.</li>
+        <li><code class="status">[x]</code> Ask it to look specifically for data loss, stale run states, route drift, overclaimed model provenance, private data leaks, and export regressions.</li>
+        <li><code class="status">[x]</code> Fix any accepted blocker before committing.</li>
+      </ul>
+      <h4>5.3 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code><code>npm test</code> - proves focused domain tests pass.</li>
+        <li><code class="status">[x]</code><code>npm run lint</code> - proves code style and React lint pass.</li>
+        <li><code class="status">[x]</code><code>npx tsc --noEmit</code> - proves TypeScript passes.</li>
+        <li><code class="status">[x]</code><code>npm run build</code> - proves production build still succeeds.</li>
+        <li><code class="status">[x]</code><code>curl -s "http://localhost:3000/api/advisory/sessions/session-1782376713835-9016d1e1/brief?regenerate=1"</code> - proves existing sessions still generate a usable artifact.</li>
+        <li><code class="status">[x]</code><code>node scripts/publish-safety-check.mjs</code> - proves public GitHub boundary is clean.</li>
+      </ul>
+      <div class="loop">Do not exit Phase 5 until tests pass and adversarial review has no unresolved blockers.</div>
+    </div>
+  </section>
+
+  <section id="validation">
+    <h2>Global Validation Commands</h2>
+    <ul class="checklist">
+      <li><code class="status">[x]</code><code>npm test</code> - focused test harness passes, if added.</li>
+      <li><code class="status">[x]</code><code>npm run lint</code> - lint passes.</li>
+      <li><code class="status">[x]</code><code>npx tsc --noEmit</code> - TypeScript passes.</li>
+      <li><code class="status">[x]</code><code>npm run build</code> - production build succeeds.</li>
+      <li><code class="status">[x]</code><code>curl -s "http://localhost:3000/api/advisory/model-availability?probe=1"</code> - local model availability remains truthful.</li>
+      <li><code class="status">[x]</code><code>curl -s "http://localhost:3000/api/advisory/sessions/session-1782376713835-9016d1e1/brief?regenerate=1"</code> - existing competitive session exports still work.</li>
+      <li><code class="status">[x]</code><code>node scripts/publish-safety-check.mjs</code> - staged publish boundary is clean.</li>
+      <li><code class="status">[x]</code> Adversarial subagent review - no unresolved blockers before commit.</li>
+    </ul>
+    <div class="loop">The plan is not complete until every validation passes or a failure is marked and explained in Amendments.</div>
+  </section>
+
+  <section id="questionables">
+    <h2>Questionables</h2>
+    <details open>
+      <summary>How much of the engine should be extracted in one pass?</summary>
+      <p class="qa-answer">Keep the first pass conservative. Extract shared pure helpers and integrate them with the main run route first. Manual route parity can follow if the refactor becomes too large for a safe single commit.</p>
+    </details>
+    <details>
+      <summary>Should stale steps auto-resume?</summary>
+      <p class="qa-answer">Not automatically in this pass. A local CLI run may still be alive even if the UI is stale. Mark stale state clearly first; automatic requeue should require more durable process ownership or explicit user action.</p>
+    </details>
+    <details>
+      <summary>Can provenance prove the exact executed model?</summary>
+      <p class="qa-answer">Only if the local CLI returns that identity. Until then, Panely should honestly record requested model, local CLI source, and verification status rather than overclaiming.</p>
+    </details>
+  </section>
+
+  <section id="notes">
+    <h2>Notes</h2>
+    <h3>Execution Constraints</h3>
+    <ul>
+      <li>Do not revert the untracked <code>docs/</code> files; they predate this plan and are outside the scoped commit.</li>
+      <li>Keep the GitHub deployment meaning: commit and push to <code>origin/main</code>, not Vercel.</li>
+      <li>Run publish-safety before committing and again before pushing.</li>
+      <li>Do not weaken local-only model routing.</li>
+      <li>Do not claim true automatic resume in this pass; expose stale state and manual recovery affordances first.</li>
+      <li>Do not attempt full manual competitive parity unless the shared helper extraction stays small and tests cover it.</li>
+    </ul>
+
+    <h3>Suggested Commit Shape</h3>
+    <table>
+      <tr><th>Commit</th><th>Scope</th><th>Reason</th></tr>
+      <tr><td>1</td><td>Tests, pure helpers, locked mutations, provenance, stale ledger, decision record</td><td>A single cohesive domain-layer hardening commit is acceptable if the diff remains reviewable and validation passes.</td></tr>
+      <tr><td>Split if needed</td><td>Tests/helpers first, route mutation safety second, record/export work third</td><td>Use this if route changes become too broad or risky.</td></tr>
+    </table>
+
+    <h3>Definition of Done</h3>
+    <p>Panely has one shared place for core session rules, durable structured artifacts, explicit run-step state, honest model provenance, fast tests for the most failure-prone logic, a clean adversarial review, and a pushed GitHub commit.</p>
+  </section>
+
+  <section id="amendments">
+    <h2>Amendments</h2>
+    <details>
+      <summary>2026-06-25T09:36:39Z - Initial plan created</summary>
+      <p>Created with Plan F3 to cover priorities 1 through 5 from the Panely panel follow-up: session engine, decision record, run ledger, provenance, and tests with subagent review gates.</p>
+    </details>
+    <details>
+      <summary>2026-06-25T09:36:39Z - Subagent review incorporated</summary>
+      <p>Accepted reviewer feedback from subagent Popper. The plan now adds the test harness first, puts locked mutation safety before ledger state, moves provenance before decision records, narrows recovery claims to stale-state visibility rather than automatic resume, and cuts full manual competitive parity from the required scope unless it stays safely testable.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T10:04:30Z - Implementation and adversarial review complete</summary>
+      <p>Implemented focused pure helpers, locked mutation paths, run-step telemetry, structured decision records, and provenance hardening. Adversarial subagent Pauli found no remaining commit-blocking issues after the failed-call provenance fix. Validation passed: <code>npm test</code>, <code>npx tsc --noEmit</code>, <code>npm run lint</code>, <code>npm run build</code>, <code>node scripts/publish-safety-check.mjs</code>, local model availability probe, and existing competitive brief regeneration.</p>
+    </details>
+  </section>
+</main>
+</body>
+</html>

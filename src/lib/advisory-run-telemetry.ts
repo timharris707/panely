@@ -1,5 +1,7 @@
-import { classifyProviderError } from "@/lib/ai/provider-errors";
-import type { AdvisoryRunAttempt } from "@/types/advisory";
+import { classifyProviderError } from "./ai/provider-errors.ts";
+import { completeRunStep, createRunStep, failRunStep } from "./advisory/run-ledger.ts";
+import { buildRequestedModelProvenance } from "./advisory/provenance.ts";
+import type { AdvisoryRunAttempt, AdvisoryRunStep } from "../types/advisory.ts";
 
 export interface RunAttemptStartInput {
   phase: string;
@@ -25,6 +27,21 @@ export function startRunAttempt(session: Record<string, unknown>, input: RunAtte
     attempt: agentAttempts.length + 1,
   };
   session.runAttempts = [...attempts, attempt];
+  const steps = Array.isArray(session.runSteps)
+    ? (session.runSteps as AdvisoryRunStep[])
+    : [];
+  session.runSteps = [
+    ...steps,
+    createRunStep({
+      sessionId: typeof session.id === "string" ? session.id : "unknown-session",
+      index: steps.length + 1,
+      phase: input.phase,
+      agentId: input.agentId,
+      model: input.model,
+      attemptId: attempt.id,
+      now,
+    }),
+  ];
   session.activeRunAttempt = attempt;
   return attempt;
 }
@@ -37,7 +54,11 @@ export function finishRunAttempt(
   const attempts = Array.isArray(session.runAttempts)
     ? (session.runAttempts as AdvisoryRunAttempt[])
     : [];
+  const steps = Array.isArray(session.runSteps)
+    ? (session.runSteps as AdvisoryRunStep[])
+    : [];
   const completedAt = new Date().toISOString();
+  const originalAttempt = attempts.find((attempt) => attempt.id === attemptId);
   session.runAttempts = attempts.map((attempt) => {
     if (attempt.id !== attemptId) return attempt;
     const durationMs = new Date(completedAt).getTime() - new Date(attempt.startedAt).getTime();
@@ -59,6 +80,17 @@ export function finishRunAttempt(
       errorKind: classified.kind,
       error: classified.message,
     };
+  });
+  session.runSteps = steps.map((step) => {
+    if (step.attemptId !== attemptId) return step;
+    if (update.status === "succeeded") {
+      return {
+        ...completeRunStep(step, completedAt),
+        provenance: buildRequestedModelProvenance(originalAttempt?.model || step.model, update.modelSource),
+      };
+    }
+    const classified = classifyProviderError(update.error);
+    return failRunStep(step, { errorKind: classified.kind, error: classified.message }, completedAt);
   });
   delete session.activeRunAttempt;
   return (session.runAttempts as AdvisoryRunAttempt[]).find((attempt) => attempt.id === attemptId) || null;

@@ -8,6 +8,10 @@ import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import { sessionFileStore as fs } from "@/lib/advisory-session-store";
 import { spawnAdvisoryAgentWithRetry } from "@/lib/advisory-agent";
+import { updateSessionLocked } from "@/lib/advisory/session-mutations";
+import { buildHistoryString as buildHistoryStringShared } from "@/lib/advisory-history";
+import { buildRequestedModelProvenance } from "@/lib/advisory/provenance";
+import type { AdvisoryEvent } from "@/types/advisory";
 
 const DATA_DIR = path.join(process.cwd(), "data", "advisory");
 const CUSTOM_AGENTS_FILE = path.join(DATA_DIR, "custom-agents.json");
@@ -244,17 +248,6 @@ Use the approved plan to understand your exact role, stance, and assignment. Spe
   return `You are ${agent.name} ${agent.emoji}, the ${agent.role} at Panely.\n\nYour expertise: ${agent.expertise}${overlayLine}${referenceBlock}${personalityBlock}\nYou are participating in a persistent roundtable discussion.\n\n${voicePrompt}\n\n**Response length: ${responseLength.toUpperCase()}**\n${lengthInstruction}\n\nIMPORTANT — Make your response feel HUMAN:\n- VARY your paragraph length. Some paragraphs should be 1 sentence. Others should be 4-5 sentences. Never make them all the same length.\n- Use occasional one-liners for emphasis.\n- Build on what others said — reference participants by name.\n- Propose concrete next steps, timelines, and resource requirements.\n- Never use filler phrases — dive straight into your analysis.\n\nThis is a high-stakes advisory session. The user is counting on this board for real decisions.`;
 }
 
-function buildHistoryString(events: Array<{ speaker: string; text: string; type: string }>): string {
-  const relevant = events.filter((e) => e.type !== "start" && e.type !== "complete" && e.text);
-  if (relevant.length === 0) return "No prior discussion yet.";
-  return relevant.map((e) => {
-    if (e.type === "human-directive" || e.speaker === "the user") {
-      return `**User:** ${e.text.replace(/\*\*/g, "")}\n(The user is the human decision-maker — treat them as the most senior person in the room.)`;
-    }
-    return `**${e.speaker}:** ${e.text.replace(/\*\*/g, "")}`;
-  }).join("\n\n");
-}
-
 function determineNextAgent(agents: string[], events: Array<{ speaker: string; type: string }>): { agentId: string; isNewRound: boolean } {
   // Filter to only agent response events (not human, not system, not start/complete)
   const agentEvents = events.filter(
@@ -370,12 +363,11 @@ export async function POST(
   const responseLength = (agentResponseLengths as Record<string, string> | undefined)?.[agentId] || sessionResponseLength;
 
   // Set thinkingAgent so the UI can show who's about to respond
-  try {
-    const s = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-    s.thinkingAgent = agentId;
-    s.paused = false;
-    fs.writeFileSync(filePath, JSON.stringify(s, null, 2));
-  } catch { /* ignore */ }
+  await updateSessionLocked(id, (s) => ({
+    ...s,
+    thinkingAgent: agentId,
+    paused: false,
+  }));
 
   // Fire-and-forget: generate the single agent response, then re-pause
   const generateResponse = async () => {
@@ -384,7 +376,7 @@ export async function POST(
     if (currentSession.status !== "active" || currentSession.aborted) return;
 
     const currentEvents = currentSession.events || [];
-    const history = buildHistoryString(currentEvents);
+    const history = buildHistoryStringShared(currentEvents);
     const agentOverlay = getAgentOverlay(personaOverlays, agentId);
 
     // ── Competitive mode prompt building ──────────────────────────────────────
@@ -445,6 +437,7 @@ export async function POST(
 
     let text = "";
     let spawnedModel = "model-router";
+    let failed = false;
     try {
       const result = await spawnAdvisoryAgentWithRetry({
         sessionId: id,
@@ -458,65 +451,66 @@ export async function POST(
       spawnedModel = result.model;
     } catch (err) {
       text = `⚠️ Failed to generate response: ${String(err)}`;
+      failed = true;
     }
 
-    // Check if session was aborted (user clicked End while we were generating)
-    const checkRaw = fs.readFileSync(filePath, "utf-8");
-    const checkSession = JSON.parse(checkRaw);
-    if (checkSession.aborted || checkSession.status !== "active") {
-      // Session was ended — discard this response silently
-      return;
-    }
-
-    // Append the event
-    const updatedRaw = fs.readFileSync(filePath, "utf-8");
-    const updatedSession = JSON.parse(updatedRaw);
-    updatedSession.events = [...(updatedSession.events || []), {
-      id: `evt_next_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      timestamp: new Date().toISOString(),
-      type: "worker",
-      speaker: agentId,
-      emoji: agent?.emoji || "💬",
-      role: session.moderator && agentId === session.moderator ? "moderator" : agentId === "Henry" ? "supervisor" : "worker",
-      text,
-      model: spawnedModel,
-      modelSource: spawnedModel,
-    }];
-
-    // ── Check if final round just completed (manual pacing auto-end) ──────────
-    const configuredRounds = updatedSession.rounds;
     let shouldAutoEnd = false;
-    if (configuredRounds && configuredRounds !== "persistent") {
-      const roundLimit = Number(configuredRounds);
-      if (!isNaN(roundLimit) && roundLimit > 0) {
-        const allEvents = updatedSession.events || [];
-        const agentEvts = allEvents.filter(
-          (e: { speaker: string; type: string }) =>
-            e.speaker !== "the user" && e.speaker !== "System" &&
-            e.type !== "start" && e.type !== "complete" && e.type !== "human-directive"
-        );
-        const agentList = (updatedSession.agents || []) as string[];
-        let completedRounds = 0;
-        const seenInRound = new Set<string>();
-        for (const e of agentEvts) {
-          seenInRound.add(e.speaker);
-          if (agentList.every((a: string) => seenInRound.has(a))) {
-            completedRounds++;
-            seenInRound.clear();
+    await updateSessionLocked(id, (updatedSession) => {
+      if (updatedSession.aborted || updatedSession.status !== "active") {
+        return updatedSession;
+      }
+
+      const nextEvent: AdvisoryEvent = {
+        id: `evt_next_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        timestamp: new Date().toISOString(),
+        type: failed ? "error" : "worker",
+        speaker: agentId,
+        emoji: agent?.emoji || "💬",
+        role: session.moderator && agentId === session.moderator ? "moderator" : agentId === "Henry" ? "supervisor" : "worker",
+        text,
+        model: spawnedModel,
+        modelSource: spawnedModel,
+        provenance: buildRequestedModelProvenance(selectedModelId, failed ? undefined : spawnedModel),
+        error: failed || undefined,
+      };
+      const nextEvents = [...(updatedSession.events || []), nextEvent];
+
+      const configuredRounds = updatedSession.rounds;
+      if (configuredRounds && configuredRounds !== "persistent") {
+        const roundLimit = Number(configuredRounds);
+        if (!isNaN(roundLimit) && roundLimit > 0) {
+          const agentEvts = nextEvents.filter(
+            (e: { speaker: string; type: string }) =>
+              e.speaker !== "the user" && e.speaker !== "System" &&
+              e.type !== "start" && e.type !== "complete" && e.type !== "human-directive"
+          );
+          const agentList = (updatedSession.agents || []) as string[];
+          let completedRounds = 0;
+          const seenInRound = new Set<string>();
+          for (const e of agentEvts) {
+            seenInRound.add(e.speaker);
+            if (agentList.every((a: string) => seenInRound.has(a))) {
+              completedRounds++;
+              seenInRound.clear();
+            }
+          }
+          if (completedRounds >= roundLimit && completedRounds > 0 && agentEvts.length > 0) {
+            shouldAutoEnd = true;
+            console.log(`[next-agent] Final round completed (${completedRounds}/${roundLimit}) — auto-triggering end session`);
           }
         }
-        if (completedRounds >= roundLimit && completedRounds > 0 && agentEvts.length > 0) {
-          shouldAutoEnd = true;
-          console.log(`[next-agent] Final round completed (${completedRounds}/${roundLimit}) — auto-triggering end session`);
-        }
       }
-    }
+
+      return {
+        ...updatedSession,
+        events: nextEvents,
+        thinkingAgent: null,
+        paused: !shouldAutoEnd,
+      };
+    });
 
     if (shouldAutoEnd) {
       // Don't pause — trigger end-session synthesis instead
-      updatedSession.thinkingAgent = null;
-      updatedSession.paused = false;
-      fs.writeFileSync(filePath, JSON.stringify(updatedSession, null, 2));
 
       try {
         // Determine the base URL from the request or fall back to localhost
@@ -528,23 +522,17 @@ export async function POST(
       } catch (err) {
         console.error("[next-agent] Error triggering end-session after final round:", err);
       }
-    } else {
-      // Re-pause the session for manual pacing
-      updatedSession.paused = true;
-      updatedSession.thinkingAgent = null;
-      fs.writeFileSync(filePath, JSON.stringify(updatedSession, null, 2));
     }
   };
 
   generateResponse().catch((err) => {
     console.error("next-agent error:", err);
     // Clear thinking state on error
-    try {
-      const s = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-      s.thinkingAgent = null;
-      s.paused = true;
-      fs.writeFileSync(filePath, JSON.stringify(s, null, 2));
-    } catch { /* ignore */ }
+    updateSessionLocked(id, (s) => ({
+      ...s,
+      thinkingAgent: null,
+      paused: true,
+    })).catch(() => {});
   });
 
   return NextResponse.json({
