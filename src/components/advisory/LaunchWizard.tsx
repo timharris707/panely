@@ -18,8 +18,9 @@ import { MODELS, PACING_OPTIONS } from "./constants";
 import { PROVIDERS, type ProviderModel } from "@/lib/ai/providers";
 import { supportedThinkingLevels } from "@/lib/ai/thinking-levels";
 import { buildProviderDisclosure } from "@/lib/advisory/provider-disclosure";
+import { inferAdvisoryIntent, type AdvisoryIntent } from "@/lib/advisory/session-intent";
 
-type Intent = "decision" | "stress-test" | "compare" | "ideas" | "red-team";
+type Intent = AdvisoryIntent;
 type SessionMode = "roundtable" | "competitive" | "formal-board";
 type Stance = "balanced" | "adversarial" | "optimistic" | "skeptical";
 type OutputPerspective = "decision-memo" | "action-plan" | "risk-memo" | "board-brief";
@@ -67,6 +68,28 @@ type AttachedFile = {
   name: string;
   size: number;
   text: string;
+};
+
+type ProjectContextPreview = {
+  projectLabel: string;
+  rootName: string;
+  selectedFiles: Array<{
+    path: string;
+    size: number;
+    score: number;
+    reasons: string[];
+    truncated: boolean;
+    includedChars: number;
+  }>;
+  candidateFileCount: number;
+  scannedDirCount: number;
+  skippedFileCount: number;
+  skippedDirCount: number;
+  warnings: Array<{ code: string; message: string; path?: string }>;
+  referenceContext: string;
+  referenceContextChars: number;
+  budgetChars: number;
+  truncated: boolean;
 };
 
 interface LaunchWizardProps {
@@ -120,6 +143,7 @@ const INTENT_COPY: Record<Intent, { label: string; desc: string }> = {
   compare: { label: "Compare options", desc: "The panel will evaluate alternatives side by side." },
   ideas: { label: "Competitive ideation", desc: "The panel will generate rival approaches." },
   "red-team": { label: "Red team", desc: "The panel will challenge assumptions aggressively." },
+  debug: { label: "Debug", desc: "The panel will diagnose the issue and propose a fix strategy." },
 };
 
 const MODE_COPY: Record<SessionMode, { label: string; desc: string }> = {
@@ -155,20 +179,7 @@ function normalizeLensThinking(lens: PlannedLens, localModels: LocalModelStatus[
 }
 
 function inferIntent(text: string): Intent {
-  const lower = text.toLowerCase();
-  if (/(red[- ]?team|attack this|tear (this|it) apart|adversarial|devil'?s advocate)/.test(lower)) {
-    return "red-team";
-  }
-  if (/(compare|versus| vs |alternative|option|which of these|trade[- ]?off)/.test(lower)) {
-    return "compare";
-  }
-  if (/(brainstorm|generate ideas|come up with|new ideas|pitch|ideat)/.test(lower)) {
-    return "ideas";
-  }
-  if (/(review|critique|audit|stress[- ]?test|pressure[- ]?test|evaluate|solid|gaps?|risks?|weakness|improve|fix|revise|changes? needed)/.test(lower)) {
-    return "stress-test";
-  }
-  return "decision";
+  return inferAdvisoryIntent(text);
 }
 
 function getInitial(name: string): string {
@@ -245,6 +256,10 @@ function buildPlanContext(params: {
 export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
   const [topic, setTopic] = useState("");
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+  const [projectPath, setProjectPath] = useState("");
+  const [projectContext, setProjectContext] = useState<ProjectContextPreview | null>(null);
+  const [projectScanning, setProjectScanning] = useState(false);
+  const [projectError, setProjectError] = useState("");
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [stance, setStance] = useState<Stance>("balanced");
   const [outputPerspective, setOutputPerspective] = useState<OutputPerspective>("decision-memo");
@@ -283,8 +298,8 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
   }, []);
 
   const inferenceText = useMemo(
-    () => [topic, ...attachedFiles.map((file) => `${file.name}\n${file.text}`)].join("\n\n"),
-    [attachedFiles, topic],
+    () => [topic, projectContext?.referenceContext ?? "", ...attachedFiles.map((file) => `${file.name}\n${file.text}`)].join("\n\n"),
+    [attachedFiles, projectContext, topic],
   );
   useEffect(() => {
     setProviderDisclosureAccepted(false);
@@ -302,6 +317,7 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
   const availableModelSet = useMemo(() => new Set(availableModelIds), [availableModelIds]);
   const availableModelOptions = MODELS.filter((option) => availableModelSet.has(option.id));
   const selectedModelIds = plan?.lenses.map((lens) => lens.modelId) ?? availableModelIds;
+  const selectedModelSignature = selectedModelIds.join("|");
   const selectedContextWindows = selectedModelIds
     .map((modelId) => localModels.find((model) => model.id === modelId)?.contextWindow)
     .filter((value): value is number => typeof value === "number");
@@ -313,6 +329,8 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
   const providerDisclosure = buildProviderDisclosure({
     topic: topic.trim(),
     attachedFileCount: attachedFiles.length,
+    localProjectFileCount: projectContext?.selectedFiles.length ?? 0,
+    sourceKinds: projectContext ? ["local-project"] : undefined,
     planningModelIds: ["claude-sonnet"],
     modelIds: selectedModelIds,
   });
@@ -323,6 +341,17 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
     const nextBudget = CONTEXT_BUDGETS.filter((item) => item.value <= limitingKnownContextWindow).at(-1)?.value ?? CONTEXT_BUDGETS[0].value;
     setContextBudgetChars(nextBudget);
   }, [contextBudgetChars, limitingKnownContextWindow]);
+
+  useEffect(() => {
+    setProviderDisclosureAccepted(false);
+  }, [contextBudgetChars, selectedModelSignature]);
+
+  useEffect(() => {
+    if (!projectContext) return;
+    setProjectContext(null);
+    setProviderDisclosureAccepted(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contextBudgetChars]);
 
   useEffect(() => {
     if (!plan || localModels.length === 0) return;
@@ -373,6 +402,8 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
           topic: cleanTopic,
           modelId: "claude-sonnet",
           attachedFileCount: attachedFiles.length,
+          localProjectFileCount: projectContext?.selectedFiles.length ?? 0,
+          sourceKinds: projectContext ? ["local-project"] : undefined,
           providerDisclosure: providerDisclosureAccepted
             ? {
                 accepted: true,
@@ -448,8 +479,51 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
     setAttachedFiles((current) => current.filter((file) => file.id !== fileId));
   };
 
+  const scanProject = async () => {
+    const cleanPath = projectPath.trim();
+    if (!cleanPath) {
+      setProjectError("Enter a local project path first.");
+      return;
+    }
+    setProjectScanning(true);
+    setProjectError("");
+    try {
+      const res = await fetch("/api/advisory/project-context", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-panely-local-project-scan": "1",
+        },
+        body: JSON.stringify({
+          projectPath: cleanPath,
+          topic: topic.trim(),
+          contextBudgetChars,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to scan project.");
+      setProjectContext(data.projectContext as ProjectContextPreview);
+      setProviderDisclosureAccepted(false);
+    } catch (err) {
+      setProjectContext(null);
+      setProviderDisclosureAccepted(false);
+      setProjectError(err instanceof Error ? err.message : "Failed to scan project.");
+    } finally {
+      setProjectScanning(false);
+    }
+  };
+
+  const clearProject = () => {
+    setProjectPath("");
+    setProjectContext(null);
+    setProjectError("");
+    setProviderDisclosureAccepted(false);
+  };
+
   const handleLaunch = async () => {
-    const cleanTopic = topic.trim() || (attachedFiles.length > 0 ? `Review attached material: ${attachedFiles.map((file) => file.name).join(", ")}` : "");
+    const cleanTopic = topic.trim()
+      || (projectContext ? `Debug local project ${projectContext.projectLabel}` : "")
+      || (attachedFiles.length > 0 ? `Review attached material: ${attachedFiles.map((file) => file.name).join(", ")}` : "");
     if (!cleanTopic) {
       setError("Add a topic, decision, or source file first.");
       return;
@@ -486,7 +560,7 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
       lenses: plan.lenses,
     });
     const attachmentContext = buildAttachmentContext(attachedFiles, contextBudgetChars);
-    const mergedContext = [planContext, attachmentContext].filter(Boolean).join("\n\n---\n\n");
+    const mergedContext = [planContext, projectContext?.referenceContext ?? "", attachmentContext].filter(Boolean).join("\n\n---\n\n");
 
     try {
       const res = await fetch("/api/advisory/sessions", {
@@ -502,6 +576,8 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
           responseLength,
           referenceContextBudgetChars: contextBudgetChars,
           referenceContext: mergedContext,
+          sourceKinds: projectContext ? ["local-project"] : undefined,
+          localProjectFileCount: projectContext?.selectedFiles.length ?? 0,
           agentModelOverrides,
           agentPersonalityTraits,
           agentCommunicationStyles,
@@ -607,6 +683,78 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
                       </button>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+
+            <div className="field local-project-box">
+              <div className="local-project-header">
+                <div>
+                  <label htmlFor="projectPath">Local project</label>
+                  <span>Scan happens on this machine. Advisor planning and session launch can send the selected packet through local CLIs after disclosure.</span>
+                </div>
+                {projectContext && (
+                  <button type="button" className="mini-button" onClick={clearProject}>
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div className="project-scan-row">
+                <input
+                  id="projectPath"
+                  value={projectPath}
+                  onChange={(event) => {
+                    setProjectPath(event.target.value);
+                    setProjectContext(null);
+                    setProjectError("");
+                    setProviderDisclosureAccepted(false);
+                  }}
+                  placeholder="/path/to/project"
+                />
+                <button type="button" className="secondary-button compact" onClick={scanProject} disabled={projectScanning || !projectPath.trim()}>
+                  {projectScanning ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}
+                  Scan
+                </button>
+              </div>
+              {projectError && (
+                <div className="project-error">
+                  <AlertCircle size={14} />
+                  {projectError}
+                </div>
+              )}
+              {projectContext && (
+                <div className="project-summary">
+                  <div className="project-summary-main">
+                    <strong>{projectContext.projectLabel}</strong>
+                    <span>
+                      {projectContext.selectedFiles.length} selected · {projectContext.candidateFileCount} candidates · {projectContext.referenceContextChars.toLocaleString()} chars
+                    </span>
+                  </div>
+                  <div className="project-file-list">
+                    {projectContext.selectedFiles.slice(0, 8).map((file) => (
+                      <div className="project-file" key={file.path} title={file.reasons.join("; ")}>
+                        <FileText size={13} />
+                        <span>{file.path}</span>
+                        <small>{formatBytes(file.size)}{file.truncated ? " · truncated" : ""}</small>
+                      </div>
+                    ))}
+                    {projectContext.selectedFiles.length > 8 && (
+                      <div className="project-file muted">
+                        +{projectContext.selectedFiles.length - 8} more selected files
+                      </div>
+                    )}
+                  </div>
+                  {projectContext.warnings.length > 0 && (
+                    <div className="project-warnings">
+                      {projectContext.warnings.slice(0, 4).map((warning, index) => (
+                        <div key={`${warning.code}-${warning.path || index}`}>
+                          <AlertCircle size={12} />
+                          <span>{warning.path ? `${warning.path}: ` : ""}{warning.message}</span>
+                        </div>
+                      ))}
+                      {projectContext.warnings.length > 4 && <small>+{projectContext.warnings.length - 4} more warnings</small>}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -993,6 +1141,7 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
         }
 
         textarea,
+        input,
         select {
           width: 100%;
           box-sizing: border-box;
@@ -1017,6 +1166,7 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
         }
 
         textarea:focus,
+        input:focus,
         select:focus {
           border-color: var(--accent);
           box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.16);
@@ -1119,6 +1269,172 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
         .attached-file button:hover {
           background: rgba(255, 255, 255, 0.06);
           color: var(--text-primary);
+        }
+
+        .local-project-box {
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          background: rgba(255, 255, 255, 0.025);
+          padding: 14px;
+        }
+
+        .local-project-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+          margin-bottom: 12px;
+        }
+
+        .local-project-header label {
+          margin-bottom: 4px;
+        }
+
+        .local-project-header span {
+          display: block;
+          color: var(--text-muted);
+          font-size: 12px;
+          line-height: 1.45;
+        }
+
+        .project-scan-row {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 10px;
+        }
+
+        .project-scan-row input {
+          min-height: 40px;
+          padding: 0 12px;
+        }
+
+        .secondary-button.compact {
+          min-width: 92px;
+          min-height: 40px;
+        }
+
+        .mini-button {
+          flex: 0 0 auto;
+          min-height: 30px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: transparent;
+          color: var(--text-secondary);
+          padding: 0 10px;
+          font: 800 11px var(--font-body);
+          cursor: pointer;
+        }
+
+        .mini-button:hover {
+          border-color: var(--accent);
+          color: var(--text-primary);
+        }
+
+        .project-error {
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
+          margin-top: 10px;
+          border: 1px solid rgba(239, 68, 68, 0.32);
+          border-radius: 8px;
+          background: rgba(239, 68, 68, 0.08);
+          color: #f87171;
+          padding: 10px;
+          font-size: 12px;
+          line-height: 1.4;
+        }
+
+        .project-error svg,
+        .project-warnings svg {
+          flex: 0 0 auto;
+          margin-top: 1px;
+        }
+
+        .project-summary {
+          margin-top: 12px;
+          border: 1px solid rgba(34, 197, 94, 0.26);
+          border-radius: 8px;
+          background: rgba(34, 197, 94, 0.06);
+          padding: 12px;
+        }
+
+        .project-summary-main {
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 10px;
+        }
+
+        .project-summary-main strong {
+          min-width: 0;
+          overflow: hidden;
+          color: var(--text-primary);
+          font-size: 13px;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .project-summary-main span {
+          flex: 0 0 auto;
+          color: var(--text-muted);
+          font-size: 11px;
+        }
+
+        .project-file-list {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .project-file {
+          display: grid;
+          grid-template-columns: 16px minmax(0, 1fr) auto;
+          align-items: center;
+          gap: 8px;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 7px;
+          background: rgba(0, 0, 0, 0.18);
+          padding: 7px 8px;
+          color: var(--text-secondary);
+          font-size: 12px;
+        }
+
+        .project-file.muted {
+          display: block;
+          color: var(--text-muted);
+          text-align: center;
+        }
+
+        .project-file span {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .project-file small {
+          color: var(--text-muted);
+          font-size: 10px;
+          white-space: nowrap;
+        }
+
+        .project-warnings {
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+          margin-top: 10px;
+          color: #fbbf24;
+          font-size: 11px;
+          line-height: 1.35;
+        }
+
+        .project-warnings div {
+          display: flex;
+          gap: 6px;
+        }
+
+        .project-warnings small {
+          color: var(--text-muted);
         }
 
         .intent-card {
@@ -1586,8 +1902,22 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
           .segmented,
           .segmented-compact,
           .control-grid,
+          .project-scan-row,
           .add-lens {
             grid-template-columns: 1fr;
+          }
+
+          .project-summary-main {
+            flex-direction: column;
+            gap: 4px;
+          }
+
+          .project-summary-main span {
+            flex: 0 1 auto;
+          }
+
+          .secondary-button.compact {
+            width: 100%;
           }
 
           .launch-footer {

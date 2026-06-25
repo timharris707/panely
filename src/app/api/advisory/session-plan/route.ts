@@ -4,9 +4,15 @@ import { getProviderModelById, PROVIDERS, resolveProviderModelId, type ProviderM
 import { detectLocalCliTools, probeAllModelHealth } from "@/lib/ai/model-health";
 import { supportedThinkingLevels } from "@/lib/ai/thinking-levels";
 import { validateSessionPlanProviderDisclosure } from "@/lib/advisory/provider-disclosure-gates";
+import {
+  inferAdvisoryIntent,
+  inferAdvisoryMode,
+  type AdvisoryIntent,
+  type AdvisoryPlannedMode,
+} from "@/lib/advisory/session-intent";
 
-type Intent = "decision" | "stress-test" | "compare" | "ideas" | "red-team";
-type PlannedMode = "roundtable" | "competitive" | "formal-board";
+type Intent = AdvisoryIntent;
+type PlannedMode = AdvisoryPlannedMode;
 type ThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
 interface PlannedAdvisor {
@@ -39,30 +45,13 @@ function healthyProviderModels() {
   };
 }
 
-function inferIntent(text: string): Intent {
-  const lower = text.toLowerCase();
-  if (/(red[- ]?team|attack this|tear (this|it) apart|adversarial|devil'?s advocate)/.test(lower)) return "red-team";
-  if (/(compare|versus| vs |alternative|option|which of these|trade[- ]?off)/.test(lower)) return "compare";
-  if (/(brainstorm|generate ideas|come up with|new ideas|pitch|ideat)/.test(lower)) return "ideas";
-  if (/(review|critique|audit|stress[- ]?test|pressure[- ]?test|evaluate|solid|gaps?|risks?|weakness|improve|fix|revise|changes? needed)/.test(lower)) return "stress-test";
-  return "decision";
-}
-
 function chooseModel(availableModelIds: string[], preferredIds: string[]) {
   const available = new Set(availableModelIds.length ? availableModelIds : ALLOWED_MODELS);
   return preferredIds.find((modelId) => available.has(modelId)) ?? availableModelIds[0] ?? "claude-sonnet";
 }
 
 function inferMode(intent: Intent, topic: string): PlannedMode {
-  const lower = topic.toLowerCase();
-  if (intent === "ideas") return "competitive";
-  if (/(formal board|formal review|high[- ]?stakes|gate|ship\/caution\/block|verdict\.json|independent review|architecture gate|quality gate)/.test(lower)) {
-    return "formal-board";
-  }
-  if ((intent === "stress-test" || intent === "red-team") && /(plan|spec|proposal|architecture|skill|repo|code|release|launch|migration|strategy)/.test(lower)) {
-    return "formal-board";
-  }
-  return "roundtable";
+  return inferAdvisoryMode(intent, topic);
 }
 
 function supportedPlannerThinkingLevels(model: ProviderModel, thinkingLevelsByModelId?: Map<string, ThinkingLevel[]>) {
@@ -76,10 +65,51 @@ function normalizeFallbackThinkingLevel(modelId: string, requested: ThinkingLeve
 }
 
 function fallbackPlan(topic: string, availableModelIds = ALLOWED_MODELS, thinkingLevelsByModelId?: Map<string, ThinkingLevel[]>): { intent: Intent; mode: PlannedMode; advisors: PlannedAdvisor[] } {
-  const intent = inferIntent(topic);
+  const intent = inferAdvisoryIntent(topic);
   const mode = inferMode(intent, topic);
   const lower = topic.toLowerCase();
-  const advisors: PlannedAdvisor[] = [
+  const advisors: PlannedAdvisor[] = intent === "debug" ? [
+    {
+      name: "Root Cause Analyst",
+      role: "Bug diagnosis and evidence reviewer",
+      purpose: "Uses the pain point, stack traces, and selected files to identify likely root causes and confidence.",
+      modelId: chooseModel(availableModelIds, ["codex-frontier", "claude-opus", "claude-sonnet", "gemini-flash"]),
+      thinkingLevel: "max",
+      stance: "diagnostic",
+    },
+    {
+      name: "Architecture Reviewer",
+      role: "System boundary and data-flow reviewer",
+      purpose: "Checks whether the failure comes from architecture, state flow, dependency boundaries, or integration assumptions.",
+      modelId: chooseModel(availableModelIds, ["claude-opus", "claude-sonnet", "codex-frontier", "gemini-flash"]),
+      thinkingLevel: "max",
+      stance: "systems",
+    },
+    {
+      name: "Regression Engineer",
+      role: "Test and reproduction specialist",
+      purpose: "Defines the smallest reproduction, missing regression tests, and commands that would prove the fix.",
+      modelId: chooseModel(availableModelIds, ["gemini-flash", "codex-frontier", "claude-sonnet", "claude-opus"]),
+      thinkingLevel: "high",
+      stance: "testing",
+    },
+    {
+      name: "Patch Strategist",
+      role: "Minimal fix and rollout planner",
+      purpose: "Proposes the smallest coherent fix strategy, sequencing, and risk controls.",
+      modelId: chooseModel(availableModelIds, ["codex-frontier", "claude-sonnet", "gemini-flash", "claude-opus"]),
+      thinkingLevel: "high",
+      stance: "practical",
+    },
+    {
+      name: "Adversarial Reviewer",
+      role: "Hypothesis challenger",
+      purpose: "Challenges weak assumptions and prevents overconfident fixes when evidence is incomplete.",
+      modelId: chooseModel(availableModelIds, ["claude-sonnet", "claude-opus", "codex-frontier", "gemini-flash"]),
+      thinkingLevel: "max",
+      stance: "adversarial",
+    },
+  ] : [
     {
       name: "Decision Lead",
       role: "Moderator and synthesis reviewer",
@@ -114,7 +144,7 @@ function fallbackPlan(topic: string, availableModelIds = ALLOWED_MODELS, thinkin
     },
   ];
 
-  if (/(legal|compliance|privacy|regulatory|contract|medical|health|claims?)/.test(lower)) {
+  if (intent !== "debug" && /(legal|compliance|privacy|regulatory|contract|medical|health|claims?)/.test(lower)) {
     advisors.splice(2, 0, {
       name: "Risk Counsel",
       role: "Legal, compliance, and policy risk reviewer",
@@ -125,7 +155,7 @@ function fallbackPlan(topic: string, availableModelIds = ALLOWED_MODELS, thinkin
     });
   }
 
-  if (/(software|app|api|database|architecture|security|code|engineering|local|cli|model)/.test(lower)) {
+  if (intent !== "debug" && /(software|app|api|database|architecture|security|code|engineering|local|cli|model)/.test(lower)) {
     advisors.splice(2, 0, {
       name: "Technical Reviewer",
       role: "Architecture, implementation, and security reviewer",
@@ -246,7 +276,7 @@ Inferred intent from heuristics: ${fallback.intent}
 
 Return JSON with this exact shape:
 {
-  "intent": "decision" | "stress-test" | "compare" | "ideas" | "red-team",
+  "intent": "decision" | "stress-test" | "compare" | "ideas" | "red-team" | "debug",
   "mode": "roundtable" | "competitive" | "formal-board",
   "advisors": [
     {
@@ -260,7 +290,7 @@ Return JSON with this exact shape:
   ]
 }
 
-Use 4-6 advisors. If the user asks to review a plan, use stress-test and include at least one skeptical/reality-checking reviewer.
+Use 4-6 advisors. If the user asks to review a plan, use stress-test and include at least one skeptical/reality-checking reviewer. If the user describes a bug, failing test, stack trace, regression, build error, or local project debugging issue, use debug and include root-cause, architecture, test/regression, patch strategy, and adversarial review perspectives.
 
 Mode guidance:
 - roundtable: exploratory collaborative judgment.
@@ -284,7 +314,7 @@ Mode guidance:
         advisors?: Array<Partial<PlannedAdvisor>>;
       };
 
-      const intent: Intent = parsed.intent && ["decision", "stress-test", "compare", "ideas", "red-team"].includes(parsed.intent)
+      const intent: Intent = parsed.intent && ["decision", "stress-test", "compare", "ideas", "red-team", "debug"].includes(parsed.intent)
         ? parsed.intent
         : fallback.intent;
       const mode: PlannedMode = parsed.mode === "competitive" || parsed.mode === "formal-board"

@@ -179,6 +179,8 @@ export interface AdvisorySession {
   insights?: SessionInsights | null;
   referenceContext?: string;
   referenceContextBudgetChars?: number;
+  sourceKinds?: Array<"attached-file" | "local-project">;
+  localProjectFileCount?: number;
   competitive?: CompetitiveState | null;
   formalBoard?: FormalBoardState | null;
   competitiveVoteMode?: "agent-winner" | "top-ideas";

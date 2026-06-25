@@ -8,6 +8,16 @@ Panely follows sparse milestone releases. GitHub Releases are created from semve
 
 - Keep upcoming milestone changes here until the release PR renames this section to `## [vX.Y.Z] - YYYY-MM-DD - Milestone name`.
 
+## [v0.6.0] - 2026-06-25 - Local Project Debug Board
+
+- Added local project intake to the launch wizard so developers can point Panely at an absolute local codebase path, scan relevant text files, and review the selected packet before model calls.
+- Added a guarded same-origin, loopback-only project context endpoint with dangerous-root rejection, symlink skipping, secret-like file skipping, generated-directory exclusions, scan limits, and context-budget truncation.
+- Added Debug intent detection and planner behavior for bugs, failing tests, stack traces, regressions, and build/lint/runtime errors, with fallback seats for root cause, architecture, regression, patch strategy, and adversarial review.
+- Added local-project provider disclosure handling so project packets are treated as non-public source material before planner or session launch calls.
+- Added session metadata and start-event copy that reports local project packets by selected-file count while keeping absolute paths redacted.
+- Added the live plan/evidence document and screenshots for desktop packet intake, selected-file/warning states, and mobile layout verification.
+- Verification: focused scanner/disclosure/planner tests, full `npm run verify`, `git diff --check`, publish-safety scanner, and adversarial code review before release.
+
 ## [v0.5.0] - 2026-06-25 - Formal Board and Local CLI Trust
 
 - Added Formal Board Review with independent first round, rebuttal, convergence, source-packet hashing, resume support, structured verdict artifacts, Markdown/HTML handoffs, and run metadata.

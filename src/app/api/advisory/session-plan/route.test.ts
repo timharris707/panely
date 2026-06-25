@@ -23,3 +23,16 @@ test("session planner disclosure helper allows public GitHub URLs", () => {
   assert.equal(result.plannerDisclosure.sensitivity, "public");
   assert.equal(result.plannerDisclosure.requiresConsent, false);
 });
+
+test("session planner treats local project source as non-public", () => {
+  const result = validateSessionPlanProviderDisclosure({
+    topic: "Debug this local project",
+    sourceKinds: ["local-project"],
+    localProjectFileCount: 4,
+    modelId: "claude-sonnet",
+  });
+
+  assert.equal(result.allowed, false);
+  assert.equal(result.plannerDisclosure.sensitivity, "non-public");
+  assert.match(result.plannerDisclosure.message, /local project source is non-public/i);
+});

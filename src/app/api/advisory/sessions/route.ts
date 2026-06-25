@@ -10,7 +10,9 @@ import type { ModelHealthResult } from "@/lib/ai/model-health";
 import { buildSessionProviderDisclosureForRequest } from "@/lib/advisory/provider-disclosure-gates";
 import { createFormalBoardState } from "@/lib/advisory/formal-board";
 import { buildSourcePacket } from "@/lib/advisory/source-packet";
+import { buildLocalProjectStartSummary } from "@/lib/advisory/local-project-summary";
 import type { AdvisorySessionMode } from "@/types/advisory";
+import type { SourceKind } from "@/lib/advisory/provider-disclosure";
 
 const DEFAULT_REFERENCE_CONTEXT_BUDGET_CHARS = 50_000;
 const MAX_REFERENCE_CONTEXT_BUDGET_CHARS = 1_000_000;
@@ -42,6 +44,12 @@ function normalizeMode(mode: unknown): AdvisorySessionMode | null {
   return mode === "roundtable" || mode === "competitive" || mode === "formal-board"
     ? mode
     : null;
+}
+
+function sourceKindsFromValue(value: unknown): SourceKind[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const sourceKinds = value.filter((item): item is SourceKind => item === "attached-file" || item === "local-project");
+  return sourceKinds.length ? Array.from(new Set(sourceKinds)) : undefined;
 }
 
 export async function GET() {
@@ -79,6 +87,9 @@ export async function POST(req: NextRequest) {
     const id = `session-${Date.now()}-${randomUUID().slice(0, 8)}`;
     const now = new Date().toISOString();
     const resolvedReferenceContextBudget = resolveReferenceContextBudget(referenceContextBudgetChars);
+    const sourceKinds = sourceKindsFromValue(body.sourceKinds);
+    const localProjectFileCount = Math.max(0, Math.trunc(Number(body.localProjectFileCount || 0)));
+    const localProjectSummary = buildLocalProjectStartSummary(sourceKinds, localProjectFileCount);
     const sessionDisclosure = buildSessionProviderDisclosureForRequest(body || {});
     const { disclosure } = sessionDisclosure;
     if (!sessionDisclosure.allowed) {
@@ -138,10 +149,10 @@ export async function POST(req: NextRequest) {
       : undefined;
 
     const startText = isCompetitive
-      ? `⚔️ **Competitive Ideation started.**\n\n**Topic:** ${topic}\n\n**Mode:** Competitive Ideation | **Model:** ${model || "claude-sonnet"}\n\n**Competitors:** ${(agents || []).join(", ") || "TBD"}\n\n**Round 1 — PITCH:** Each agent pitches ${resolvedCompetitiveVoteMode === "top-ideas" ? "their top three improvement ideas" : "their boldest idea"}.\n**Round 2 — CRITIQUE:** Agents stress-test the ideas by name.\n**Round 3 — VOTE:** ${resolvedCompetitiveVoteMode === "top-ideas" ? `Each agent votes for the top ${resolvedCompetitiveTopCount} ideas overall.` : "Each agent votes for the best idea (not their own) with reasoning."}\n\nLet the competition begin...`
+      ? `⚔️ **Competitive Ideation started.**\n\n**Topic:** ${topic}\n\n**Mode:** Competitive Ideation | **Model:** ${model || "claude-sonnet"}${localProjectSummary}\n\n**Competitors:** ${(agents || []).join(", ") || "TBD"}\n\n**Round 1 — PITCH:** Each agent pitches ${resolvedCompetitiveVoteMode === "top-ideas" ? "their top three improvement ideas" : "their boldest idea"}.\n**Round 2 — CRITIQUE:** Agents stress-test the ideas by name.\n**Round 3 — VOTE:** ${resolvedCompetitiveVoteMode === "top-ideas" ? `Each agent votes for the top ${resolvedCompetitiveTopCount} ideas overall.` : "Each agent votes for the best idea (not their own) with reasoning."}\n\nLet the competition begin...`
       : isFormalBoard
-      ? `🧾 **Formal Board Review started.**\n\n**Topic:** ${topic}\n\n**Mode:** Formal Board Review | **Model:** ${model || "claude-sonnet"}\n\n**Source packet SHA-256:** ${sourcePacket?.hash || "pending"}\n\n**Seats:** ${(agents || []).join(", ") || "TBD"}\n\n**Round 1 — INDEPENDENT REVIEW:** Each seat reviews the same source packet with prompt-level peer-output isolation.\n**Round 2 — REBUTTAL:** Seats receive the Round 1 packet and update or challenge the board.\n**Final — VERDICT:** Panely produces an advisory-board/verdict@1 artifact with evidence, judgment calls, couldn't-verify items, and dissent.\n\nStanding by for formal board inputs...`
-      : `🚀 **Session started.**\n\n**Topic:** ${topic}\n\n**Mode:** Roundtable | **Model:** ${model || "claude-sonnet"}\n\n**Participants:** ${(agents || []).join(", ") || "TBD"}\n\nStanding by for agent inputs...`;
+      ? `🧾 **Formal Board Review started.**\n\n**Topic:** ${topic}\n\n**Mode:** Formal Board Review | **Model:** ${model || "claude-sonnet"}${localProjectSummary}\n\n**Source packet SHA-256:** ${sourcePacket?.hash || "pending"}\n\n**Seats:** ${(agents || []).join(", ") || "TBD"}\n\n**Round 1 — INDEPENDENT REVIEW:** Each seat reviews the same source packet with prompt-level peer-output isolation.\n**Round 2 — REBUTTAL:** Seats receive the Round 1 packet and update or challenge the board.\n**Final — VERDICT:** Panely produces an advisory-board/verdict@1 artifact with evidence, judgment calls, couldn't-verify items, and dissent.\n\nStanding by for formal board inputs...`
+      : `🚀 **Session started.**\n\n**Topic:** ${topic}\n\n**Mode:** Roundtable | **Model:** ${model || "claude-sonnet"}${localProjectSummary}\n\n**Participants:** ${(agents || []).join(", ") || "TBD"}\n\nStanding by for agent inputs...`;
 
     const session: AdvisorySessionRecord = {
       id,
@@ -165,6 +176,8 @@ export async function POST(req: NextRequest) {
       forkedAtEvent: forkedAtEvent || null,
       referenceContext: referenceContext ? String(referenceContext).slice(0, resolvedReferenceContextBudget) : undefined,
       referenceContextBudgetChars: resolvedReferenceContextBudget,
+      ...(sourceKinds ? { sourceKinds } : {}),
+      ...(localProjectFileCount > 0 ? { localProjectFileCount } : {}),
       paused: false,
       ...(agentPersonalityTraits && Object.keys(agentPersonalityTraits).length > 0 ? { agentPersonalityTraits } : {}),
       ...(agentCommunicationStyles && Object.keys(agentCommunicationStyles).length > 0 ? { agentCommunicationStyles } : {}),

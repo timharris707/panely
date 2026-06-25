@@ -47,6 +47,20 @@ test("attached files are treated as unknown sensitivity", () => {
   assert.deepEqual(disclosure.providers, ["Anthropic / Claude", "Google / Gemini"]);
 });
 
+test("local project source is treated as non-public", () => {
+  const disclosure = buildProviderDisclosure({
+    topic: "Debug this project",
+    sourceKinds: ["local-project"],
+    localProjectFileCount: 3,
+    planningModelIds: ["claude-sonnet"],
+    modelIds: ["codex-frontier"],
+  });
+  assert.equal(disclosure.sensitivity, "non-public");
+  assert.equal(disclosure.requiresConsent, true);
+  assert.match(disclosure.message, /local project source is non-public/i);
+  assert.deepEqual(disclosure.providers, ["Anthropic / Claude", "OpenAI / Codex"]);
+});
+
 test("provider labels are deduplicated by provider", () => {
   assert.deepEqual(providerLabelsForModelIds(["claude-opus", "claude-sonnet", "codex-frontier"]), [
     "Anthropic / Claude",

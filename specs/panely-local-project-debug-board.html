@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan: Panely Local Project Debug Board</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #080a0f;
+    --panel: #14181f;
+    --panel-2: #1c232d;
+    --panel-3: #10151d;
+    --text: #f5f7fb;
+    --muted: #a8b3c2;
+    --line: #2f3947;
+    --accent: #5eead4;
+    --accent-2: #60a5fa;
+    --warn: #fbbf24;
+    --danger: #fb7185;
+    --ok: #22c55e;
+    --code: #07090d;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(circle at 12% 6%, rgba(94, 234, 212, .12), transparent 28%),
+      radial-gradient(circle at 84% 14%, rgba(96, 165, 250, .12), transparent 32%),
+      var(--bg);
+    color: var(--text);
+    line-height: 1.58;
+  }
+  main { width: min(1180px, calc(100vw - 40px)); margin: 0 auto; padding: 40px 0 78px; }
+  header, section, .phase, figure, details.meta { border: 1px solid var(--line); background: rgba(20, 24, 31, .9); border-radius: 10px; }
+  header { padding: 28px; margin-bottom: 20px; }
+  section, .phase { padding: 24px; margin: 18px 0; }
+  figure { margin: 18px 0; padding: 16px; background: rgba(28, 35, 45, .78); }
+  h1, h2, h3, h4 { margin: 0 0 12px; letter-spacing: 0; }
+  h1 { font-size: clamp(34px, 5vw, 58px); line-height: 1.04; }
+  h2 { font-size: 24px; }
+  h3 { font-size: 20px; }
+  h4 { margin-top: 20px; color: #dce8ff; font-size: 14px; text-transform: uppercase; letter-spacing: .04em; }
+  p, li, figcaption, dd { color: var(--muted); }
+  ul { margin: 8px 0 0; padding-left: 22px; }
+  li { margin: 7px 0; }
+  code { background: var(--code); color: #e7efff; border: 1px solid #232b37; border-radius: 5px; padding: 2px 5px; }
+  details.meta { padding: 12px 16px; margin-top: 18px; }
+  summary { cursor: pointer; color: var(--text); font-weight: 800; }
+  dl { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 8px 14px; margin: 12px 0 0; }
+  dt { color: var(--muted); font-weight: 800; }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  th, td { border: 1px solid var(--line); padding: 10px; text-align: left; vertical-align: top; }
+  th { color: var(--text); background: var(--panel-2); }
+  td { color: var(--muted); }
+  .tag { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; margin-right: 8px; font-size: 11px; font-weight: 900; text-transform: uppercase; }
+  .existing { color: #a5b4fc; }
+  .new { color: #7dd3fc; }
+  .change { color: #facc15; }
+  .status { min-width: 38px; display: inline-block; color: var(--accent); font-weight: 900; text-align: center; }
+  .checklist { list-style: none; padding-left: 0; }
+  .checklist li { border-left: 3px solid var(--line); padding-left: 10px; }
+  .loop, .callout { border-left: 4px solid var(--accent-2); background: rgba(96, 165, 250, .1); border-radius: 8px; padding: 14px; color: var(--muted); margin-top: 14px; }
+  .risk { border-left-color: var(--warn); background: rgba(251, 191, 36, .08); }
+  .ok { border-left-color: var(--ok); background: rgba(34, 197, 94, .08); }
+  .danger { border-left-color: var(--danger); background: rgba(251, 113, 133, .08); }
+  .visual { width: 100%; max-height: 380px; display: block; border-radius: 8px; background: var(--panel-3); }
+  .evidence-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+  .evidence-card { border: 1px dashed var(--line); border-radius: 8px; padding: 14px; background: var(--panel-2); }
+  .evidence-card img { width: 100%; max-height: 280px; object-fit: cover; object-position: top left; border: 1px solid var(--line); border-radius: 8px; margin-top: 10px; display: block; }
+  @media (max-width: 760px) {
+    main { width: min(100vw - 24px, 1180px); padding-top: 24px; }
+    dl { grid-template-columns: 1fr; }
+    section, .phase, header { padding: 18px; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+  <header>
+    <h1>Plan: Panely Local Project Debug Board</h1>
+    <details class="meta" open>
+      <summary>Metadata</summary>
+      <dl>
+        <dt>created</dt><dd>2026-06-25T13:09:57-07:00</dd>
+        <dt>modified</dt><dd>2026-06-25T13:09:57-07:00, 2026-06-25T13:15:19-07:00, 2026-06-25T13:17:38-07:00, 2026-06-25T13:38:13-07:00, 2026-06-25T13:49:17-07:00</dd>
+        <dt>commits</dt><dd>pending</dd>
+        <dt>agent name</dt><dd>Codex</dd>
+        <dt>session id</dt><dd>019efcdb-afca-78d2-93fc-220dcdb3c9c0</dd>
+        <dt>back refs</dt><dd>specs/panely-formal-board-v2-buildout.html, specs/panely-release-and-cli-capability-workflow.html, user request for local project debugging and repeatable plan-build-review-release workflow</dd>
+        <dt>forward refs</dt><dd>pending implementation commit and release tag</dd>
+      </dl>
+    </details>
+  </header>
+
+  <figure>
+    <svg class="visual" viewBox="0 0 1536 760" role="img" aria-label="Local project debug board flow">
+      <rect width="1536" height="760" fill="#10151d"/>
+      <circle cx="226" cy="150" r="144" fill="#5eead4" opacity=".12"/>
+      <circle cx="1294" cy="178" r="172" fill="#60a5fa" opacity=".12"/>
+      <text x="88" y="96" fill="#f5f7fb" font-size="48" font-weight="800">Local Project Debug Board</text>
+      <text x="88" y="146" fill="#a8b3c2" font-size="24">Point Panely at a codebase, describe the pain, get a rigorous multi-model diagnosis.</text>
+      <g transform="translate(92 236)">
+        <rect width="260" height="138" rx="14" fill="#1c232d" stroke="#2f3947"/>
+        <text x="26" y="58" fill="#5eead4" font-size="28" font-weight="800">Project path</text>
+        <text x="26" y="96" fill="#a8b3c2" font-size="18">Local only</text>
+      </g>
+      <g transform="translate(390 236)">
+        <rect width="260" height="138" rx="14" fill="#1c232d" stroke="#2f3947"/>
+        <text x="26" y="58" fill="#5eead4" font-size="28" font-weight="800">Context packet</text>
+        <text x="26" y="96" fill="#a8b3c2" font-size="18">Relevant files</text>
+      </g>
+      <g transform="translate(688 236)">
+        <rect width="260" height="138" rx="14" fill="#1c232d" stroke="#2f3947"/>
+        <text x="26" y="58" fill="#5eead4" font-size="28" font-weight="800">Debug board</text>
+        <text x="26" y="96" fill="#a8b3c2" font-size="18">Specialized lenses</text>
+      </g>
+      <g transform="translate(986 236)">
+        <rect width="260" height="138" rx="14" fill="#1c232d" stroke="#2f3947"/>
+        <text x="26" y="58" fill="#5eead4" font-size="28" font-weight="800">Diagnosis</text>
+        <text x="26" y="96" fill="#a8b3c2" font-size="18">Fix strategy</text>
+      </g>
+      <g transform="translate(1284 236)">
+        <rect width="160" height="138" rx="14" fill="#1c232d" stroke="#2f3947"/>
+        <text x="22" y="58" fill="#5eead4" font-size="28" font-weight="800">Tests</text>
+        <text x="22" y="96" fill="#a8b3c2" font-size="18">Proof</text>
+      </g>
+      <path d="M352 305 H390 M650 305 H688 M948 305 H986 M1246 305 H1284" stroke="#60a5fa" stroke-width="6"/>
+      <rect x="92" y="520" width="1352" height="112" rx="14" fill="#14181f" stroke="#2f3947"/>
+      <text x="130" y="582" fill="#f5f7fb" font-size="26" font-weight="800">Definition of done: a developer can paste a local repo path, describe a bug, review the selected files, and launch a board built for debugging.</text>
+    </svg>
+    <figcaption>Panely becomes a local-first debugging room for large codebases without pretending to be an autonomous IDE.</figcaption>
+  </figure>
+
+  <section id="purpose">
+    <h2>Purpose</h2>
+    <p>Build a Local Project Debug Board workflow for Panely and formalize the repeatable plan-review-build-review-release process as a reusable Codex skill. The product goal is to help developers bring a hard local codebase problem into Panely, have the app assemble a bounded source packet from relevant files, and run a multi-model advisory board that produces a diagnosis, fix strategy, and test plan.</p>
+  </section>
+
+  <section id="problem">
+    <h2>Problem</h2>
+    <p>Panely can already review pasted text and attached files, but a developer with a large local project still has to manually choose files and explain context. That breaks down for real bugs where the useful context is scattered across stack traces, package files, configs, tests, recent code, and likely suspect modules. Separately, the human delivery workflow we have used all day is valuable but not yet packaged as a reusable command.</p>
+    <figure>
+      <svg class="visual" viewBox="0 0 1536 620" role="img" aria-label="Developer debugging pain points">
+        <rect width="1536" height="620" fill="#10151d"/>
+        <text x="80" y="88" fill="#f5f7fb" font-size="42" font-weight="800">Current developer friction</text>
+        <g transform="translate(92 168)">
+          <rect width="310" height="250" rx="12" fill="#1c232d" stroke="#2f3947"/>
+          <text x="28" y="58" fill="#fbbf24" font-size="28" font-weight="800">Too many files</text>
+          <text x="28" y="104" fill="#a8b3c2" font-size="20">Manual curation does</text>
+          <text x="28" y="134" fill="#a8b3c2" font-size="20">not scale to real repos.</text>
+        </g>
+        <g transform="translate(446 168)">
+          <rect width="310" height="250" rx="12" fill="#1c232d" stroke="#2f3947"/>
+          <text x="28" y="58" fill="#fbbf24" font-size="28" font-weight="800">Missing clues</text>
+          <text x="28" y="104" fill="#a8b3c2" font-size="20">Stack traces and tests</text>
+          <text x="28" y="134" fill="#a8b3c2" font-size="20">point to context.</text>
+        </g>
+        <g transform="translate(800 168)">
+          <rect width="310" height="250" rx="12" fill="#1c232d" stroke="#2f3947"/>
+          <text x="28" y="58" fill="#fbbf24" font-size="28" font-weight="800">No review gate</text>
+          <text x="28" y="104" fill="#a8b3c2" font-size="20">Developers need to see</text>
+          <text x="28" y="134" fill="#a8b3c2" font-size="20">what will be sent.</text>
+        </g>
+        <g transform="translate(1154 168)">
+          <rect width="290" height="250" rx="12" fill="#1c232d" stroke="#2f3947"/>
+          <text x="28" y="58" fill="#fbbf24" font-size="28" font-weight="800">Repeatable flow</text>
+          <text x="28" y="104" fill="#a8b3c2" font-size="20">The release process</text>
+          <text x="28" y="134" fill="#a8b3c2" font-size="20">needs one command.</text>
+        </g>
+      </svg>
+      <figcaption>The feature should reduce context-gathering friction while keeping user review and provider disclosure explicit.</figcaption>
+    </figure>
+  </section>
+
+  <section id="solution">
+    <h2>Solution</h2>
+    <p>Add an optional Local Project section to the launch wizard. The user enters a local project path and describes the bug or pain point. Panely scans the project locally, builds a source packet from relevant text files under the selected context budget, shows the files and warnings, and includes that packet in the advisory session reference context after provider disclosure is accepted. The planner receives a new debug intent and recommends debugger-specific board seats. In parallel, create a reusable Codex skill for the repeatable plan-review-build-review-release workflow.</p>
+  </section>
+
+  <section id="scope">
+    <h2>Scope Boundaries</h2>
+    <div class="callout">
+      This run builds a local project intake and debug-board launch workflow. It does not give Panely write access to the target project, apply patches, or run arbitrary project commands automatically. Those are future phases after the file-selection and disclosure model is trustworthy.
+    </div>
+    <table>
+      <thead><tr><th>In scope</th><th>Out of scope for this release</th></tr></thead>
+      <tbody>
+        <tr><td>Local path input, scan, file selection, source packet preview, disclosure, debug intent, planner seats, session launch.</td><td>Autonomous code editing, test execution inside arbitrary repos, remote repository cloning, background job queues.</td></tr>
+        <tr><td>Conservative ignore rules for large/binary/generated directories and files.</td><td>Full gitignore parser parity, language-server indexing, semantic embeddings.</td></tr>
+        <tr><td>Reusable local Codex skill for planf3 plus adversarial review plus GitHub release flow.</td><td>Publishing the skill to a public marketplace.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="files" class="files">
+    <h2>Relevant Files</h2>
+    <h3>Existing Files</h3>
+    <ul>
+      <li><span class="tag existing">existing</span><code>src/components/advisory/LaunchWizard.tsx</code> - launch modal, topic/file intake, disclosure, planning, and session creation.</li>
+      <li><span class="tag existing">existing</span><code>src/app/api/advisory/session-plan/route.ts</code> - AI advisor planner and heuristic fallback.</li>
+      <li><span class="tag existing">existing</span><code>src/app/api/advisory/sessions/route.ts</code> - session creation, provider disclosure, and reference context persistence.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/advisory/source-packet.ts</code> - source packet structure for formal board runs.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/advisory/provider-disclosure.ts</code> - sensitivity and provider disclosure language.</li>
+      <li><span class="tag existing">existing</span><code>src/types/advisory.ts</code> - session and reference context types.</li>
+      <li><span class="tag existing">existing</span><code>src/styles/advisory.css</code> - launch wizard styling.</li>
+      <li><span class="tag existing">existing</span><code>.github/workflows/release.yml</code>, <code>CHANGELOG.md</code>, <code>README.md</code> - established GitHub release workflow.</li>
+    </ul>
+    <h3>New Files</h3>
+    <ul>
+      <li><span class="tag new">new</span><code>src/lib/advisory/project-context.ts</code> - pure local project scanner, scoring, packet builder, limits, and warnings.</li>
+      <li><span class="tag new">new</span><code>src/lib/advisory/project-context.test.ts</code> - scanner and packet tests using temporary fixture projects.</li>
+      <li><span class="tag new">new</span><code>src/app/api/advisory/project-context/route.ts</code> - local-only API endpoint for project packet previews with same-origin/loopback protection.</li>
+      <li><span class="tag new">new</span><code>src/app/api/advisory/project-context/route.test.ts</code> - endpoint validation, anti-CSRF, same-origin, and disclosure regression tests.</li>
+      <li><span class="tag new">new</span><code>~/.codex/skills/panely-ship-run/SKILL.md</code> - reusable local workflow skill for this plan-review-build-review-release pattern. This is a local Codex capability, not a GitHub release artifact.</li>
+      <li><span class="tag new">new</span><code>~/.codex/skills/panely-ship-run/agents/openai.yaml</code> - UI metadata for invoking the local skill.</li>
+      <li><span class="tag new">new</span><code>specs/panely-local-project-debug-board/</code> - visual evidence screenshots for this run.</li>
+    </ul>
+  </section>
+
+  <section id="phases">
+    <h2>Implementation Phases</h2>
+    <p><strong>IMPORTANT:</strong> Execute every phase in order. Update this document before starting a phase, after completing a phase, and after review findings. Status markers: <code>[]</code> idle, <code>[wip]</code> in progress, <code>[x]</code> complete, <code>[f]</code> failed.</p>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 0: Plan Review Gate</h3>
+      <p>Create this plan, run adversarial review, and incorporate accepted feedback before code changes.</p>
+      <h4>0.1 Plan Creation</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Create live HTML plan in <code>specs/panely-local-project-debug-board.html</code>.</li>
+        <li><code class="status">[x]</code> Include Local Project Debug Board product scope, repeatable workflow skill scope, testing, visual evidence, and release steps.</li>
+        <li><code class="status">[x]</code> Open plan locally for user visibility.</li>
+      </ul>
+      <h4>0.2 Adversarial Plan Review</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Spawn adversarial reviewer focused on scope, privacy, local filesystem safety, context-budget correctness, UI complexity, testing gaps, and release risk.</li>
+        <li><code class="status">[x]</code> Incorporate accepted review changes into this plan.</li>
+        <li><code class="status">[x]</code> Mark Phase 0 complete only after review is clean or findings are resolved.</li>
+      </ul>
+      <h4>0.3 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> <code>rg -n "\\{\\{|\\}\\}" specs/panely-local-project-debug-board.html</code> - proves no template tokens remain.</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 1: Local Project Context Engine</h3>
+      <p>Build the pure scanner and packet generator first so UI and API can stay thin.</p>
+      <h4>1.1 Scanner and Limits</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Validate absolute local project paths and reject missing paths or non-directories with clear errors.</li>
+        <li><code class="status">[x]</code> Reject dangerous roots and private stores: <code>/</code>, user home root, <code>~/.codex</code>, <code>~/.ssh</code>, <code>~/.aws</code>, <code>~/.config</code>, <code>~/.gnupg</code>, and similar credential directories.</li>
+        <li><code class="status">[x]</code> Resolve <code>realpath</code>, do not follow symlinks, and require every selected file realpath to remain inside the selected project root.</li>
+        <li><code class="status">[x]</code> Walk the project recursively with hard limits for depth, files, directories, bytes read, selected files, elapsed time, and warnings.</li>
+        <li><code class="status">[x]</code> Implement concrete defaults: <code>MAX_DEPTH=12</code>, <code>MAX_CANDIDATE_FILES=900</code>, <code>MAX_DIRS=260</code>, <code>MAX_BYTES_READ=1_200_000</code>, <code>MAX_SELECTED_FILES=24</code>, <code>MAX_SCAN_MS=2500</code>, and <code>MAX_WARNINGS=40</code>.</li>
+        <li><code class="status">[x]</code> Use conservative excludes: <code>.git</code>, <code>node_modules</code>, <code>.next</code>, <code>dist</code>, <code>build</code>, coverage, binary/media, large files, generated artifacts, and secrets-like env files.</li>
+        <li><code class="status">[x]</code> Identify key project files such as README, package files, tsconfig, lockfiles, test configs, source files, and paths mentioned in stack traces or prompt text.</li>
+        <li><code class="status">[x]</code> Score candidate files from prompt terms, path mentions, extension priority, and project metadata.</li>
+      </ul>
+      <h4>1.2 Packet Builder</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Build a bounded markdown source packet with a redacted project root label, scan summary, user pain point, selected file manifest, warnings, and selected file contents.</li>
+        <li><code class="status">[x]</code> Use a budget allocator that preserves packet preamble, manifest, and warnings; truncate selected file contents last.</li>
+        <li><code class="status">[x]</code> Preserve warnings and manifest even when file contents are truncated.</li>
+        <li><code class="status">[x]</code> Do not include absolute project paths in model packets by default; show relative paths plus a redacted root label. Full local path stays in the local UI only unless the user explicitly opts in later.</li>
+        <li><code class="status">[x]</code> Include enough metadata for the board to know this is local project material sent through selected CLIs after disclosure.</li>
+      </ul>
+      <h4>1.3 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> <code>npm test -- src/lib/advisory/project-context.test.ts</code> - proves scanner, scoring, excludes, symlink containment, dangerous-root rejection, large-repo limits, budget behavior, and warning preservation.</li>
+        <li><code class="status">[x]</code> Test invariant: returned <code>referenceContext.length &lt;= contextBudgetChars</code>, while the manifest and warnings remain present after truncation.</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 2: Project Context API</h3>
+      <p>Expose the scanner as a local-only preview endpoint for the launch wizard.</p>
+      <h4>2.1 API Route</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add <code>POST /api/advisory/project-context</code> accepting <code>projectPath</code>, <code>topic</code>, and <code>contextBudgetChars</code>.</li>
+        <li><code class="status">[x]</code> Return selected files, skipped counts, warnings, packet character count, and reference context text.</li>
+        <li><code class="status">[x]</code> Export <code>runtime = "nodejs"</code> and keep the endpoint strictly server-side; do not send data to any model provider during scan.</li>
+        <li><code class="status">[x]</code> Require an explicit request header for project scans, reject cross-site fetches with <code>Sec-Fetch-Site</code>, verify origin/referer host matches the request host, and allow only loopback hosts.</li>
+        <li><code class="status">[x]</code> Add <code>sourceKinds: ["local-project"]</code> or <code>localProjectFileCount</code> to provider disclosure helpers so local project material always requires consent for both planner and session creation.</li>
+      </ul>
+      <h4>2.2 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> <code>npm test -- src/app/api/advisory/project-context/route.test.ts src/lib/advisory/project-context.test.ts src/lib/advisory/provider-disclosure.test.ts src/app/api/advisory/sessions/route.test.ts</code> - proves endpoint validation, anti-CSRF, packet response, and disclosure wiring.</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 3: Debug Intent and Advisor Planning</h3>
+      <p>Make debugging a first-class planning contract before the UI starts sending project packets to the planner.</p>
+      <h4>3.1 Intent</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add <code>debug</code> intent heuristics for bug, error, stack trace, failing test, regression, TypeScript/build/lint failure, and broken behavior language.</li>
+        <li><code class="status">[x]</code> Update planner JSON schema and fallback plan to support <code>debug</code>.</li>
+        <li><code class="status">[x]</code> Prefer <code>formal-board</code> for high-stakes debugging and <code>roundtable</code> for exploratory troubleshooting.</li>
+      </ul>
+      <h4>3.2 Debug Seats</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add fallback seats such as Root Cause Analyst, Architecture Reviewer, Test/Regression Engineer, Patch Strategist, and Adversarial Reviewer.</li>
+        <li><code class="status">[x]</code> Instruct planner to consider selected project files and produce roles that map to the bug, not static mascots.</li>
+      </ul>
+      <h4>3.3 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> <code>npm test -- src/app/api/advisory/session-plan/route.test.ts</code> - proves debug intent fallback and disclosure behavior.</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 4: Launch Wizard Project Intake</h3>
+      <p>Add the user-facing project path workflow without making the setup feel crowded. Be explicit that scanning is local, but generating the advisor plan is a model call.</p>
+      <h4>4.1 UI Controls</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add a compact Local Project section below the topic box with path input, scan button, clear button, status, and selected-file summary.</li>
+        <li><code class="status">[x]</code> Show selected files as readable chips/cards with path, size, score reason, and truncation state.</li>
+        <li><code class="status">[x]</code> Show warnings for skipped directories, skipped large/binary files, and env/secrets files without exposing secret contents.</li>
+        <li><code class="status">[x]</code> Make the UI clear that scan is local, while both advisor-plan generation and session launch may send selected source material through the chosen local CLIs after provider disclosure.</li>
+      </ul>
+      <h4>4.2 Launch Integration</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Include project packet text in planner inference and session reference context.</li>
+        <li><code class="status">[x]</code> Reset disclosure acceptance when project path or packet changes.</li>
+        <li><code class="status">[x]</code> Reset disclosure acceptance when selected models/providers or context budget changes.</li>
+        <li><code class="status">[x]</code> Preserve existing attachment workflow and context budget behavior.</li>
+      </ul>
+      <h4>4.3 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> <code>npx tsc --noEmit</code> - proves UI/API type integration.</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 5: Debug Output Contract</h3>
+      <p>Ensure the final board has a useful shape for developers.</p>
+      <h4>5.1 Reference Context Framing</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add a debug packet preamble asking the board to return root cause hypotheses, evidence, likely files, proposed fix strategy, and test plan.</li>
+        <li><code class="status">[x]</code> Ensure generated sessions show redacted project label and selected file count in the start event/reference context.</li>
+        <li><code class="status">[x]</code> Keep private source disclosure visible and honest.</li>
+      </ul>
+      <h4>5.2 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> <code>npm test -- src/lib/advisory/project-context.test.ts src/lib/advisory/decision-record.test.ts</code> - proves packet shape and downstream output compatibility.</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 6: Repeatable Delivery Workflow Skill</h3>
+      <p>Create a local Codex skill so Tim can invoke this workflow with a short command later.</p>
+      <h4>6.1 Skill Creation</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Initialize <code>~/.codex/skills/panely-ship-run</code> using the official skill creator script.</li>
+        <li><code class="status">[x]</code> Write a concise <code>SKILL.md</code> that requires planf3 planning, adversarial plan review, live HTML status updates, visual evidence, implementation, adversarial code review, verification, and GitHub release workflow.</li>
+        <li><code class="status">[x]</code> Include explicit user-confirmation gates before publishing actions such as commit, push, tag, or release when the user has not already authorized those actions in the current request.</li>
+        <li><code class="status">[x]</code> Generate <code>agents/openai.yaml</code> metadata.</li>
+      </ul>
+      <h4>6.2 Skill Validation</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> <code>python3 "$HOME/.codex/skills/.system/skill-creator/scripts/quick_validate.py" "$HOME/.codex/skills/panely-ship-run"</code> - proves the skill is discoverable and valid.</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 7: Visual Evidence</h3>
+      <p>Capture screenshots that prove the new workflow is visible, usable, and not visually broken.</p>
+      <h4>7.1 Screenshots</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Capture desktop launch wizard with Local Project section.</li>
+        <li><code class="status">[x]</code> Capture scanned packet summary with selected files, warning states, and long relative paths.</li>
+        <li><code class="status">[x]</code> Capture provider disclosure gate showing local-project source disclosure text.</li>
+        <li><code class="status">[x]</code> Capture mobile/narrow viewport to verify text and controls do not overlap.</li>
+        <li><code class="status">[x]</code> Embed screenshots in the Visual Evidence section below.</li>
+      </ul>
+      <h4>7.2 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> <code>npm run build</code> - proves production rendering compiles.</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[wip]</code> Phase 8: Final Review, Commit, Push, Release</h3>
+      <p>Run final gates, adversarial code review, commit, push, tag, and verify GitHub Release notes.</p>
+      <h4>8.1 Review and Verification</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Run adversarial code review after implementation and before commit.</li>
+        <li><code class="status">[x]</code> Run full <code>npm run verify</code>.</li>
+        <li><code class="status">[x]</code> Run publish-safety and confirm only expected warnings remain.</li>
+      </ul>
+      <h4>8.2 GitHub Workflow</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Choose next semver and add <code>CHANGELOG.md</code> release notes before commit.</li>
+        <li><code class="status">[]</code> Stage only intended repo files and commit approved changes.</li>
+        <li><code class="status">[]</code> Push <code>main</code> to <code>timharris707/panely</code>.</li>
+        <li><code class="status">[]</code> Confirm the release tag does not already exist, create an annotated tag on the pushed commit, and push the tag.</li>
+        <li><code class="status">[]</code> Watch GitHub Actions release workflow and confirm release URL.</li>
+      </ul>
+      <h4>8.3 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> <code>gh release view &lt;tag&gt; --repo timharris707/panely</code> - proves release notes were published.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="validation">
+    <h2>Validation Commands</h2>
+    <ul class="checklist">
+      <li><code class="status">[x]</code> <code>npm test -- src/lib/advisory/project-context.test.ts src/app/api/advisory/project-context/route.test.ts src/app/api/advisory/session-plan/route.test.ts src/lib/advisory/provider-disclosure.test.ts src/app/api/advisory/sessions/route.test.ts</code> - validates scanner, endpoint, disclosure, and planner behavior.</li>
+      <li><code class="status">[x]</code> <code>npm run verify</code> - full release candidate verification.</li>
+      <li><code class="status">[x]</code> <code>git diff --check</code> - whitespace and patch hygiene.</li>
+      <li><code class="status">[x]</code> <code>python3 "$HOME/.codex/skills/.system/skill-creator/scripts/quick_validate.py" "$HOME/.codex/skills/panely-ship-run"</code> - validates the new workflow skill.</li>
+      <li><code class="status">[x]</code> Browser screenshots embedded below - visual evidence of desktop and mobile UI.</li>
+    </ul>
+  </section>
+
+  <section id="questionables">
+    <h2>Questionables</h2>
+    <details open>
+      <summary>Should Panely run project tests automatically?</summary>
+      <p class="qa-answer">Not in this release. Running arbitrary project commands is powerful but risky. This release only reads selected text files locally and produces an advisory context packet. Test-command discovery and explicit user-approved execution can come later.</p>
+    </details>
+    <details>
+      <summary>Should the app parse full .gitignore rules?</summary>
+      <p class="qa-answer">Not initially. A conservative exclude list is safer and faster. Full gitignore parity is useful later but can create surprising omissions if not explained well.</p>
+    </details>
+    <details>
+      <summary>Should local project paths be persisted?</summary>
+      <p class="qa-answer">For this release, only the redacted project label and relative paths may appear in persisted session data or model packets. The absolute path remains local UI state only unless a future explicit opt-in is built.</p>
+    </details>
+  </section>
+
+  <section id="visual-evidence">
+    <h2>Visual Evidence</h2>
+    <p>Screenshots are captured during Phase 7 and embedded here before release.</p>
+    <div class="evidence-grid">
+      <div class="evidence-card">
+        <strong>Desktop launch wizard</strong>
+        <p>Captured after scanning the local fixture project. The wizard shows the Local Project scanner and selected packet summary.</p>
+        <img src="panely-local-project-debug-board/launch-wizard-desktop.png" alt="Desktop launch wizard with local project intake" />
+      </div>
+      <div class="evidence-card">
+        <strong>Project packet summary</strong>
+        <p>Selected files use relative paths, while secret-like files, generated directories, and symlinks are reported as skipped.</p>
+        <img src="panely-local-project-debug-board/project-packet-summary-desktop.png" alt="Project packet summary with selected files and warnings" />
+      </div>
+      <div class="evidence-card">
+        <strong>Provider disclosure gate</strong>
+        <p>Local project source is treated as non-public before advisor planning or session launch can send selected material through local CLIs.</p>
+        <img src="panely-local-project-debug-board/provider-disclosure-gate.png" alt="Provider disclosure gate for local project source" />
+      </div>
+      <div class="evidence-card">
+        <strong>Mobile layout</strong>
+        <p>Narrow viewport evidence: the project path input and Scan button stack without text overlap.</p>
+        <img src="panely-local-project-debug-board/local-project-mobile.png" alt="Mobile launch wizard local project controls" />
+      </div>
+    </div>
+  </section>
+
+  <section id="notes">
+    <h2>Notes</h2>
+    <div class="callout">
+      Product principle: this should feel like "bring my code problem into a board room," not "let the app rummage around my machine." The user must review selected files and provider disclosure before model calls.
+    </div>
+    <div class="danger">
+      Accepted adversarial review changes: local project source must force provider disclosure for planner and session; scan endpoint must require same-origin/loopback headers; dangerous roots and symlink escapes must be blocked; large scans need hard limits; packet budgets must preserve manifest and warnings; release notes must be committed before tagging; model packets should use redacted root labels and relative paths by default.
+    </div>
+    <div class="risk">
+      Residual risk: Codex/Gemini context windows are currently labeled as configured rather than verified. The project packet builder must respect the selected context budget and avoid implying it can always send a whole repo.
+    </div>
+    <div class="callout">
+      Adversarial review cleanup: untracked historical docs under <code>docs/</code> remain intentionally excluded from this commit because they contain developer-specific local path warnings; the committed release candidate does not include those files.
+    </div>
+    <table>
+      <thead><tr><th>Debug board seat</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>Root Cause Analyst</td><td>Use stack traces, failing behavior, and selected files to identify likely cause and confidence.</td></tr>
+        <tr><td>Architecture Reviewer</td><td>Find design mismatch, state-flow, dependency, or boundary issues.</td></tr>
+        <tr><td>Test and Regression Engineer</td><td>Define reproduction, regression tests, and edge cases.</td></tr>
+        <tr><td>Patch Strategist</td><td>Propose the smallest coherent fix path and rollout order.</td></tr>
+        <tr><td>Adversarial Reviewer</td><td>Challenge weak hypotheses and prevent overconfident fixes.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="amendments">
+    <h2>Amendments</h2>
+    <details>
+      <summary>2026-06-25T13:09:57-07:00 - Initial plan created</summary>
+      <p>Created the initial Local Project Debug Board and repeatable workflow-skill plan from the user request.</p>
+    </details>
+    <details>
+      <summary>2026-06-25T13:15:19-07:00 - Adversarial plan review incorporated</summary>
+      <p>Accepted review findings on provider disclosure, filesystem safety, context-budget allocation, release ordering, visual evidence, local workflow-skill scope, and absolute path redaction.</p>
+    </details>
+    <details>
+      <summary>2026-06-25T13:17:38-07:00 - Second review corrections incorporated</summary>
+      <p>Removed the absolute-path persistence contradiction, added concrete scan limit defaults, and added the explicit reference-context budget invariant.</p>
+    </details>
+  </section>
+
+</main>
+</body>
+</html>

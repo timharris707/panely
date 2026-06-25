@@ -1,6 +1,7 @@
 import { getProviderModelById } from "../ai/providers.ts";
 
 export type SourceSensitivity = "public" | "unknown" | "non-public";
+export type SourceKind = "attached-file" | "local-project";
 
 export interface ProviderDisclosure {
   sensitivity: SourceSensitivity;
@@ -85,7 +86,14 @@ function hasOnlyBenignPublicUrlContext(topic: string, urls: string[]) {
   return tokens.length > 0 && tokens.every((token) => BENIGN_PUBLIC_URL_TOPIC_TOKENS.has(token));
 }
 
-export function inferSourceSensitivity(input: { topic: string; attachedFileCount?: number }): SourceSensitivity {
+export function inferSourceSensitivity(input: {
+  topic: string;
+  attachedFileCount?: number;
+  localProjectFileCount?: number;
+}): SourceSensitivity {
+  if ((input.localProjectFileCount ?? 0) > 0) {
+    return "non-public";
+  }
   if ((input.attachedFileCount ?? 0) > 0) return "unknown";
   const topic = input.topic.trim();
   if (!topic) return "unknown";
@@ -112,10 +120,13 @@ export function providerLabelsForModelIds(modelIds: string[]) {
 export function buildProviderDisclosure(input: {
   topic: string;
   attachedFileCount?: number;
+  localProjectFileCount?: number;
+  sourceKinds?: SourceKind[];
   modelIds: string[];
   planningModelIds?: string[];
 }): ProviderDisclosure {
-  const sensitivity = inferSourceSensitivity(input);
+  const hasLocalProject = (input.localProjectFileCount ?? 0) > 0 || input.sourceKinds?.includes("local-project") === true;
+  const sensitivity = hasLocalProject ? "non-public" : inferSourceSensitivity(input);
   const providers = providerLabelsForModelIds([...(input.planningModelIds ?? []), ...input.modelIds]);
   const requiresConsent = sensitivity !== "public";
   const providerList = providers.length ? providers.join(", ") : "the selected model providers";
@@ -124,7 +135,9 @@ export function buildProviderDisclosure(input: {
     requiresConsent,
     providers,
     message: requiresConsent
-      ? `This topic or source material may be non-public. Panely will send it through local CLIs to ${providerList}.`
+      ? hasLocalProject
+        ? `This local project source is non-public. Panely will send the selected project packet through local CLIs to ${providerList}.`
+        : `This topic or source material may be non-public. Panely will send it through local CLIs to ${providerList}.`
       : `This appears to be public source material. Panely will use ${providerList}.`,
   };
 }
