@@ -105,6 +105,7 @@ export default function AdvisoryPage() {
   const [togglingPause, setTogglingPause] = useState(false);
   const [showNewMessages, setShowNewMessages] = useState(false);
   const [endSessionConfirm, setEndSessionConfirm] = useState(false);
+  const [dismissSessionConfirm, setDismissSessionConfirm] = useState(false);
   const [endingSession, setEndingSession] = useState(false);
   const [advancingTurn, setAdvancingTurn] = useState(false);
   const [requestingFullRound, setRequestingFullRound] = useState(false);
@@ -453,6 +454,7 @@ export default function AdvisoryPage() {
     setEvents([]);
     setShowNewMessages(false);
     setEndSessionConfirm(false);
+    setDismissSessionConfirm(false);
     setSessionInsights(null);
     setActionItems([]);
     setMobileSidebarOpen(false);
@@ -485,6 +487,7 @@ export default function AdvisoryPage() {
       setEvents([]);
       setShowNewMessages(false);
       setEndSessionConfirm(false);
+      setDismissSessionConfirm(false);
       setSessionInsights(null);
       setActionItems([]);
       void loadSessionEvents(nextSession.id);
@@ -678,17 +681,35 @@ export default function AdvisoryPage() {
     }
   };
 
-  const handleArchive = async () => {
+  const handleArchive = async (dismiss = false) => {
     if (!activeSession) return;
     setArchiving(true);
     try {
-      const res = await fetch(`/api/advisory/sessions/${activeSession.id}/archive`, { method: "POST" });
+      const archiveUrl = dismiss
+        ? `/api/advisory/sessions/${activeSession.id}/archive?mode=dismiss`
+        : `/api/advisory/sessions/${activeSession.id}/archive`;
+      const res = await fetch(archiveUrl, { method: "POST" });
       if (!res.ok) throw new Error(await res.text());
-      setSessions((prev) => prev.filter((s) => s.id !== activeSession.id));
-      setActiveSession(null);
-      setEvents([]);
-      setSessionInsights(null);
-      setActionItems([]);
+      const data = await res.json();
+      if (dismiss) {
+        const dismissedSession = (data.session || { ...activeSession, status: "abandoned", archived: false }) as AdvisorySession;
+        setSessions((prev) => prev.map((s) => s.id === activeSession.id ? dismissedSession : s));
+        setActiveView("history");
+        setActiveSession(dismissedSession);
+        setEvents(dismissedSession.events || events);
+        setIsGenerating(false);
+        setConnectingToAI(false);
+        setThinkingAgent(null);
+        setIsPaused(true);
+      } else {
+        setSessions((prev) => prev.filter((s) => s.id !== activeSession.id));
+        setActiveSession(null);
+        setEvents([]);
+        setSessionInsights(null);
+        setActionItems([]);
+      }
+      setEndSessionConfirm(false);
+      setDismissSessionConfirm(false);
       await loadSessions();
     } catch (e) {
       console.error("Archive error:", e);
@@ -1066,12 +1087,13 @@ export default function AdvisoryPage() {
         else if (compareMode) { setCompareMode(false); setCompareSelections([]); }
         else if (showLaunchModal) setShowLaunchModal(false);
         if (endSessionConfirm) setEndSessionConfirm(false);
+        if (dismissSessionConfirm) setDismissSessionConfirm(false);
         if (mobileSidebarOpen) setMobileSidebarOpen(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showLaunchModal, endSessionConfirm, mobileSidebarOpen, showCompareView, compareMode]);
+  }, [showLaunchModal, endSessionConfirm, dismissSessionConfirm, mobileSidebarOpen, showCompareView, compareMode]);
 
   // ── Round tracking ──────────────────────────────────────────────────────
   // Compute which round each event belongs to by tracking agent cycles.
@@ -1372,10 +1394,16 @@ export default function AdvisoryPage() {
                           {isPaused ? "Resume" : "Pause"}
                         </button>
                       )}
-                      {activeSession.status === "active" && !endSessionConfirm && (
-                        <button onClick={() => setEndSessionConfirm(true)} disabled={endingSession} title="Finish session and create final synthesis"
+                      {activeSession.status === "active" && !endSessionConfirm && !dismissSessionConfirm && (
+                        <button onClick={() => { setEndSessionConfirm(true); setDismissSessionConfirm(false); }} disabled={endingSession} title="Finish session and create final synthesis"
                           style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid rgba(74,222,128,0.35)", backgroundColor: "rgba(74,222,128,0.08)", color: "#4ade80", cursor: endingSession ? "not-allowed" : "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 600, transition: "all 150ms ease", opacity: endingSession ? 0.5 : 1 }}>
                           <CheckCircle2 size={12} /> Finish
+                        </button>
+                      )}
+                      {activeSession.status === "active" && !endSessionConfirm && !dismissSessionConfirm && (
+                        <button onClick={() => { setDismissSessionConfirm(true); setEndSessionConfirm(false); }} disabled={archiving} title="Dismiss active session to History without creating a final synthesis"
+                          style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid rgba(250,204,21,0.42)", backgroundColor: "rgba(250,204,21,0.08)", color: "#facc15", cursor: archiving ? "not-allowed" : "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 600, transition: "all 150ms ease", opacity: archiving ? 0.6 : 1 }}>
+                          {archiving ? <Loader2 size={12} className="animate-spin" /> : <Archive size={12} />} Dismiss
                         </button>
                       )}
                       {activeSession.status === "active" && endSessionConfirm && (
@@ -1387,6 +1415,19 @@ export default function AdvisoryPage() {
                           </button>
                           <button onClick={() => setEndSessionConfirm(false)}
                             style={{ padding: "4px 8px", borderRadius: "5px", border: "1px solid rgba(74,222,128,0.25)", backgroundColor: "transparent", color: "#4ade80", cursor: "pointer", fontSize: "10px", fontWeight: 600 }}>
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+                      {activeSession.status === "active" && dismissSessionConfirm && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px 8px", borderRadius: "8px", border: "1px solid rgba(250,204,21,0.42)", backgroundColor: "rgba(250,204,21,0.08)", maxWidth: "100%", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                          <span style={{ fontSize: "10px", color: "#facc15", fontWeight: 700, maxWidth: "270px", whiteSpace: "normal", lineHeight: 1.25 }}>This will dismiss the session and move it to History. You will not be able to finish.</span>
+                          <button onClick={() => handleArchive(true)} disabled={archiving}
+                            style={{ padding: "4px 10px", borderRadius: "5px", border: "none", backgroundColor: "#ca8a04", color: "#0b0b0c", cursor: archiving ? "not-allowed" : "pointer", fontSize: "10px", fontWeight: 800, display: "flex", alignItems: "center", gap: "4px", opacity: archiving ? 0.7 : 1 }}>
+                            {archiving ? <Loader2 size={10} className="animate-spin" /> : null} Dismiss
+                          </button>
+                          <button onClick={() => setDismissSessionConfirm(false)}
+                            style={{ padding: "4px 8px", borderRadius: "5px", border: "1px solid rgba(250,204,21,0.28)", backgroundColor: "transparent", color: "#facc15", cursor: "pointer", fontSize: "10px", fontWeight: 700 }}>
                             Cancel
                           </button>
                         </div>
@@ -1909,7 +1950,7 @@ export default function AdvisoryPage() {
                         {exportingPDF ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />}
                         {exportingPDF ? "Opening..." : "Print / PDF"}
                       </button>
-                      <button onClick={handleArchive} disabled={archiving} title="Archive session to workspace memory"
+                      <button onClick={() => handleArchive(false)} disabled={archiving} title="Archive session to workspace memory"
                         style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid rgba(74,222,128,0.3)", backgroundColor: "rgba(74,222,128,0.08)", color: "#4ade80", cursor: archiving ? "not-allowed" : "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 600, opacity: archiving ? 0.6 : 1 }}>
                         {archiving ? <Loader2 size={12} className="animate-spin" /> : <Archive size={12} />}
                         {archiving ? "Archiving..." : "Archive"}

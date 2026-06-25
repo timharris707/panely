@@ -1,4 +1,5 @@
 import type { FormalBoardState, FormalBoardVerdict } from "../../types/advisory.ts";
+import { formalVerdictPassesBuiltInGate } from "./verdict-schema.ts";
 
 function escapeHtml(value: string) {
   return value
@@ -33,7 +34,7 @@ function markdownTableCell(value: string | undefined) {
 }
 
 export function formalVerdictArtifactName(verdict: FormalBoardVerdict) {
-  return verdict.valid ? "verdict.json" : "panely-invalid-verdict.json";
+  return formalVerdictPassesBuiltInGate(verdict).ok ? "verdict.json" : "panely-invalid-verdict.json";
 }
 
 export function renderFormalConsensusMarkdown(input: {
@@ -116,6 +117,8 @@ export function renderFormalConsensusMarkdown(input: {
     `- Filesystem isolation: ${input.state.isolation?.filesystemIsolation ? "yes" : "no"}`,
     `- Network isolation: ${input.state.isolation?.networkIsolation ? "yes" : "no"}`,
     `- Source material scope: ${input.state.isolation?.sourceMaterialScope || "source-packet"}`,
+    `- Strict board gate: ${input.state.isolation?.strictMode || "unsupported-prompt-only"}`,
+    `- Unsupported guarantees: ${input.state.isolation?.unsupportedGuarantees?.join(", ") || "filesystem isolation, network isolation, process sandboxing"}`,
     `- Note: ${input.state.isolation?.note || "Prompt-level peer-output isolation only."}`,
     "",
     "## Artifact manifest",
@@ -183,6 +186,8 @@ export function buildFormalRunMetadata(input: {
     `Source material scope: ${isolation?.sourceMaterialScope || "source-packet"}`,
     `Filesystem isolation: ${isolation?.filesystemIsolation ? "yes" : "no"}`,
     `Network isolation: ${isolation?.networkIsolation ? "yes" : "no"}`,
+    `Strict board gate: ${isolation?.strictMode || "unsupported-prompt-only"}`,
+    `Unsupported guarantees: ${isolation?.unsupportedGuarantees?.join(", ") || "filesystem isolation, network isolation, process sandboxing"}`,
     `CWD mode by phase: ${JSON.stringify(isolation?.cwdModeByPhase || { "round-1": "app-working-directory", "round-2": "app-working-directory", synthesis: "app-working-directory" })}`,
     isolation?.note || "Round 1 uses prompt-level peer-output isolation over one source packet. Panely does not yet claim conductor-level filesystem or network isolation for Formal Board Review.",
     "",

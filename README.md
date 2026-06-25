@@ -141,22 +141,64 @@ Build for production:
 npm run build
 ```
 
-## Publishing
+## Verification
 
-For this project, **deploy** means publishing the latest source to GitHub:
+Before merging release-bound work, run:
 
 ```bash
-git status
-npm run lint
-npx tsc --noEmit
-npm run build
-node scripts/publish-safety-check.mjs
-git add .
-git commit -m "Describe the change"
-git push origin main
+npm run verify
 ```
 
-Panely is local-first and does not require Vercel or any hosted deployment target. A hosted demo can be added later if needed, but the normal release path is GitHub plus local execution.
+This runs lint, typecheck, tests, production build, and the publish-safety scanner.
+
+## Releases
+
+For Panely, a GitHub Release is a milestone publication, not a per-deploy log. Releases are sparse, semver-tagged, and created by CI.
+
+Release rules:
+
+- Releases are created only when a semver tag like `v0.5.0` is pushed.
+- Release tags should point to a merged, green `main` commit.
+- Release notes come from the matching `CHANGELOG.md` section first.
+- If the matching changelog section is missing, the workflow falls back to GitHub-generated notes.
+- Pre-`v1.0.0`, minor versions track milestones, such as `v0.5.0` for M5.
+- Patch versions are for fixes within a released milestone.
+- `v1.0.0` is reserved for an explicit production-ready call.
+
+Milestone release flow:
+
+```bash
+git checkout main
+git pull --ff-only origin main
+git tag -a v0.5.0 -m "Panely v0.5.0"
+git push origin v0.5.0
+```
+
+The `.github/workflows/release.yml` workflow creates the GitHub Release from that tag.
+
+Curate `CHANGELOG.md` as part of the milestone PR:
+
+```md
+## [Unreleased]
+
+## [v0.5.0] - 2026-06-25 - Formal Board Review
+
+- Added ...
+- Changed ...
+- Verification: lint, typecheck, tests, build, and publish-safety passed.
+```
+
+After publishing, treat tags as immutable. The commands below are an emergency repair path only, not the normal way to create releases. If a release is botched and nobody depends on it yet, fix it by deleting the release and tag, then re-tagging the corrected commit:
+
+```bash
+gh release delete v0.5.0 --yes
+git push origin --delete v0.5.0
+git tag -d v0.5.0
+git tag -a v0.5.0 -m "Panely v0.5.0"
+git push origin v0.5.0
+```
+
+Panely is local-first and does not require Vercel or any hosted deployment target. A hosted demo can be added later if needed, but the normal release path is GitHub milestone releases plus local execution.
 
 ## Local Model Tools
 

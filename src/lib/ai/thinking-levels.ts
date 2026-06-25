@@ -1,4 +1,5 @@
 import type { ProviderModel } from "@/lib/ai/providers";
+import { fallbackCliThinkingCapability, normalizeCliThinkingLevel, type CliThinkingCapability } from "./cli-capabilities.ts";
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
@@ -10,14 +11,23 @@ export interface ThinkingLevelResolution {
   note: string;
 }
 
-export function supportedThinkingLevels(model: ProviderModel): ThinkingLevel[] {
-  if (model.localCli === "claude") return ["low", "medium", "high", "xhigh", "max"];
-  if (model.localCli === "codex") return ["minimal", "low", "medium", "high", "xhigh", "max"];
+export function supportedThinkingLevels(
+  model: ProviderModel,
+  capability?: Partial<Pick<CliThinkingCapability, "supportedThinkingLevels" | "thinkingEnforced">>
+): ThinkingLevel[] {
+  if (capability?.thinkingEnforced && capability.supportedThinkingLevels) return capability.supportedThinkingLevels;
+  if (capability && !capability.thinkingEnforced) return [];
+  if (model.localCli === "claude") return fallbackCliThinkingCapability("claude").supportedThinkingLevels;
+  if (model.localCli === "codex") return fallbackCliThinkingCapability("codex").supportedThinkingLevels;
   if (model.localCli === "gemini") return [];
   return model.thinkingLevels ?? [];
 }
 
-export function resolveThinkingLevel(model: ProviderModel, requestedLevel?: ThinkingLevel): ThinkingLevelResolution {
+export function resolveThinkingLevel(
+  model: ProviderModel,
+  requestedLevel?: ThinkingLevel,
+  capability?: Partial<Pick<CliThinkingCapability, "supportedThinkingLevels" | "thinkingEnforced" | "thinkingNote">>
+): ThinkingLevelResolution {
   const requested = requestedLevel ?? "medium";
 
   if (requested === "off") {
@@ -30,7 +40,10 @@ export function resolveThinkingLevel(model: ProviderModel, requestedLevel?: Thin
     };
   }
 
-  if (model.localCli === "gemini") {
+  const fallbackCapability = model.localCli ? fallbackCliThinkingCapability(model.localCli) : undefined;
+  const activeCapability = capability || fallbackCapability;
+
+  if (model.localCli === "gemini" && !activeCapability?.thinkingEnforced) {
     return {
       requested,
       effective: undefined,
@@ -40,16 +53,33 @@ export function resolveThinkingLevel(model: ProviderModel, requestedLevel?: Thin
     };
   }
 
+  if (
+    activeCapability &&
+    typeof activeCapability.thinkingEnforced === "boolean" &&
+    Array.isArray(activeCapability.supportedThinkingLevels)
+  ) {
+    const resolved = normalizeCliThinkingLevel(requested, {
+      supportedThinkingLevels: activeCapability.supportedThinkingLevels,
+      thinkingEnforced: activeCapability.thinkingEnforced,
+      thinkingNote: activeCapability.thinkingNote || "",
+    });
+    return {
+      requested,
+      effective: resolved.effective,
+      enforced: resolved.enforced,
+      normalized: resolved.normalized,
+      note: resolved.note,
+    };
+  }
+
   const supported = supportedThinkingLevels(model);
   if (supported.includes(requested)) {
     return {
       requested,
-      effective: requested === "minimal" && model.localCli === "claude" ? "low" : requested,
+      effective: requested,
       enforced: true,
-      normalized: requested === "minimal" && model.localCli === "claude",
-      note: requested === "minimal" && model.localCli === "claude"
-        ? "Claude CLI does not expose minimal effort; using low."
-        : "Thinking level is passed to the local CLI.",
+      normalized: false,
+      note: "Thinking level is passed to the local CLI.",
     };
   }
 

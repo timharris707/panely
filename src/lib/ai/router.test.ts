@@ -13,6 +13,19 @@ test("Claude command passes normalized effort", () => {
   assert.deepEqual(command.args.slice(0, 6), ["-p", "--model", "claude-opus-4-8", "--effort", "max", "--tools"]);
 });
 
+test("Claude command never passes unsupported xhigh effort", () => {
+  const command = buildLocalCliCommand(
+    { modelId: "claude-opus", prompt: "Review this", thinkingLevel: "xhigh" },
+    "claude",
+    "claude-opus-4-8",
+  );
+
+  assert.equal(command.command, "claude");
+  assert.ok(command.args.includes("--effort"));
+  assert.ok(command.args.includes("max"));
+  assert.ok(!command.args.includes("xhigh"));
+});
+
 test("Codex command passes model reasoning effort explicitly", () => {
   const command = buildLocalCliCommand(
     { modelId: "codex-frontier", prompt: "Review this", thinkingLevel: "xhigh" },

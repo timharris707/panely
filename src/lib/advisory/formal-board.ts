@@ -7,6 +7,7 @@ import type {
   FormalBoardConvergence,
 } from "../../types/advisory.ts";
 import type { SourcePacket } from "./source-packet.ts";
+import { validateFormalBoardVerdict } from "./verdict-schema.ts";
 
 const PROTOCOL_VERSION = "advisory-board/formal@1" as const;
 const VERDICT_SCHEMA = "advisory-board/verdict@1" as const;
@@ -26,7 +27,9 @@ export function defaultFormalBoardIsolation() {
       complete: "app-working-directory" as const,
     },
     sourceMaterialScope: "source-packet" as const,
-    note: "Formal Board Review uses prompt-level peer-output isolation and a shared source packet. It does not claim conductor-level filesystem or network isolation.",
+    strictMode: "unsupported-prompt-only" as const,
+    unsupportedGuarantees: ["filesystem isolation", "network isolation", "process sandboxing"] as const,
+    note: "Formal Board Review uses prompt-level peer-output isolation and a shared source packet. It does not claim conductor-level filesystem, network, or process isolation.",
     updatedAt,
   };
 }
@@ -363,7 +366,7 @@ export function buildFormalVerdict(input: {
   const finalRoundVerdicts = board.filter((seat) => !seat.dropped).map((seat) => seat.round_verdicts.at(-1)).filter(Boolean);
   const unanimous = finalRoundVerdicts.length >= 2 && finalRoundVerdicts.every((item) => item === verdict);
 
-  return {
+  const rawVerdict: FormalBoardVerdict = {
     schema: VERDICT_SCHEMA,
     title: input.title || input.topic.slice(0, 90),
     date: input.date || new Date().toISOString().slice(0, 10),
@@ -390,5 +393,15 @@ export function buildFormalVerdict(input: {
     sameSeatContinuity,
     synthesisNeutrality: input.synthesisNeutrality,
     synthesisProducer: input.synthesisProducer,
+  };
+  const schemaValidation = validateFormalBoardVerdict(rawVerdict);
+  if (schemaValidation.ok) return rawVerdict;
+  return {
+    ...rawVerdict,
+    valid: false,
+    validityReason: [
+      rawVerdict.validityReason,
+      `Built-in verdict schema gate failed: ${schemaValidation.errors.join("; ")}`,
+    ].filter(Boolean).join(" "),
   };
 }

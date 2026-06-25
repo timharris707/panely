@@ -40,7 +40,10 @@ function verdict(valid: boolean): FormalBoardVerdict {
     confidence: "medium",
     unanimous: true,
     rounds: 2,
-    board: [],
+    board: [
+      { seat: "A", model: "codex:gpt-5.5", round_verdicts: ["caution", "caution"], dropped: false },
+      { seat: "B", model: "claude:opus-4.8", round_verdicts: ["caution", "caution"], dropped: false },
+    ],
     blockers: [],
     dissent: [],
     open_questions: [],

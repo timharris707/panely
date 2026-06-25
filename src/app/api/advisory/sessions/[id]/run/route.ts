@@ -1096,7 +1096,7 @@ async function runFormalBoard(
   writeFormalArtifact(
     formalBoard,
     "source-packet.md",
-    `<!-- source-packet-sha256: ${sourcePacket.hash} -->\n\n${sourcePacket.text}\n`
+    `<!-- source-packet-sha256: ${sourcePacket.hash} -->\n<!-- strict-board-posture: ${formalBoard.isolation?.strictMode || "unsupported-prompt-only"} -->\n\n> Formal Board Review uses prompt-level peer-output isolation in this release. Filesystem, network, and process isolation are not enforced by Panely's app runner.\n\n${sourcePacket.text}\n`
   );
   writeFormalStateSnapshot(formalBoard);
 

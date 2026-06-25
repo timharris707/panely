@@ -16,6 +16,14 @@ type ToolStatus = {
   authStatus?: "signed-in" | "auth-required" | "unknown";
   updateStatus?: "current" | "outdated" | "unknown" | "missing";
   isOutdated?: boolean;
+  supportedThinkingLevels?: string[];
+  thinkingEnforced?: boolean;
+  thinkingEvidence?: string;
+  thinkingNote?: string;
+  capabilityCheckedAt?: string;
+  contextWindow?: number;
+  contextEvidence?: string;
+  contextNote?: string;
   checkedAt?: string;
   nextCheckAt?: string;
   error?: string;
@@ -47,7 +55,13 @@ type ModelStatus = {
   cliVersion?: string;
   intent?: string;
   contextWindow?: number;
+  contextEvidence?: string;
+  contextNote?: string;
   thinkingLevels?: string[];
+  thinkingEnforced?: boolean;
+  thinkingNote?: string;
+  thinkingEvidence?: string;
+  thinkingCapabilityCheckedAt?: string;
   intendedUse?: string;
   probe?: {
     ok: boolean;
@@ -103,6 +117,7 @@ export default function AdvisorySettingsPage() {
   const [safetyLoading, setSafetyLoading] = useState(false);
   const [updatingTool, setUpdatingTool] = useState<LocalCliToolId | null>(null);
   const [updateResult, setUpdateResult] = useState<ToolUpdateResult | null>(null);
+  const [pendingUpdate, setPendingUpdate] = useState<{ tool: LocalCliToolId; command?: string } | null>(null);
 
   const load = async (probe = false) => {
     if (probe) setProbing(true);
@@ -126,10 +141,13 @@ export default function AdvisorySettingsPage() {
     }
   };
 
+  const requestUpdateTool = (tool: LocalCliToolId) => {
+    setPendingUpdate({ tool, command: data?.tools?.[tool]?.updateCommand });
+  };
+
   const updateTool = async (tool: LocalCliToolId) => {
-    const command = data?.tools?.[tool]?.updateCommand;
-    if (command && !window.confirm(`Run local CLI update?\n\n${command}`)) return;
     setUpdatingTool(tool);
+    setPendingUpdate(null);
     setUpdateResult(null);
     try {
       const res = await fetch("/api/advisory/model-availability/update", {
@@ -254,7 +272,7 @@ export default function AdvisorySettingsPage() {
                     <strong>{tool.label}</strong>
                     {canUpdate ? (
                       <button
-                        onClick={() => void updateTool(toolId)}
+                        onClick={() => requestUpdateTool(toolId)}
                         disabled={Boolean(updatingTool)}
                         title={`Run ${status?.updateCommand}`}
                         style={{
@@ -290,6 +308,8 @@ export default function AdvisorySettingsPage() {
                     {status?.latestVersion ? <><br />Latest: {status.latestVersion}</> : null}
                     {status?.replacementFor ? <><br />Replacement for: {status.replacementFor}</> : null}
                     {status?.authStatus ? <><br />Auth: {status.authStatus}</> : null}
+                    {status?.supportedThinkingLevels ? <><br />Thinking: {status.supportedThinkingLevels.length ? status.supportedThinkingLevels.join(", ") : "not enforced"}</> : null}
+                    {status?.contextWindow ? <><br />Context: {formatContextWindow(status.contextWindow)}</> : null}
                     {status?.checkedAt ? <><br />Checked: {formatCheckTime(status.checkedAt)}</> : null}
                     {needsAttention && status?.updateCommand ? <><br /><code>{status.updateCommand}</code></> : null}
                     {status?.error ? <><br />{status.error}</> : null}
@@ -375,10 +395,26 @@ export default function AdvisorySettingsPage() {
                   <span style={{ border: "1px solid var(--border)", borderRadius: "999px", padding: "3px 8px", color: "var(--text-secondary)", fontSize: "11px", fontWeight: 800 }}>
                     {formatContextWindow(model.contextWindow)}
                   </span>
-                  <span style={{ border: "1px solid var(--border)", borderRadius: "999px", padding: "3px 8px", color: "var(--text-secondary)", fontSize: "11px", fontWeight: 800 }}>
-                    Thinking: {model.thinkingLevels?.join(", ") || "unknown"}
+                  <span
+                    title={model.contextNote || model.contextEvidence || undefined}
+                    style={{ border: "1px solid var(--border)", borderRadius: "999px", padding: "3px 8px", color: "var(--text-secondary)", fontSize: "11px", fontWeight: 800 }}
+                  >
+                    {model.contextEvidence?.startsWith("verified") ? "Verified context" : "Fallback context"}
+                  </span>
+                  <span
+                    title={model.thinkingNote || model.thinkingEvidence || undefined}
+                    style={{ border: "1px solid var(--border)", borderRadius: "999px", padding: "3px 8px", color: "var(--text-secondary)", fontSize: "11px", fontWeight: 800 }}
+                  >
+                    Thinking: {model.thinkingLevels?.join(", ") || "not enforced"}
                   </span>
                 </div>
+                {(model.thinkingNote || model.contextNote) ? (
+                  <div style={{ color: "var(--text-muted)", fontSize: "11px", marginTop: "7px", lineHeight: 1.45 }}>
+                    {model.thinkingNote ? <div>{model.thinkingNote}</div> : null}
+                    {model.contextNote ? <div>{model.contextNote}</div> : null}
+                    {model.thinkingCapabilityCheckedAt ? <div>Capability checked {formatCheckTime(model.thinkingCapabilityCheckedAt)}</div> : null}
+                  </div>
+                ) : null}
                 {model.intendedUse || model.intent ? (
                   <div style={{ color: "var(--text-muted)", fontSize: "12px", marginTop: "7px" }}>{model.intendedUse || model.intent}</div>
                 ) : null}
@@ -402,6 +438,89 @@ export default function AdvisorySettingsPage() {
           ))}
         </section>
       </main>
+      {pendingUpdate ? (
+        <div
+          role="presentation"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 80,
+            background: "rgba(0,0,0,0.68)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "24px",
+          }}
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setPendingUpdate(null);
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cli-update-title"
+            style={{
+              width: "min(520px, 100%)",
+              border: "1px solid var(--border)",
+              borderRadius: "12px",
+              background: "var(--surface)",
+              boxShadow: "0 28px 80px rgba(0,0,0,0.45)",
+              padding: "22px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", marginBottom: "14px" }}>
+              <CircleAlert size={20} color="#f59e0b" style={{ flex: "0 0 auto", marginTop: "2px" }} />
+              <div>
+                <h2 id="cli-update-title" style={{ margin: 0, fontSize: "20px", fontFamily: "var(--font-heading)", letterSpacing: 0 }}>
+                  Update {pendingUpdate.tool} CLI?
+                </h2>
+                <p style={{ margin: "8px 0 0", color: "var(--text-muted)", fontSize: "14px", lineHeight: 1.6 }}>
+                  Panely will run this command locally, then refresh model and capability checks. This can change which models, effort levels, and context limits are available.
+                </p>
+              </div>
+            </div>
+            {pendingUpdate.command ? (
+              <code style={{ display: "block", whiteSpace: "pre-wrap", overflowWrap: "anywhere", padding: "12px", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--surface-elevated)", color: "var(--text-secondary)" }}>
+                {pendingUpdate.command}
+              </code>
+            ) : null}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "18px" }}>
+              <button
+                type="button"
+                onClick={() => setPendingUpdate(null)}
+                style={{
+                  minHeight: "38px",
+                  padding: "0 14px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--border)",
+                  background: "var(--surface-elevated)",
+                  color: "var(--text-secondary)",
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void updateTool(pendingUpdate.tool)}
+                style={{
+                  minHeight: "38px",
+                  padding: "0 16px",
+                  borderRadius: "8px",
+                  border: "1px solid rgba(245,158,11,0.42)",
+                  background: "rgba(245,158,11,0.16)",
+                  color: "#fbbf24",
+                  fontWeight: 900,
+                  cursor: "pointer",
+                }}
+              >
+                Run Update
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

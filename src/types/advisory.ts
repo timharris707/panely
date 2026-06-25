@@ -101,6 +101,8 @@ export interface FormalBoardIsolation {
   networkIsolation: boolean;
   cwdModeByPhase: Partial<Record<FormalBoardPhase, "app-working-directory" | "temporary-source-packet-directory" | "conductor-managed">>;
   sourceMaterialScope: "source-packet";
+  strictMode?: "unsupported-prompt-only" | "partial" | "enforced";
+  unsupportedGuarantees?: readonly string[];
   note: string;
   updatedAt: string;
 }

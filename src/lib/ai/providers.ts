@@ -26,7 +26,7 @@ export const PROVIDERS: ProviderModel[] = [
     localCli: "claude",
     intent: "Most capable Claude option for hard reasoning and agentic work.",
     contextWindow: 200000,
-    thinkingLevels: ["low", "medium", "high", "xhigh", "max"],
+    thinkingLevels: ["low", "medium", "high", "max"],
     intendedUse: "Deep strategy, synthesis, judgment, and high-stakes critique.",
   },
   {
@@ -40,7 +40,7 @@ export const PROVIDERS: ProviderModel[] = [
     localCli: "claude",
     intent: "Deep reasoning, synthesis, and careful critique.",
     contextWindow: 200000,
-    thinkingLevels: ["low", "medium", "high", "xhigh", "max"],
+    thinkingLevels: ["low", "medium", "high", "max"],
     intendedUse: "Balanced analysis, critique, and live moderation.",
   },
   {
@@ -53,7 +53,7 @@ export const PROVIDERS: ProviderModel[] = [
     localCli: "gemini",
     intent: "Google flagship for long-context analysis, forecasting, and data-heavy review.",
     contextWindow: 1000000,
-    thinkingLevels: ["minimal", "low", "medium", "high"],
+    thinkingLevels: [],
     intendedUse: "Large source packets, repository review, and long-context comparison.",
   },
   {
@@ -66,7 +66,7 @@ export const PROVIDERS: ProviderModel[] = [
     localCli: "gemini",
     intent: "Google's current Flash frontier model for agentic and coding work.",
     contextWindow: 1000000,
-    thinkingLevels: ["minimal", "low", "medium", "high"],
+    thinkingLevels: [],
     intendedUse: "Large-context coding, agentic loops, repository review, and fast high-quality comparison passes.",
   },
   {
@@ -78,7 +78,7 @@ export const PROVIDERS: ProviderModel[] = [
     routedModel: "openai/gpt-5.5",
     localCli: "codex",
     intent: "Coding, product strategy, and broad frontier reasoning.",
-    contextWindow: 200000,
+    contextWindow: 1000000,
     thinkingLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
     intendedUse: "Software review, product architecture, implementation planning, and broad reasoning.",
   },

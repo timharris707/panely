@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { buildSourcePacket } from "./source-packet.ts";
 import { buildFormalRunMetadata, formalVerdictArtifactName, renderFormalConsensusHtml, renderFormalConsensusMarkdown } from "./formal-artifacts.ts";
+import { validateFormalBoardVerdict } from "./verdict-schema.ts";
 import {
   buildFormalRoundOneUserPrompt,
   buildFormalVerdict,
@@ -59,6 +60,8 @@ test("formal board state records honest prompt-level isolation metadata", () => 
   assert.equal(state.isolation?.filesystemIsolation, false);
   assert.equal(state.isolation?.networkIsolation, false);
   assert.equal(state.isolation?.cwdModeByPhase["round-1"], "app-working-directory");
+  assert.equal(state.isolation?.strictMode, "unsupported-prompt-only");
+  assert.deepEqual(state.isolation?.unsupportedGuarantees, ["filesystem isolation", "network isolation", "process sandboxing"]);
   assert.match(state.isolation?.note || "", /does not claim conductor-level/);
 });
 
@@ -102,6 +105,7 @@ test("formal verdict records dropped and degraded seats", () => {
   });
 
   assert.equal(verdict.schema, "advisory-board/verdict@1");
+  assert.equal(validateFormalBoardVerdict(verdict).ok, true);
   assert.equal(verdict.verdict, "caution");
   assert.equal(verdict.confidence, "low");
   assert.equal(verdict.rounds, 2);
@@ -339,5 +343,7 @@ test("formal run metadata renders isolation posture", () => {
   assert.match(metadata, /Mode: prompt-level/);
   assert.match(metadata, /Filesystem isolation: no/);
   assert.match(metadata, /Network isolation: no/);
+  assert.match(metadata, /Strict board gate: unsupported-prompt-only/);
+  assert.match(metadata, /Unsupported guarantees: filesystem isolation, network isolation, process sandboxing/);
   assert.match(metadata, /app-working-directory/);
 });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import { sessionFileStore as fs } from "@/lib/advisory-session-store";
 import { spawnAdvisoryAgentWithRetry } from "@/lib/advisory-agent";
+import { getCurrentUser } from "@/lib/local-user";
 
 const DATA_DIR = path.join(process.cwd(), "data", "advisory");
 const MEMORY_FILE = path.join(DATA_DIR, "agent-memory.json");
@@ -119,19 +120,39 @@ function buildTranscriptMarkdown(session: Record<string, unknown>): string {
 
 // ─── Archive logic ────────────────────────────────────────────────────────────
 
-async function archiveSession(sessionId: string): Promise<{ success: boolean; error?: string; transcriptPath?: string }> {
+async function archiveSession(
+  sessionId: string,
+  options: { userId: string; dismiss?: boolean }
+): Promise<{ success: boolean; error?: string; status?: number; transcriptPath?: string; session?: Record<string, unknown> }> {
   const filePath = path.join(DATA_DIR, `${sessionId}.json`);
   if (!fs.existsSync(filePath)) {
-    return { success: false, error: "Session not found" };
+    return { success: false, error: "Session not found", status: 404 };
   }
 
   const raw = fs.readFileSync(filePath, "utf-8");
   const session = JSON.parse(raw);
+  if (typeof session.userId === "string" && session.userId !== options.userId) {
+    return { success: false, error: "Forbidden", status: 403 };
+  }
 
   const topic = session.topic as string;
   const agents = (session.agents as string[]) || [];
   const events = (session.events as Array<Record<string, unknown>>) || [];
   const createdAt = session.createdAt as string;
+
+  if (options.dismiss) {
+    session.status = session.status === "active" ? "abandoned" : session.status;
+    session.archived = false;
+    delete session.archivedAt;
+    session.dismissedAt = new Date().toISOString();
+    session.outcome = session.outcome || "Dismissed without final synthesis";
+    session.runInProgress = false;
+    session.paused = true;
+    delete session.thinkingAgent;
+    fs.writeFileSync(filePath, JSON.stringify(session, null, 2));
+
+    return { success: true, session };
+  }
 
   const dateSlug = new Date(createdAt).toISOString().split("T")[0];
   const topicSlug = slugify(topic);
@@ -284,27 +305,33 @@ Keep each string to 1-2 sentences. Be specific and concrete. Only include agents
   session.transcriptPath = transcriptPath;
   fs.writeFileSync(filePath, JSON.stringify(session, null, 2));
 
-  return { success: true, transcriptPath };
+  return { success: true, transcriptPath, session };
 }
 
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = await getCurrentUser();
     const { id } = await params;
-    const result = await archiveSession(id);
+    const mode = req.nextUrl.searchParams.get("mode");
+    const result = await archiveSession(id, {
+      userId: user.id,
+      dismiss: mode === "dismiss",
+    });
 
     if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: 404 });
+      return NextResponse.json({ error: result.error }, { status: result.status ?? 500 });
     }
 
     return NextResponse.json({
       ok: true,
-      message: "Session archived successfully",
+      message: mode === "dismiss" ? "Session dismissed successfully" : "Session archived successfully",
       transcriptPath: result.transcriptPath,
+      session: result.session,
     });
   } catch (err) {
     console.error("Archive error:", err);

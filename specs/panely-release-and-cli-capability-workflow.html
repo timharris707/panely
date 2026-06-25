@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan: Panely Release and CLI Capability Workflow</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #090b0f;
+    --panel: #15191f;
+    --panel-2: #1d232c;
+    --line: #313a46;
+    --text: #f4f7fb;
+    --muted: #aeb8c6;
+    --accent: #5eead4;
+    --accent-2: #8b5cf6;
+    --warn: #fbbf24;
+    --danger: #fb7185;
+    --ok: #22c55e;
+    --code: #07090d;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: radial-gradient(circle at 16% 8%, rgba(94, 234, 212, .12), transparent 30%), radial-gradient(circle at 82% 14%, rgba(139, 92, 246, .12), transparent 30%), var(--bg); color: var(--text); line-height: 1.58; }
+  main { width: min(1140px, calc(100vw - 40px)); margin: 0 auto; padding: 40px 0 76px; }
+  header, section, .phase, figure, details.meta { border: 1px solid var(--line); background: rgba(21, 25, 31, .9); border-radius: 10px; }
+  header { padding: 28px; margin-bottom: 20px; }
+  section, .phase { padding: 24px; margin: 18px 0; }
+  figure { margin: 18px 0; padding: 16px; background: rgba(29, 35, 44, .78); }
+  h1, h2, h3, h4 { margin: 0 0 12px; letter-spacing: 0; }
+  h1 { font-size: clamp(34px, 5vw, 56px); line-height: 1.04; }
+  h2 { font-size: 24px; }
+  h3 { font-size: 20px; }
+  h4 { margin-top: 20px; color: #d9e4ff; font-size: 14px; text-transform: uppercase; letter-spacing: .04em; }
+  p, li, figcaption, dd { color: var(--muted); }
+  ul { margin: 8px 0 0; padding-left: 22px; }
+  li { margin: 7px 0; }
+  code { background: var(--code); color: #e4eefc; border: 1px solid #262d37; border-radius: 5px; padding: 2px 5px; }
+  details.meta { padding: 12px 16px; margin-top: 18px; }
+  summary { cursor: pointer; color: var(--text); font-weight: 800; }
+  dl { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 8px 14px; margin: 12px 0 0; }
+  dt { color: var(--muted); font-weight: 800; }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  .tag { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; margin-right: 8px; font-size: 11px; font-weight: 900; text-transform: uppercase; }
+  .existing { color: #a5b4fc; }
+  .new { color: #7dd3fc; }
+  .change { color: #facc15; }
+  .status { min-width: 38px; display: inline-block; color: var(--accent); font-weight: 900; text-align: center; }
+  .checklist { list-style: none; padding-left: 0; }
+  .checklist li { border-left: 3px solid var(--line); padding-left: 10px; }
+  .loop, .callout { border-left: 4px solid var(--accent-2); background: rgba(139, 92, 246, .1); border-radius: 8px; padding: 14px; color: var(--muted); margin-top: 14px; }
+  .risk { border-left-color: var(--warn); background: rgba(251, 191, 36, .08); }
+  .ok { border-left-color: var(--ok); background: rgba(34, 197, 94, .08); }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  th, td { border: 1px solid var(--line); padding: 10px; text-align: left; vertical-align: top; }
+  th { color: var(--text); background: var(--panel-2); }
+  td { color: var(--muted); }
+  .visual { width: 100%; max-height: 360px; display: block; border-radius: 8px; background: #0d1118; }
+  @media (max-width: 760px) { main { width: min(100vw - 24px, 1140px); padding-top: 24px; } dl { grid-template-columns: 1fr; } section, .phase, header { padding: 18px; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Plan: Panely Release and CLI Capability Workflow</h1>
+    <details class="meta" open>
+      <summary>Metadata</summary>
+      <dl>
+        <dt>created</dt><dd>2026-06-25T00:00:00-07:00</dd>
+        <dt>modified</dt><dd>2026-06-25T00:00:00-07:00, 2026-06-25T00:00:01-07:00, 2026-06-25T00:00:02-07:00</dd>
+        <dt>commits</dt><dd>pending</dd>
+        <dt>agent name</dt><dd>Codex</dd>
+        <dt>session id</dt><dd>019efcdb-afca-78d2-93fc-220dcdb3c9c0</dd>
+        <dt>back refs</dt><dd>User request for skills-aligned release workflow; Hermes feedback on hard-coded effort levels; independent-agent minimum checklist; specs/panely-formal-board-v2-buildout.html</dd>
+        <dt>forward refs</dt><dd>Implementation commit for semver release workflow, live CLI effort capabilities, and strict-board compatibility closeout</dd>
+      </dl>
+    </details>
+  </header>
+
+  <figure>
+    <svg class="visual" viewBox="0 0 1536 620" role="img" aria-label="Release and CLI capability workflow">
+      <rect width="1536" height="620" fill="#0d1118"/>
+      <text x="88" y="92" fill="#f4f7fb" font-size="46" font-weight="800">Milestone releases + live CLI capabilities</text>
+      <text x="88" y="140" fill="#aeb8c6" font-size="22">Sparse semver releases. No stale effort levels.</text>
+      <g transform="translate(92 230)">
+        <rect width="370" height="150" rx="14" fill="#1d232c" stroke="#313a46"/>
+        <text x="28" y="58" fill="#5eead4" font-size="28" font-weight="800">CHANGELOG</text>
+        <text x="28" y="98" fill="#aeb8c6" font-size="18">Curated milestone notes</text>
+      </g>
+      <g transform="translate(582 230)">
+        <rect width="370" height="150" rx="14" fill="#1d232c" stroke="#313a46"/>
+        <text x="28" y="58" fill="#5eead4" font-size="28" font-weight="800">vX.Y.Z tag</text>
+        <text x="28" y="98" fill="#aeb8c6" font-size="18">CI creates Release</text>
+      </g>
+      <g transform="translate(1072 230)">
+        <rect width="370" height="150" rx="14" fill="#1d232c" stroke="#313a46"/>
+        <text x="28" y="58" fill="#5eead4" font-size="28" font-weight="800">CLI snapshot</text>
+        <text x="28" y="98" fill="#aeb8c6" font-size="18">UI shows real levels</text>
+      </g>
+      <path d="M462 305 H582 M952 305 H1072" stroke="#8b5cf6" stroke-width="6"/>
+    </svg>
+    <figcaption>The release system becomes milestone-based, while model effort controls become evidence-based.</figcaption>
+  </figure>
+
+  <section id="purpose">
+    <h2>Purpose</h2>
+    <p>Implement the Panely release/versioning workflow to match the sibling skills repo, fix the hard-coded thinking/effort level bug so UI choices reflect current local CLI capability snapshots, and close the independent-agent strict-board compatibility findings.</p>
+  </section>
+
+  <section id="problem">
+    <h2>Problem</h2>
+    <p>Panely was moving toward per-deploy GitHub Releases, which conflicts with the skills repo convention that Releases are sparse semver milestone publications. Separately, Panely still treats provider effort levels as product truth even when the installed CLI parser rejects a level, such as Claude rejecting <code>xhigh</code>.</p>
+  </section>
+
+  <section id="solution">
+    <h2>Solution</h2>
+    <p>Use CI-on-semver-tag for GitHub Releases, with curated <code>CHANGELOG.md</code> sections as the primary release-note source. Replace hard-coded effort lists with daily local CLI capability snapshots that record supported effort levels, enforcement status, evidence, and safe normalization behavior. Add a local verdict-schema gate and make strict-board posture explicit where Panely cannot enforce process-level isolation.</p>
+  </section>
+
+  <section id="external-review-coverage">
+    <h2>Independent Review Coverage</h2>
+    <p>The independent-agent feedback is accepted into scope. The checklist below is covered by concrete phases rather than left as advisory commentary.</p>
+    <ul class="checklist">
+      <li><code class="status">[x]</code> Fix Claude <code>xhigh</code>: remove it from live Claude choices unless the installed CLI accepts it, and normalize old Claude <code>xhigh</code> requests to <code>max</code>.</li>
+      <li><code class="status">[x]</code> Add a built-in <code>advisory-board/verdict@1</code> schema/verdict gate that does not depend on <code>~/.codex/skills/...</code>.</li>
+      <li><code class="status">[x]</code> Add explicit strict-board/gate posture: either stronger cwd/filesystem/network controls or clear unsupported labels in artifacts and metadata.</li>
+      <li><code class="status">[x]</code> Bring more toolchain/update/preflight discipline into Panely: daily CLI checks, capability schema versioning, stale-cache handling, and invalid-effort detection.</li>
+      <li><code class="status">[x]</code> Preserve Panely's M5 artifact pipeline: <code>verdict.json</code>, Markdown, HTML, handoff data, metadata, and manifest remain first-class outputs.</li>
+    </ul>
+  </section>
+
+  <section id="files" class="files">
+    <h2>Relevant Files</h2>
+    <h3>Existing Files</h3>
+    <ul>
+      <li><span class="tag existing">existing</span><code>README.md</code> - release policy and local verification docs.</li>
+      <li><span class="tag existing">existing</span><code>package.json</code> - verification scripts.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/ai/model-health.ts</code> - daily CLI detection, version checks, model probes, and capability cache.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/ai/thinking-levels.ts</code> - thinking level support and normalization logic.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/ai/providers.ts</code> - model metadata and current hard-coded thinking assumptions.</li>
+      <li><span class="tag existing">existing</span><code>src/app/api/advisory/model-availability/route.ts</code> - settings/setup source for visible model options.</li>
+      <li><span class="tag existing">existing</span><code>src/app/api/advisory/session-plan/route.ts</code> - AI plan normalization and prompt instructions.</li>
+      <li><span class="tag existing">existing</span><code>src/components/advisory/LaunchWizard.tsx</code> - user-facing model/thinking selectors.</li>
+      <li><span class="tag existing">existing</span><code>src/app/advisory/settings/page.tsx</code> - model settings capability UI.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/ai/thinking-levels.test.ts</code> - current stale Claude xhigh assertion.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/ai/router.test.ts</code> - command construction tests.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/advisory/verdict.ts</code> - formal verdict builder and artifact naming.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/advisory/formal-board.ts</code> - Formal Board Review protocol state and isolation metadata.</li>
+      <li><span class="tag existing">existing</span><code>src/lib/advisory/formal-board.test.ts</code> - formal protocol and artifact tests.</li>
+    </ul>
+    <h3>New Files</h3>
+    <ul>
+      <li><span class="tag new">new</span><code>.github/workflows/release.yml</code> - semver tag-triggered GitHub Release workflow.</li>
+      <li><span class="tag new">new</span><code>CHANGELOG.md</code> - curated milestone release notes.</li>
+      <li><span class="tag new">new</span><code>src/lib/ai/cli-capabilities.ts</code> - pure parsing and normalization helpers for CLI-supported effort levels.</li>
+      <li><span class="tag new">new</span><code>src/lib/ai/cli-capabilities.test.ts</code> - fixture-based tests for Claude parser help and safe normalization.</li>
+      <li><span class="tag new">new</span><code>src/lib/advisory/verdict-schema.ts</code> - built-in schema gate for formal board verdicts.</li>
+      <li><span class="tag new">new</span><code>src/lib/advisory/verdict-schema.test.ts</code> - schema compatibility tests independent of the local skills folder.</li>
+      <li><span class="tag new">new</span><code>specs/panely-release-and-cli-capability-workflow.html</code> - this live plan and execution tracker.</li>
+    </ul>
+  </section>
+
+  <section id="phases">
+    <h2>Implementation Phases</h2>
+    <p><strong>IMPORTANT:</strong> Execute every phase and task step by step, in order, top to bottom.</p>
+    <p>Status markers: <code>[]</code> idle · <code>[wip]</code> in progress · <code>[x]</code> complete · <code>[f]</code> failed.</p>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 1: Plan Review Gate</h3>
+      <p>Formalize and adversarially review this implementation plan before further code changes.</p>
+      <h4>1.1 Create plan</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Create this HTML plan in <code>specs/</code>.</li>
+        <li><code class="status">[x]</code> Include both release workflow and CLI effort capability scope.</li>
+      </ul>
+      <h4>1.2 Adversarial plan review</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Have a subagent challenge the plan for hidden risks, missing tests, and scope mismatch.</li>
+        <li><code class="status">[x]</code> Patch this plan based on valid review findings before implementation continues.</li>
+        <li><code class="status">[x]</code> Expand scope to cover the independent-agent minimum checklist, not just release/versioning.</li>
+      </ul>
+      <h4>1.3 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> <code>rg "\\{\\{" specs/panely-release-and-cli-capability-workflow.html</code> - Proves no template placeholders remain.</li>
+      </ul>
+      <div class="loop">Do not exit this phase until the plan review is complete and any accepted fixes are reflected here.</div>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 2: Skills-Aligned Release Workflow</h3>
+      <p>Implement sparse semver milestone releases created by CI from tags, not local deployment commands.</p>
+      <h4>2.1 Release workflow</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add <code>.github/workflows/release.yml</code> triggered by <code>v*.*.*</code> tags and manual dispatch for existing tags.</li>
+        <li><code class="status">[x]</code> Validate strict <code>vX.Y.Z</code> format and ensure the tagged commit is reachable from <code>origin/main</code>.</li>
+        <li><code class="status">[x]</code> Extract <code>## [vX.Y.Z]</code> from <code>CHANGELOG.md</code>; fall back to generated notes if missing.</li>
+        <li><code class="status">[x]</code> Use only <code>contents: write</code> permission.</li>
+      </ul>
+      <h4>2.2 Documentation</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add <code>CHANGELOG.md</code> with an <code>[Unreleased]</code> section and v1.0 hold policy.</li>
+        <li><code class="status">[x]</code> Update <code>README.md</code> to document milestone release flow, semver convention, changelog-first notes, and emergency tag correction.</li>
+        <li><code class="status">[x]</code> Remove any local command that creates GitHub releases.</li>
+      </ul>
+      <h4>2.3 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> <code>ruby -e "require 'yaml'; YAML.load_file('.github/workflows/release.yml')"</code> - Proves workflow YAML parses.</li>
+        <li><code class="status">[x]</code> <code>node scripts/extract-release-notes.mjs v0.5.0 ...</code> - Proves changelog extraction behavior.</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 3: CLI Capability Snapshot Model</h3>
+      <p>Make available thinking levels depend on the current local CLI capability snapshot.</p>
+      <h4>3.1 Capability parsing</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add pure helpers that parse supported effort levels from CLI help/errors.</li>
+        <li><code class="status">[x]</code> For Claude, parse accepted values from help text or parser rejection evidence; default to <code>low, medium, high, max</code> when unavailable.</li>
+        <li><code class="status">[x]</code> For Codex, keep configurable reasoning levels but model them as local CLI capability data, not provider metadata truth.</li>
+        <li><code class="status">[x]</code> For Gemini, expose no enforceable thinking levels unless the installed CLI exposes a stable flag.</li>
+      </ul>
+      <h4>3.2 Cache shape</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Extend local CLI tool status with <code>supportedThinkingLevels</code>, <code>thinkingEnforced</code>, <code>thinkingEvidence</code>, and <code>capabilityCheckedAt</code>.</li>
+        <li><code class="status">[x]</code> Add a capability schema version and force stale/backfilled cache refresh when old cache entries lack the new fields.</li>
+        <li><code class="status">[x]</code> Keep daily TTL behavior and force-check behavior intact.</li>
+        <li><code class="status">[x]</code> Avoid storing unsanitized private output.</li>
+      </ul>
+      <h4>3.3 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> <code>npm test -- src/lib/ai/cli-capabilities.test.ts src/lib/ai/thinking-levels.test.ts</code> - Proves parser and normalization behavior.</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 4: UI, Planner, and Runtime Integration</h3>
+      <p>Feed the capability snapshot into visible selectors, planner prompts, model settings, and runtime command construction.</p>
+      <h4>4.1 Model availability API</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Return thinking levels from the current CLI tool status, not provider hard-coding.</li>
+        <li><code class="status">[x]</code> Return fallback/check-required cues when no fresh capability evidence exists.</li>
+        <li><code class="status">[x]</code> Include normalization notes for unsupported historical levels.</li>
+      </ul>
+      <h4>4.2 Launch Wizard and Settings</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Hide unsupported effort levels in setup.</li>
+        <li><code class="status">[x]</code> Show <code>thinking not enforced</code> for Gemini when appropriate.</li>
+        <li><code class="status">[x]</code> Show checked time and evidence source on the settings page.</li>
+      </ul>
+      <h4>4.3 Planner and runtime</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Planner instructions should list only supported thinking levels for available local models.</li>
+        <li><code class="status">[x]</code> Planner fallback advisors must stop requesting unsupported Claude <code>xhigh</code>.</li>
+        <li><code class="status">[x]</code> Runtime should normalize old unsupported levels, especially Claude <code>xhigh -> max</code>, before command construction.</li>
+        <li><code class="status">[x]</code> Tests should fail if Claude <code>xhigh</code> is passed to <code>--effort</code>.</li>
+      </ul>
+      <h4>4.4 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> <code>npm test -- src/lib/ai/router.test.ts src/lib/ai/thinking-levels.test.ts src/lib/ai/cli-capabilities.test.ts</code> - Proves runtime command behavior.</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 5: Strict Board Compatibility Closeout</h3>
+      <p>Close the formal-board compatibility items from the independent review without weakening Panely's artifact pipeline.</p>
+      <h4>5.1 Built-in verdict gate</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Add a local schema validator for <code>advisory-board/verdict@1</code> with required <code>schema</code>, <code>verdict</code>, <code>confidence</code>, <code>board</code>, and <code>rounds</code> checks.</li>
+        <li><code class="status">[x]</code> Call the built-in validator before writing canonical <code>verdict.json</code>; invalid runs must write <code>panely-invalid-verdict.json</code>.</li>
+        <li><code class="status">[x]</code> Keep the optional external skill validator test as an extra compatibility check, not the only gate.</li>
+      </ul>
+      <h4>5.2 Strict posture honesty</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Make prompt-level-only isolation explicit in formal metadata, source packet notes, and run metadata.</li>
+        <li><code class="status">[x]</code> Label filesystem/network isolation as unsupported unless Panely can actually enforce it in this release.</li>
+        <li><code class="status">[x]</code> Preserve final Markdown, HTML, handoff data, run metadata, manifest, and verdict artifacts.</li>
+      </ul>
+      <h4>5.3 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> <code>npm test -- src/lib/advisory/verdict-schema.test.ts src/lib/advisory/formal-board.test.ts</code> - Proves the built-in gate and formal artifacts.</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <h3><code class="status">[x]</code> Phase 6: Final Verification, Adversarial Code Review, Commit, Push</h3>
+      <p>Verify the full app, get adversarial code review, commit, and push.</p>
+      <h4>6.1 Verification</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Run <code>npm run verify</code>.</li>
+        <li><code class="status">[x]</code> Validate release workflow YAML and changelog extraction behavior.</li>
+        <li><code class="status">[x]</code> Browser-check the model settings/launch flow if touched UI remains running.</li>
+      </ul>
+      <h4>6.2 Adversarial code review</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Have a subagent review the final diff before commit.</li>
+        <li><code class="status">[x]</code> Address any valid findings or record why no change is needed.</li>
+      </ul>
+      <h4>6.3 Git</h4>
+      <ul class="checklist">
+        <li><code class="status">[x]</code> Stage only intended files, excluding unrelated untracked folders.</li>
+        <li><code class="status">[x]</code> Commit with a concise message.</li>
+        <li><code class="status">[wip]</code> Push <code>main</code> to GitHub.</li>
+      </ul>
+      <h4>6.4 Testing Strategy</h4>
+      <ul class="checklist">
+        <li><code class="status">[]</code> <code>git status --short</code> - Proves only unrelated local artifacts remain uncommitted.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="validation">
+    <h2>Validation Commands</h2>
+    <ul class="checklist">
+      <li><code class="status">[x]</code> <code>npm run verify</code> - Full app verification.</li>
+      <li><code class="status">[x]</code> <code>ruby -e "require 'yaml'; YAML.load_file('.github/workflows/release.yml')"</code> - Release workflow syntax check.</li>
+      <li><code class="status">[x]</code> <code>git diff --check</code> - Whitespace and patch hygiene.</li>
+    </ul>
+    <div class="loop">The plan is not complete until all validation commands pass and review gates are complete.</div>
+  </section>
+
+  <section id="visual-evidence">
+    <h2>Visual Evidence</h2>
+    <ul class="checklist">
+      <li><code class="status">[x]</code> <code>/tmp/panely-settings-update-modal.png</code> - Browser verification that CLI update uses a Panely modal, not a native browser confirm dialog.</li>
+      <li><code class="status">[x]</code> Browser snapshot confirmed Claude thinking levels are <code>low, medium, high, max</code>, Codex context is <code>1M</code>, and Gemini thinking is <code>not enforced</code>.</li>
+    </ul>
+  </section>
+
+  <section id="questionables">
+    <h2>Questionables</h2>
+    <details open>
+      <summary>Should Panely still keep model-level fallback lists?</summary>
+      <p class="qa-answer">Yes, but only as fallback capability assumptions when the CLI cannot be checked. The UI should label those as check-required or fallback data, not live capability truth.</p>
+    </details>
+    <details>
+      <summary>Should release workflow run verification in CI before creating the release?</summary>
+      <p class="qa-answer">Not in this first implementation. The governing model says releases are cut from a merged, green main; the workflow should create the release from the tag. If GitHub branch protection is weak later, add a release workflow job that also runs <code>npm run verify</code>.</p>
+    </details>
+  </section>
+
+  <section id="notes">
+    <h2>Notes</h2>
+    <div class="callout ok">Plan created during a <code>/goal</code> run. The goal scope was expanded after creation to include the effort-level capability work requested in the newest user message.</div>
+    <div class="callout ok">Adversarial plan review accepted seven implementation tightenings: snapshot-fed runtime normalization, planner prompt/fallback cleanup, cache migration, release workflow validation, stale worktree handling, emergency-only release repair language, and careful staging.</div>
+    <div class="callout risk">Do not commit unrelated untracked <code>docs/</code> or <code>.playwright-cli/</code> unless the user explicitly asks for those artifacts to become tracked.</div>
+    <table>
+      <thead><tr><th>Decision</th><th>Outcome</th></tr></thead>
+      <tbody>
+        <tr><td>GitHub Releases</td><td>Semver milestone tags only, CI-created, changelog-first.</td></tr>
+        <tr><td>Snapshots</td><td>Allowed only outside Release tags and release-silent.</td></tr>
+        <tr><td>Effort levels</td><td>Driven by CLI capability cache, with safe runtime normalization.</td></tr>
+        <tr><td>Claude xhigh</td><td>Do not show or pass unless the local CLI explicitly accepts it; normalize old sessions to <code>max</code>.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="amendments">
+    <h2>Amendments</h2>
+    <details>
+      <summary>2026-06-25T00:00:00-07:00 - Initial plan</summary>
+      <p>Created combined plan for release workflow and CLI capability-driven effort levels.</p>
+    </details>
+    <details open>
+      <summary>2026-06-25T00:00:02-07:00 - Implementation checkpoint</summary>
+      <p>Completed release workflow, CLI capability snapshot, settings modal, built-in verdict gate, strict-board honesty labels, targeted tests, typecheck, changelog extraction check, browser modal verification, full verification, adversarial code review, and local commit <code>e576116</code>. Review findings were addressed: release CI now runs <code>npm ci</code> and <code>npm run verify</code> before creating releases, and <code>.playwright-cli/</code> is ignored.</p>
+    </details>
+  </section>
+</main>
+</body>
+</html>

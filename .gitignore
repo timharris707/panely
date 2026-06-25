@@ -34,3 +34,4 @@ dist/
 *.pem
 .vercel
 .agents/
+.playwright-cli/

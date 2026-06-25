@@ -5,6 +5,7 @@ import path from "path";
 import { getProviderModelById, type AIProvider } from "./providers.ts";
 import { classifyProviderError } from "./provider-errors.ts";
 import { codexReasoningEffortArgs, resolveThinkingLevel, type ThinkingLevel } from "./thinking-levels.ts";
+import { getLocalCliToolStatus, type LocalCliName, type LocalCliToolStatus } from "./model-health.ts";
 
 export interface GenerateTextInput {
   prompt: string;
@@ -88,13 +89,13 @@ export function buildLocalCliCommand(
   input: GenerateTextInput,
   localCli: "claude" | "codex" | "gemini",
   model: string,
-  options: { outputFile?: string } = {}
+  options: { outputFile?: string; cliToolStatus?: LocalCliToolStatus } = {}
 ): LocalCliCommand {
   const prompt = composePrompt(input.prompt, input.systemPrompt);
 
   if (localCli === "claude") {
     const modelConfig = getProviderModelById(input.modelId);
-    const effort = resolveThinkingLevel(modelConfig, input.thinkingLevel).effective ?? "low";
+    const effort = resolveThinkingLevel(modelConfig, input.thinkingLevel, options.cliToolStatus).effective ?? "low";
     return {
       command: "claude",
       args: [
@@ -115,7 +116,7 @@ export function buildLocalCliCommand(
 
   if (localCli === "codex") {
     const modelConfig = getProviderModelById(input.modelId);
-    const reasoningArgs = codexReasoningEffortArgs(resolveThinkingLevel(modelConfig, input.thinkingLevel));
+    const reasoningArgs = codexReasoningEffortArgs(resolveThinkingLevel(modelConfig, input.thinkingLevel, options.cliToolStatus));
     const outputFile = options.outputFile;
     if (!outputFile) {
       throw new Error("Codex CLI command construction requires an output file.");
@@ -162,8 +163,10 @@ async function generateWithLocalCli(input: GenerateTextInput, localCli: "claude"
     ? Math.max(30000, Math.min(300000, input.timeoutMs))
     : derivedTimeoutMs;
 
+  const cliToolStatus = getLocalCliToolStatus(localCli as LocalCliName);
+
   if (localCli === "claude") {
-    const command = buildLocalCliCommand(input, localCli, model);
+    const command = buildLocalCliCommand(input, localCli, model, { cliToolStatus });
     // Claude CLI accepts the prompt as an argv tail and streams stdout directly.
     return runCommand(
       command.command,
@@ -179,7 +182,7 @@ async function generateWithLocalCli(input: GenerateTextInput, localCli: "claude"
     const dir = mkdtempSync(path.join(tmpdir(), "panely-codex-"));
     const outputFile = path.join(dir, "last-message.txt");
     try {
-      const command = buildLocalCliCommand(input, localCli, model, { outputFile });
+      const command = buildLocalCliCommand(input, localCli, model, { outputFile, cliToolStatus });
       await runCommand(
         command.command,
         command.args,

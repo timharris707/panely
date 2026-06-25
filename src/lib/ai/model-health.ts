@@ -4,6 +4,12 @@ import { spawnSync } from "child_process";
 import { getProviderModelById, PROVIDERS, type ProviderModel } from "./providers.ts";
 import { classifyProviderError, sanitizeProviderOutput, type ProviderErrorKind } from "./provider-errors.ts";
 import { isVersionOutdated } from "./cli-version.ts";
+import {
+  CLI_CAPABILITY_SCHEMA_VERSION,
+  deriveCliThinkingCapability,
+  fallbackCliThinkingCapability,
+  type CliThinkingLevel,
+} from "./cli-capabilities.ts";
 
 const MODEL_PROBE_PROMPT = "Reply with exactly: ok";
 const LARGE_CONTEXT_PROBE_PROMPT = `${"Panely local context probe. ".repeat(12000)}\n\nReply with exactly: ok`;
@@ -46,6 +52,15 @@ export interface LocalCliToolStatus {
   authStatus?: CliAuthStatus;
   updateStatus: CliUpdateStatus;
   isOutdated?: boolean;
+  capabilitySchemaVersion?: typeof CLI_CAPABILITY_SCHEMA_VERSION;
+  supportedThinkingLevels?: CliThinkingLevel[];
+  thinkingEnforced?: boolean;
+  thinkingEvidence?: string;
+  thinkingNote?: string;
+  contextWindow?: number;
+  contextEvidence?: string;
+  contextNote?: string;
+  capabilityCheckedAt?: string;
   checkedAt: string;
   nextCheckAt: string;
   error?: string;
@@ -96,6 +111,18 @@ function isFresh(checkedAt?: string) {
   if (!checkedAt) return false;
   const timestamp = new Date(checkedAt).getTime();
   return Number.isFinite(timestamp) && Date.now() - timestamp < DAILY_HEALTH_TTL_MS;
+}
+
+function hasFreshCapabilitySnapshot(command: LocalCliName, status?: LocalCliToolStatus) {
+  if (!status) return false;
+  if (status.capabilitySchemaVersion !== CLI_CAPABILITY_SCHEMA_VERSION) return false;
+  if (!Array.isArray(status.supportedThinkingLevels)) return false;
+  if (typeof status.thinkingEnforced !== "boolean") return false;
+  if (!status.thinkingEvidence || !status.thinkingNote || !status.capabilityCheckedAt) return false;
+  if (typeof status.contextWindow !== "number" || !status.contextEvidence || !status.contextNote) return false;
+  if (!isFresh(status.capabilityCheckedAt)) return false;
+  if (command === "claude" && status.supportedThinkingLevels.includes("xhigh")) return false;
+  return true;
 }
 
 function readCache(): HealthCacheStore {
@@ -203,10 +230,44 @@ function detectAgyAuthStatus() {
   return "unknown" as const;
 }
 
+function detectThinkingCapability(command: LocalCliName, checkedAt: string) {
+  if (command !== "claude") return fallbackCliThinkingCapability(command, checkedAt);
+
+  const help = spawnSync(command, ["--help"], {
+    encoding: "utf8",
+    timeout: 2000,
+    maxBuffer: 512 * 1024,
+  });
+  const helpText = sanitizeProviderOutput(`${help.stdout || ""}\n${help.stderr || ""}`);
+  return deriveCliThinkingCapability({
+    command,
+    helpText,
+    checkedAt,
+  });
+}
+
+function applyThinkingCapability(status: LocalCliToolStatus, command: LocalCliName): LocalCliToolStatus {
+  const capability = status.available
+    ? detectThinkingCapability(command, status.checkedAt)
+    : fallbackCliThinkingCapability(command, status.checkedAt);
+  return {
+    ...status,
+    capabilitySchemaVersion: capability.schemaVersion,
+    supportedThinkingLevels: capability.supportedThinkingLevels,
+    thinkingEnforced: capability.thinkingEnforced,
+    thinkingEvidence: capability.thinkingEvidence,
+    thinkingNote: capability.thinkingNote,
+    contextWindow: capability.contextWindow,
+    contextEvidence: capability.contextEvidence,
+    contextNote: capability.contextNote,
+    capabilityCheckedAt: capability.capabilityCheckedAt,
+  };
+}
+
 function buildToolStatus(command: LocalCliName, options: { force?: boolean } = {}): LocalCliToolStatus {
   const packageInfo = CLI_PACKAGE_INFO[command];
   const cached = readCache().tools?.[command];
-  if (!options.force && cached && isFresh(cached.checkedAt)) return cached;
+  if (!options.force && cached && isFresh(cached.checkedAt) && hasFreshCapabilitySnapshot(command, cached)) return cached;
 
   const now = new Date().toISOString();
   const located = spawnSync("which", [command], {
@@ -215,7 +276,7 @@ function buildToolStatus(command: LocalCliName, options: { force?: boolean } = {
   });
 
   if (located.status !== 0) {
-    return {
+    return applyThinkingCapability({
       available: false,
       packageName: packageInfo.packageName,
       updateCommand: packageInfo.updateCommand,
@@ -225,7 +286,7 @@ function buildToolStatus(command: LocalCliName, options: { force?: boolean } = {
       updateStatus: "missing",
       checkedAt: now,
       nextCheckAt: nextCheckAt(now),
-    };
+    }, command);
   }
 
   const version = spawnSync(command, ["--version"], {
@@ -239,7 +300,7 @@ function buildToolStatus(command: LocalCliName, options: { force?: boolean } = {
   const install = resolveInstallMethod(command, cliPath);
   const authStatus = command === "agy" ? detectAgyAuthStatus() : undefined;
 
-  return {
+  return applyThinkingCapability({
     available: true,
     path: cliPath,
     version: installedVersion,
@@ -254,7 +315,7 @@ function buildToolStatus(command: LocalCliName, options: { force?: boolean } = {
     checkedAt: now,
     nextCheckAt: nextCheckAt(now),
     error: latest.error,
-  };
+  }, command);
 }
 
 export function buildProbeCommand(model: ProviderModel, options: { largeContext?: boolean } = {}) {
@@ -299,6 +360,10 @@ export function detectLocalCliTools(options: { force?: boolean } = {}) {
     gemini: detectCli("gemini", options),
     agy: detectCli("agy", options),
   };
+}
+
+export function getLocalCliToolStatus(command: LocalCliName, options: { force?: boolean } = {}) {
+  return detectCli(command, options);
 }
 
 export function updateLocalCliTool(command: LocalCliName, options: { timeoutMs?: number } = {}): CliToolUpdateResult {

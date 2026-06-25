@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateText } from "@/lib/ai/router";
 import { getProviderModelById, PROVIDERS, resolveProviderModelId, type ProviderModel } from "@/lib/ai/providers";
-import { probeAllModelHealth } from "@/lib/ai/model-health";
+import { detectLocalCliTools, probeAllModelHealth } from "@/lib/ai/model-health";
+import { supportedThinkingLevels } from "@/lib/ai/thinking-levels";
 import { validateSessionPlanProviderDisclosure } from "@/lib/advisory/provider-disclosure-gates";
 
 type Intent = "decision" | "stress-test" | "compare" | "ideas" | "red-team";
@@ -22,12 +23,19 @@ const ALLOWED_THINKING: ThinkingLevel[] = ["minimal", "low", "medium", "high", "
 
 function healthyProviderModels() {
   const health = probeAllModelHealth();
+  const tools = detectLocalCliTools();
   const healthyIds = new Set(health.filter((result) => result.ok).map((result) => result.id));
   const models = PROVIDERS.filter((provider) => healthyIds.has(provider.id));
+  const thinkingLevelsByModelId = new Map(models.map((provider) => [
+    provider.id,
+    supportedThinkingLevels(provider, provider.localCli ? tools[provider.localCli] : undefined).filter((level) => level !== "off") as ThinkingLevel[],
+  ]));
   return {
     health,
+    tools,
     models,
     ids: models.map((provider) => provider.id),
+    thinkingLevelsByModelId,
   };
 }
 
@@ -57,7 +65,17 @@ function inferMode(intent: Intent, topic: string): PlannedMode {
   return "roundtable";
 }
 
-function fallbackPlan(topic: string, availableModelIds = ALLOWED_MODELS): { intent: Intent; mode: PlannedMode; advisors: PlannedAdvisor[] } {
+function supportedPlannerThinkingLevels(model: ProviderModel, thinkingLevelsByModelId?: Map<string, ThinkingLevel[]>) {
+  return thinkingLevelsByModelId?.get(model.id) ?? supportedThinkingLevels(model).filter((level) => level !== "off") as ThinkingLevel[];
+}
+
+function normalizeFallbackThinkingLevel(modelId: string, requested: ThinkingLevel, thinkingLevelsByModelId?: Map<string, ThinkingLevel[]>) {
+  const model = getProviderModelById(modelId);
+  const levels = supportedPlannerThinkingLevels(model, thinkingLevelsByModelId);
+  return levels.includes(requested) ? requested : (levels.at(-1) ?? "high");
+}
+
+function fallbackPlan(topic: string, availableModelIds = ALLOWED_MODELS, thinkingLevelsByModelId?: Map<string, ThinkingLevel[]>): { intent: Intent; mode: PlannedMode; advisors: PlannedAdvisor[] } {
   const intent = inferIntent(topic);
   const mode = inferMode(intent, topic);
   const lower = topic.toLowerCase();
@@ -75,7 +93,7 @@ function fallbackPlan(topic: string, availableModelIds = ALLOWED_MODELS): { inte
       role: "Plan quality and assumptions critic",
       purpose: "Finds gaps, weak assumptions, missing evidence, and changes needed before execution.",
       modelId: chooseModel(availableModelIds, ["claude-sonnet", "claude-opus", "codex-frontier", "gemini-flash"]),
-      thinkingLevel: "xhigh",
+      thinkingLevel: "max",
       stance: "skeptical",
     },
     {
@@ -113,22 +131,41 @@ function fallbackPlan(topic: string, availableModelIds = ALLOWED_MODELS): { inte
       role: "Architecture, implementation, and security reviewer",
       purpose: "Reviews technical feasibility, architecture, data flow, security, and implementation risk.",
       modelId: chooseModel(availableModelIds, ["codex-frontier", "gemini-flash", "claude-sonnet", "claude-opus"]),
-      thinkingLevel: "xhigh",
+      thinkingLevel: "max",
       stance: "technical",
     });
   }
 
-  return { intent, mode, advisors: advisors.slice(0, 6) };
+  return {
+    intent,
+    mode,
+    advisors: advisors.slice(0, 6).map((advisor) => ({
+      ...advisor,
+      thinkingLevel: normalizeFallbackThinkingLevel(advisor.modelId, advisor.thinkingLevel, thinkingLevelsByModelId),
+    })),
+  };
 }
 
-function normalizeThinkingLevel(thinkingLevel: unknown, model: ProviderModel, fallbackThinking: ThinkingLevel): ThinkingLevel {
+function normalizeThinkingLevel(
+  thinkingLevel: unknown,
+  model: ProviderModel,
+  fallbackThinking: ThinkingLevel,
+  thinkingLevelsByModelId?: Map<string, ThinkingLevel[]>
+): ThinkingLevel {
   const requested = typeof thinkingLevel === "string" && ALLOWED_THINKING.includes(thinkingLevel as ThinkingLevel)
     ? (thinkingLevel as ThinkingLevel)
     : fallbackThinking;
-  return model.thinkingLevels?.includes(requested) ? requested : (model.thinkingLevels?.at(-1) ?? fallbackThinking);
+  const supported = supportedPlannerThinkingLevels(model, thinkingLevelsByModelId);
+  return supported.includes(requested) ? requested : (supported.at(-1) ?? fallbackThinking);
 }
 
-function normalizeAdvisor(advisor: Partial<PlannedAdvisor>, index: number, fallbackAdvisors: PlannedAdvisor[], availableModelIds: string[]): PlannedAdvisor {
+function normalizeAdvisor(
+  advisor: Partial<PlannedAdvisor>,
+  index: number,
+  fallbackAdvisors: PlannedAdvisor[],
+  availableModelIds: string[],
+  thinkingLevelsByModelId: Map<string, ThinkingLevel[]>
+): PlannedAdvisor {
   const fallback = fallbackAdvisors[index] ?? fallbackAdvisors[0];
   const modelId =
     typeof advisor.modelId === "string" && availableModelIds.includes(advisor.modelId)
@@ -136,7 +173,7 @@ function normalizeAdvisor(advisor: Partial<PlannedAdvisor>, index: number, fallb
       : fallback.modelId;
   const providerModel = getProviderModelById(modelId);
   const thinkingLevel =
-    normalizeThinkingLevel(advisor.thinkingLevel, providerModel, fallback.thinkingLevel);
+    normalizeThinkingLevel(advisor.thinkingLevel, providerModel, fallback.thinkingLevel, thinkingLevelsByModelId);
 
   return {
     name: String(advisor.name || fallback.name).slice(0, 36),
@@ -184,9 +221,13 @@ export async function POST(req: NextRequest) {
     const plannerModelId = availableModelIds.includes(requestedPlannerModelId)
       ? requestedPlannerModelId
       : chooseModel(availableModelIds, ["claude-sonnet", "claude-opus", "codex-frontier", "gemini-flash"]);
-    const fallback = fallbackPlan(topic, availableModelIds);
+    const fallback = fallbackPlan(topic, availableModelIds, available.thinkingLevelsByModelId);
     const availableModelLines = available.models
-      .map((provider) => `- ${provider.id}: ${provider.name}, ${provider.intendedUse ?? provider.intent ?? "available local CLI model"}`)
+      .map((provider) => {
+        const levels = available.thinkingLevelsByModelId.get(provider.id) ?? [];
+        const levelText = levels.length ? levels.join(", ") : "none; thinking not enforced";
+        return `- ${provider.id}: ${provider.name}; thinking levels: ${levelText}; ${provider.intendedUse ?? provider.intent ?? "available local CLI model"}`;
+      })
       .join("\n");
 
     const systemPrompt = `You design clean AI advisory-board sessions.
@@ -196,9 +237,7 @@ Return ONLY valid JSON. No markdown.
 Available model IDs that passed local CLI checks:
 ${availableModelLines}
 
-Thinking levels: minimal, low, medium, high, xhigh, max.
-
-Create named advisors specifically for this topic. Do not use existing product agent names. Do not use generic labels like Agent 1. The names should sound like temporary advisory roles, not permanent mascots. Use ONLY the available model IDs listed above.`;
+Create named advisors specifically for this topic. Do not use existing product agent names. Do not use generic labels like Agent 1. The names should sound like temporary advisory roles, not permanent mascots. Use ONLY the available model IDs and per-model thinking levels listed above. If a model lists no thinking levels, use "high" as a harmless placeholder and Panely will not enforce it.`;
 
   const prompt = `Topic and source material:
 ${topic.slice(0, 12000)}
@@ -252,7 +291,7 @@ Mode guidance:
         ? parsed.mode
         : inferMode(intent, topic);
       const advisors = Array.isArray(parsed.advisors)
-        ? parsed.advisors.slice(0, 6).map((advisor, index) => normalizeAdvisor(advisor, index, fallback.advisors, availableModelIds))
+        ? parsed.advisors.slice(0, 6).map((advisor, index) => normalizeAdvisor(advisor, index, fallback.advisors, availableModelIds, available.thinkingLevelsByModelId))
         : fallback.advisors;
 
       return NextResponse.json({

@@ -3,14 +3,15 @@ import assert from "node:assert/strict";
 import { getProviderModelById } from "./providers.ts";
 import { codexReasoningEffortArgs, resolveThinkingLevel, supportedThinkingLevels } from "./thinking-levels.ts";
 
-test("Claude thinking levels are enforceable through the local CLI", () => {
+test("Claude thinking levels do not include unsupported xhigh by default", () => {
   const model = getProviderModelById("claude-opus");
-  assert.deepEqual(supportedThinkingLevels(model), ["low", "medium", "high", "xhigh", "max"]);
+  assert.deepEqual(supportedThinkingLevels(model), ["low", "medium", "high", "max"]);
 
   const resolved = resolveThinkingLevel(model, "xhigh");
   assert.equal(resolved.enforced, true);
-  assert.equal(resolved.effective, "xhigh");
-  assert.equal(resolved.normalized, false);
+  assert.equal(resolved.effective, "max");
+  assert.equal(resolved.normalized, true);
+  assert.match(resolved.note, /using max/i);
 });
 
 test("Codex reasoning effort maps to config args", () => {

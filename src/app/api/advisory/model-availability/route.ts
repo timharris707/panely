@@ -8,25 +8,31 @@ export async function GET(request: Request) {
   const forceProbe = probeMode === "1" || probeMode === "large";
   const largeContext = probeMode === "large";
   const tools = detectLocalCliTools({ force: forceProbe });
-  const models = PROVIDERS.map((model) => ({
-    id: model.id,
-    name: model.name,
-    provider: model.provider,
-    model: model.model,
-    localCli: model.localCli,
-    source: model.localCli ? `Local ${model.localCli} CLI` : "Not configured",
-    available: model.localCli ? Boolean(tools[model.localCli]?.available) : false,
-    cliPath: model.localCli ? tools[model.localCli]?.path : undefined,
-    cliVersion: model.localCli ? tools[model.localCli]?.version : undefined,
-    intent: model.intent,
-    contextWindow: model.contextWindow,
-    thinkingLevels: supportedThinkingLevels(model).filter((level) => level !== "off"),
-    thinkingEnforced: model.localCli !== "gemini",
-    thinkingNote: model.localCli === "gemini"
-      ? "Gemini CLI thinking level is not enforced because the installed CLI does not expose a stable thinking flag."
-      : "Thinking level is passed to the local CLI.",
-    intendedUse: model.intendedUse,
-    probe: probeModelHealth(model.id, { force: forceProbe, largeContext }),
-  }));
+  const models = PROVIDERS.map((model) => {
+    const toolStatus = model.localCli ? tools[model.localCli] : undefined;
+    return {
+      id: model.id,
+      name: model.name,
+      provider: model.provider,
+      model: model.model,
+      localCli: model.localCli,
+      source: model.localCli ? `Local ${model.localCli} CLI` : "Not configured",
+      available: model.localCli ? Boolean(toolStatus?.available) : false,
+      cliPath: toolStatus?.path,
+      cliVersion: toolStatus?.version,
+      intent: model.intent,
+      contextWindow: toolStatus?.contextWindow ?? model.contextWindow,
+      contextEvidence: toolStatus?.contextEvidence,
+      contextNote: toolStatus?.contextNote,
+      thinkingLevels: supportedThinkingLevels(model, toolStatus).filter((level) => level !== "off"),
+      thinkingEnforced: Boolean(toolStatus?.thinkingEnforced),
+      thinkingNote: toolStatus?.thinkingNote,
+      thinkingEvidence: toolStatus?.thinkingEvidence,
+      thinkingCapabilityCheckedAt: toolStatus?.capabilityCheckedAt,
+      thinkingCapabilitySchemaVersion: toolStatus?.capabilitySchemaVersion,
+      intendedUse: model.intendedUse,
+      probe: probeModelHealth(model.id, { force: forceProbe, largeContext }),
+    };
+  });
   return NextResponse.json({ tools, models, routing: "local-cli-only" });
 }

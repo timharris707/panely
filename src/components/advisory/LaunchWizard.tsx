@@ -39,6 +39,11 @@ type LocalModelStatus = {
   thinkingLevels?: ThinkingLevel[];
   thinkingEnforced?: boolean;
   thinkingNote?: string;
+  thinkingEvidence?: string;
+  thinkingCapabilityCheckedAt?: string;
+  contextWindow?: number;
+  contextEvidence?: string;
+  contextNote?: string;
   probe?: {
     ok: boolean;
     status: string;
