@@ -119,7 +119,7 @@ function buildTranscriptMarkdown(session: Record<string, unknown>): string {
 
 // ─── Archive logic ────────────────────────────────────────────────────────────
 
-export async function archiveSession(sessionId: string): Promise<{ success: boolean; error?: string; transcriptPath?: string }> {
+async function archiveSession(sessionId: string): Promise<{ success: boolean; error?: string; transcriptPath?: string }> {
   const filePath = path.join(DATA_DIR, `${sessionId}.json`);
   if (!fs.existsSync(filePath)) {
     return { success: false, error: "Session not found" };
