@@ -7,15 +7,12 @@ import {
   Send,
   CheckCircle2,
   Loader2,
-  Copy,
-  Download,
   Archive,
   Pause,
   Play,
   ChevronRight,
   ChevronDown,
   RotateCcw,
-  FileDown,
   Focus,
   Paperclip,
   GitBranch,
@@ -23,7 +20,6 @@ import {
   FileText,
 } from "lucide-react";
 import Link from "next/link";
-import { exportSessionAsPDF } from "@/components/AdvisoryPDFExport";
 import { AvatarStack } from "@/components/AgentAvatar";
 import type {
   AdvisoryEvent,
@@ -34,17 +30,8 @@ import type {
 } from "@/types/advisory";
 import {
   formatDate,
-  formatMarkdownExport,
-  formatMarkdownFileExport,
-  slugify,
   getStatusBadge,
-  MODELS,
 } from "@/components/advisory/constants";
-
-// Short display labels for models shown as badges
-const MODEL_SHORT: Record<string, string> = Object.fromEntries(
-  MODELS.map((m) => [m.id, m.label.replace(/ \(.*\)$/, "")])
-);
 
 // ─── Component imports ────���───────────────────────��──────────────────────────
 import EventBubble from "@/components/advisory/EventBubble";
@@ -53,27 +40,11 @@ import SessionSidebar from "@/components/advisory/SessionSidebar";
 import SessionInsightsPanel from "@/components/advisory/SessionInsightsPanel";
 import ActionItemsPanel from "@/components/advisory/ActionItemsPanel";
 import LaunchWizard from "@/components/advisory/LaunchWizard";
-import SessionComparison from "@/components/advisory/SessionComparison";
 import DeepDiveModal from "@/components/advisory/DeepDiveModal";
+import ArtifactsPanel from "@/components/advisory/ArtifactsPanel";
 
 // ─── CSS ─────────────────────────────────────────────────────────────────────
 import "@/styles/advisory.css";
-
-type FormalArtifactManifestItem = {
-  id: string;
-  label: string;
-  kind: string;
-  relativePath: string;
-  exists: boolean;
-  required: boolean;
-  canonical: boolean;
-};
-
-type FormalArtifactManifest = {
-  status: "completed-valid" | "completed-invalid" | "incomplete" | "unavailable";
-  sourcePacketHash?: string;
-  items: FormalArtifactManifestItem[];
-};
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
@@ -96,8 +67,6 @@ export default function AdvisoryPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeView, setActiveView] = useState<"live" | "history">("live");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [copiedToast, setCopiedToast] = useState(false);
-  const [exportingPDF, setExportingPDF] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [autoPlay, setAutoPlay] = useState(false);
@@ -114,14 +83,8 @@ export default function AdvisoryPage() {
   const [thinkingKey, setThinkingKey] = useState<string | null>(null);
   const [connectingToAI, setConnectingToAI] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterAgent, setFilterAgent] = useState<string>("");
-  const [showFilters, setShowFilters] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [customAgents, setCustomAgents] = useState<CustomAgent[]>([]);
-  const [compareMode, setCompareMode] = useState(false);
-  const [compareSelections, setCompareSelections] = useState<string[]>([]);
-  const [showCompareView, setShowCompareView] = useState(false);
-  const [compareSessions, setCompareSessions] = useState<[AdvisorySession | null, AdvisorySession | null]>([null, null]);
   const [sessionInsights, setSessionInsights] = useState<SessionInsights | null>(null);
   const [extractingInsights, setExtractingInsights] = useState(false);
   const [actionItems, setActionItems] = useState<DetailedActionItem[]>([]);
@@ -129,8 +92,8 @@ export default function AdvisoryPage() {
   const [continuing, setContinuing] = useState(false);
   const [forking, setForking] = useState(false);
   const [deepDiveAgent, setDeepDiveAgent] = useState<{ id: string; name: string; emoji: string; role: string } | null>(null);
-  const [formalArtifactManifest, setFormalArtifactManifest] = useState<FormalArtifactManifest | null>(null);
   const [resumingFormalReview, setResumingFormalReview] = useState(false);
+  const [showArtifactsPanel, setShowArtifactsPanel] = useState(false);
 
   const eventsEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -194,6 +157,15 @@ export default function AdvisoryPage() {
     sexyScrollTo(el, Math.max(0, target));
   }, [sexyScrollTo, scrollToBottom]);
 
+  const followLatestIfReadingLive = useCallback((delay = 50) => {
+    if (isNearBottom()) {
+      setTimeout(() => scrollToLatestMessage(), delay);
+      setShowNewMessages(false);
+    } else {
+      setShowNewMessages(true);
+    }
+  }, [isNearBottom, scrollToLatestMessage]);
+
   // ── Data loading ──────────────────────────────────────────────────────────
 
   const loadSessions = useCallback(async () => {
@@ -237,29 +209,6 @@ export default function AdvisoryPage() {
       console.error("Failed to load session:", e);
     }
   }, []);
-
-  const loadFormalArtifactManifest = useCallback(async (id: string) => {
-    try {
-      const res = await fetch(`/api/advisory/sessions/${id}/formal-artifacts`, { cache: "no-store" });
-      const data = await res.json();
-      if (res.ok && data.manifest) {
-        setFormalArtifactManifest(data.manifest);
-      } else {
-        setFormalArtifactManifest(null);
-      }
-    } catch (e) {
-      console.error("Failed to load formal artifacts:", e);
-      setFormalArtifactManifest(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (activeSession?.mode === "formal-board") {
-      void loadFormalArtifactManifest(activeSession.id);
-    } else {
-      setFormalArtifactManifest(null);
-    }
-  }, [activeSession?.id, activeSession?.mode, activeSession?.status, activeSession?.formalBoard?.phase, loadFormalArtifactManifest]);
 
   const loadCustomAgents = useCallback(async () => {
     try {
@@ -319,18 +268,8 @@ export default function AdvisoryPage() {
 
   useEffect(() => {
     if (events.length === 0) return;
-    // If we're waiting for an agent response (isGenerating) or near bottom, always auto-scroll
-    if (isGenerating || isNearBottom()) {
-      // Scroll to the TOP of the latest message, not the bottom of the page
-      // Longer delay for auto-play (DOM needs time to render) vs manual
-      const delay = autoPlay ? 200 : 50;
-      setTimeout(() => scrollToLatestMessage(), delay);
-      setShowNewMessages(false);
-    } else {
-      setShowNewMessages(true);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [events]);
+    followLatestIfReadingLive(autoPlay ? 200 : 50);
+  }, [autoPlay, events, followLatestIfReadingLive]);
 
   // Keep eventsRef in sync
   useEffect(() => { eventsRef.current = events; }, [events]);
@@ -577,88 +516,6 @@ export default function AdvisoryPage() {
     setRefreshing(false);
   };
 
-  const handleCopyToClipboard = async () => {
-    if (!activeSession) return;
-    const markdown = formatMarkdownExport(activeSession, events);
-    try {
-      await navigator.clipboard.writeText(markdown);
-      setCopiedToast(true);
-      setTimeout(() => setCopiedToast(false), 2000);
-    } catch (e) {
-      console.error("Clipboard error:", e);
-    }
-  };
-
-  const handleExportMarkdown = () => {
-    if (!activeSession) return;
-    const markdown = formatMarkdownExport(activeSession, events);
-    const dateStr = new Date(activeSession.createdAt).toISOString().split("T")[0];
-    const topicSlug = slugify(activeSession.topic);
-    const fileName = `advisory-${dateStr}-${topicSlug}.txt`;
-    const blob = new Blob([markdown], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleExportMD = () => {
-    if (!activeSession) return;
-    const md = formatMarkdownFileExport(activeSession, events);
-    const dateStr = new Date(activeSession.createdAt).toISOString().split("T")[0];
-    const topicSlug = slugify(activeSession.topic);
-    const fileName = `${topicSlug}-${dateStr}.md`;
-    const blob = new Blob([md], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleExportBriefMD = async () => {
-    if (!activeSession) return;
-    const res = await fetch(`/api/advisory/sessions/${activeSession.id}/brief?regenerate=1`, { cache: "no-store" });
-    const data = await res.json();
-    if (!res.ok || !data.brief?.markdown) {
-      console.error("Brief export error:", data);
-      return;
-    }
-    const dateStr = new Date(activeSession.createdAt).toISOString().split("T")[0];
-    const topicSlug = slugify(activeSession.title || activeSession.topic);
-    const fileName = `${topicSlug}-board-brief-${dateStr}.md`;
-    const blob = new Blob([data.brief.markdown], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const formalArtifactUrl = (artifactId: string, download = false) => {
-    if (!activeSession) return "#";
-    const params = new URLSearchParams({ artifact: artifactId });
-    if (download) params.set("download", "1");
-    return `/api/advisory/sessions/${activeSession.id}/formal-artifacts?${params.toString()}`;
-  };
-
-  const openFormalArtifact = (artifactId: string, download = false) => {
-    if (!activeSession) return;
-    const url = formalArtifactUrl(artifactId, download);
-    if (download) {
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "";
-      a.click();
-      return;
-    }
-    window.open(url, "_blank", "noopener,noreferrer");
-  };
-
   const handleResumeFormalReview = async () => {
     if (!activeSession || resumingFormalReview) return;
     setResumingFormalReview(true);
@@ -670,21 +527,6 @@ export default function AdvisoryPage() {
       console.error("Formal resume error:", e);
     } finally {
       setResumingFormalReview(false);
-    }
-  };
-
-  const handleExportPDF = async () => {
-    if (!activeSession || exportingPDF) return;
-    setExportingPDF(true);
-    try {
-      await exportSessionAsPDF(
-        activeSession as unknown as import("@/components/AdvisoryPDFExport").PDFSession,
-        events as unknown as import("@/components/AdvisoryPDFExport").PDFEvent[]
-      );
-    } catch (e) {
-      console.error("PDF export error:", e);
-    } finally {
-      setExportingPDF(false);
     }
   };
 
@@ -797,7 +639,7 @@ export default function AdvisoryPage() {
           model: "",
         };
         setEvents((prev) => [...prev, wrappingEvent]);
-        setTimeout(() => scrollToBottom(true), 150);
+        followLatestIfReadingLive(150);
         // The end route is running async — polling will detect completion
         return;
       }
@@ -807,8 +649,7 @@ export default function AdvisoryPage() {
         setThinkingAgent(data.nextAgent);
         setConnectingToAI(false);
       }
-      // Auto-scroll to show the "thinking..." indicator so user knows something is happening
-      setTimeout(() => scrollToBottom(true), 150); // scroll to bottom for thinking indicator, then scrollToLatestMessage when response arrives
+      followLatestIfReadingLive(150);
     } catch (e) {
       console.error("Next turn error:", e);
     } finally {
@@ -834,7 +675,7 @@ export default function AdvisoryPage() {
         text: "⏳ **Creating final synthesis artifact...** The moderator is reviewing the full discussion and preparing closing remarks. This may take 15–30 seconds.",
       };
       setEvents((prev) => [...prev, synthesisPlaceholder]);
-      setTimeout(() => scrollToBottom(), 100);
+      followLatestIfReadingLive(100);
       await fetch(`/api/advisory/sessions/${activeSession.id}/end`, { method: "POST" });
       await loadSessionEvents(activeSession.id, true);
       await loadSessions();
@@ -1061,32 +902,6 @@ export default function AdvisoryPage() {
     }
   };
 
-  // ── Compare sessions ──────────────────────────────────────────────────────
-
-  const handleToggleCompareSelection = (sessionId: string) => {
-    setCompareSelections((prev) => {
-      if (prev.includes(sessionId)) return prev.filter((s) => s !== sessionId);
-      if (prev.length >= 2) return [prev[1], sessionId];
-      return [...prev, sessionId];
-    });
-  };
-
-  const handleOpenCompare = async () => {
-    if (compareSelections.length !== 2) return;
-    const loaded: [AdvisorySession | null, AdvisorySession | null] = [null, null];
-    for (let i = 0; i < 2; i++) {
-      try {
-        const res = await fetch(`/api/advisory/sessions/${compareSelections[i]}`);
-        const data = await res.json();
-        loaded[i] = data.session || null;
-      } catch { /* ignore */ }
-    }
-    setCompareSessions(loaded as [AdvisorySession | null, AdvisorySession | null]);
-    setShowCompareView(true);
-    setCompareMode(false);
-    setCompareSelections([]);
-  };
-
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -1099,9 +914,7 @@ export default function AdvisoryPage() {
         }
       }
       if (e.key === "Escape") {
-        if (showCompareView) setShowCompareView(false);
-        else if (compareMode) { setCompareMode(false); setCompareSelections([]); }
-        else if (showLaunchModal) setShowLaunchModal(false);
+        if (showLaunchModal) setShowLaunchModal(false);
         if (endSessionConfirm) setEndSessionConfirm(false);
         if (dismissSessionConfirm) setDismissSessionConfirm(false);
         if (mobileSidebarOpen) setMobileSidebarOpen(false);
@@ -1109,7 +922,7 @@ export default function AdvisoryPage() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showLaunchModal, endSessionConfirm, dismissSessionConfirm, mobileSidebarOpen, showCompareView, compareMode]);
+  }, [showLaunchModal, endSessionConfirm, dismissSessionConfirm, mobileSidebarOpen]);
 
   // ── Round tracking ──────────────────────────────────────────────────────
   // Compute which round each event belongs to by tracking agent cycles.
@@ -1147,26 +960,6 @@ export default function AdvisoryPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   const sessionData = activeSession as unknown as Record<string, unknown> | null;
-  const formalArtifactStatusLabel = formalArtifactManifest?.status === "completed-valid"
-    ? "Formal artifacts ready"
-    : formalArtifactManifest?.status === "completed-invalid"
-    ? "Invalid formal artifacts"
-    : formalArtifactManifest?.status === "incomplete"
-    ? "Formal artifacts incomplete"
-    : "Formal artifacts unavailable";
-  const formalArtifactStatusColor = formalArtifactManifest?.status === "completed-valid"
-    ? "#4ade80"
-    : formalArtifactManifest?.status === "completed-invalid"
-    ? "#facc15"
-    : "#a78bfa";
-  const formalArtifactActions = formalArtifactManifest?.items
-    .filter((item) => [
-      "final-consensus-html",
-      "verdict",
-      "run-metadata",
-      "source-packet",
-      "handoff-data",
-    ].includes(item.id)) || [];
   const formalHasRecoverableStep = Boolean(activeSession?.runSteps?.some((step) =>
     step.phase.startsWith("formal-") && (step.status === "failed" || step.status === "stale")
   ));
@@ -1189,6 +982,15 @@ export default function AdvisoryPage() {
             position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.5)",
             zIndex: 299, display: "none",
           }}
+        />
+      )}
+
+      {activeSession && (
+        <ArtifactsPanel
+          open={showArtifactsPanel}
+          session={activeSession}
+          events={events}
+          onClose={() => setShowArtifactsPanel(false)}
         />
       )}
 
@@ -1217,20 +1019,11 @@ export default function AdvisoryPage() {
             loading={loading}
             refreshing={refreshing}
             searchQuery={searchQuery}
-            filterAgent={filterAgent}
-            showFilters={showFilters}
-            compareMode={compareMode}
-            compareSelections={compareSelections}
             mobileSidebarOpen={mobileSidebarOpen}
             onSelectSession={handleSelectSession}
             onActiveViewChange={handleActiveViewChange}
             onRefresh={handleRefresh}
             onSearchChange={setSearchQuery}
-            onFilterAgentChange={setFilterAgent}
-            onShowFiltersChange={setShowFilters}
-            onCompareModeToggle={() => { setCompareMode((v) => !v); setCompareSelections([]); }}
-            onCompareToggle={handleToggleCompareSelection}
-            onOpenCompare={handleOpenCompare}
             onShowLaunchModal={() => setShowLaunchModal(true)}
             onMobileSidebarClose={() => setMobileSidebarOpen(false)}
           />
@@ -1268,7 +1061,7 @@ export default function AdvisoryPage() {
                 color: "var(--text-muted)", display: "flex", alignItems: "center",
                 textDecoration: "none",
               }}
-              aria-label="Model settings"
+              aria-label="Model connections"
             >
               <Settings size={13} />
             </Link>
@@ -1358,15 +1151,6 @@ export default function AdvisoryPage() {
                           <Paperclip size={9} /> REF MATERIAL
                         </span>
                       )}
-                      {activeSession.model && (
-                        <span title={activeSession.model} style={{
-                          fontSize: "9px", fontWeight: 700, color: "#818cf8",
-                          backgroundColor: "rgba(129,140,248,0.12)", border: "1px solid rgba(129,140,248,0.25)",
-                          padding: "2px 7px", borderRadius: "4px", fontFamily: "var(--font-mono)", letterSpacing: "0.04em",
-                        }}>
-                          {MODEL_SHORT[activeSession.model] ?? activeSession.model}
-                        </span>
-                      )}
                       {typeof sessionData?.rounds === "number" && (
                         <span style={{
                           fontSize: "9px", fontWeight: 700, color: "#fb923c",
@@ -1450,30 +1234,9 @@ export default function AdvisoryPage() {
                       )}
                       {activeSession.status === "completed" && (
                         <>
-                          <button onClick={handleCopyToClipboard} title="Copy as Markdown"
-                            style={{ padding: "6px 10px", borderRadius: "6px", border: `1px solid ${copiedToast ? "rgba(74,222,128,0.4)" : "rgba(96,165,250,0.4)"}`, backgroundColor: copiedToast ? "rgba(74,222,128,0.1)" : "rgba(96,165,250,0.1)", color: copiedToast ? "#4ade80" : "#60a5fa", cursor: "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", transition: "all 150ms ease", fontWeight: 600 }}>
-                            <Copy size={12} /> {copiedToast ? "Copied!" : "Copy"}
-                          </button>
-                          <button onClick={handleExportMarkdown} title="Export as plain text file"
-                            style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid rgba(96,165,250,0.4)", backgroundColor: "rgba(96,165,250,0.1)", color: "#60a5fa", cursor: "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 600 }}>
-                            <Download size={12} /> Export
-                          </button>
-                          <button onClick={handleExportMD} title="Export as Markdown file"
-                            style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid rgba(96,165,250,0.4)", backgroundColor: "rgba(96,165,250,0.1)", color: "#60a5fa", cursor: "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 600 }}>
-                            <FileDown size={12} /> Export MD
-                          </button>
-                          <button onClick={handleExportBriefMD} title="Export board brief with transcript"
-                            style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid rgba(74,222,128,0.4)", backgroundColor: "rgba(74,222,128,0.1)", color: "#4ade80", cursor: "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 700 }}>
-                            <FileText size={12} /> Brief MD
-                          </button>
-                          <Link href={`/brief/${activeSession.id}`} target="_blank" title="Open board brief"
-                            style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid rgba(74,222,128,0.4)", backgroundColor: "rgba(74,222,128,0.08)", color: "#4ade80", cursor: "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 700, textDecoration: "none" }}>
-                            <FileText size={12} /> Open Brief
-                          </Link>
-                          <button onClick={handleExportPDF} disabled={exportingPDF} title="Print / Save PDF"
-                            style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid rgba(139,92,246,0.4)", backgroundColor: exportingPDF ? "rgba(139,92,246,0.2)" : "rgba(139,92,246,0.1)", color: "#a78bfa", cursor: exportingPDF ? "not-allowed" : "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 600, opacity: exportingPDF ? 0.7 : 1, transition: "all 150ms ease" }}>
-                            {exportingPDF ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />}
-                            {exportingPDF ? "Opening..." : "Print / PDF"}
+                          <button onClick={() => setShowArtifactsPanel(true)} title="Open session artifacts"
+                            style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid rgba(96,165,250,0.42)", backgroundColor: "rgba(96,165,250,0.1)", color: "#60a5fa", cursor: "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 700 }}>
+                            <FileText size={12} /> Artifacts
                           </button>
                         </>
                       )}
@@ -1602,7 +1365,7 @@ export default function AdvisoryPage() {
                     ref={scrollContainerRef}
                     className="advisory-events-stream"
                     style={{ flex: 1, overflowY: "auto", padding: "20px 24px", backgroundColor: "var(--background)", position: "relative" }}
-                    onScroll={() => { if (isNearBottom()) setShowNewMessages(false); }}
+                    onScroll={() => setShowNewMessages(!isNearBottom())}
                   >
                     {events.length === 0 ? (
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-muted)", flexDirection: "column", gap: "12px" }}>
@@ -1781,7 +1544,7 @@ export default function AdvisoryPage() {
                       <button
                         onClick={() => { scrollToBottom(); setShowNewMessages(false); }}
                         style={{ position: "absolute", bottom: "16px", left: "50%", transform: "translateX(-50%)", padding: "6px 14px", borderRadius: "20px", border: "1px solid var(--accent)", backgroundColor: "var(--accent)", color: "#fff", cursor: "pointer", fontSize: "11px", fontWeight: 700, display: "flex", alignItems: "center", gap: "5px", zIndex: 10, boxShadow: "0 4px 12px rgba(0,0,0,0.3)", whiteSpace: "nowrap" }}>
-                        <ChevronDown size={12} /> New messages
+                        <ChevronDown size={12} /> Jump to latest
                       </button>
                     </div>
                   )}
@@ -1914,57 +1677,9 @@ export default function AdvisoryPage() {
                         {continuing ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
                         Continue Discussion
                       </button>
-                      <button onClick={handleExportMD} title="Export as Markdown file"
-                        style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid rgba(96,165,250,0.4)", backgroundColor: "rgba(96,165,250,0.1)", color: "#60a5fa", cursor: "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 600 }}>
-                        <FileDown size={12} /> Export MD
-                      </button>
-                      <button onClick={handleExportBriefMD} title="Export board brief with transcript"
-                        style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid rgba(74,222,128,0.4)", backgroundColor: "rgba(74,222,128,0.1)", color: "#4ade80", cursor: "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 700 }}>
-                        <FileText size={12} /> Brief MD
-                      </button>
-                      <Link href={`/brief/${activeSession.id}`} target="_blank" title="Open board brief"
-                        style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid rgba(74,222,128,0.4)", backgroundColor: "rgba(74,222,128,0.08)", color: "#4ade80", cursor: "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 700, textDecoration: "none" }}>
-                        <FileText size={12} /> Open Brief
-                      </Link>
-                      {activeSession.mode === "formal-board" && formalArtifactManifest && (
-                        <div style={{ flexBasis: "100%", marginTop: "4px", padding: "10px", borderRadius: "8px", border: "1px solid rgba(167,139,250,0.24)", backgroundColor: "rgba(167,139,250,0.06)", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                          <div style={{ minWidth: "190px", flex: "1 1 220px" }}>
-                            <div style={{ color: formalArtifactStatusColor, fontSize: "11px", fontWeight: 800, letterSpacing: "0.3px", textTransform: "uppercase" }}>
-                              {formalArtifactStatusLabel}
-                            </div>
-                            <div style={{ color: "var(--text-muted)", fontSize: "10px", marginTop: "2px" }}>
-                              {formalArtifactManifest.sourcePacketHash ? `source ${formalArtifactManifest.sourcePacketHash.slice(0, 12)}` : "source pending"}
-                            </div>
-                          </div>
-                          {formalArtifactActions.map((item) => {
-                            const label = item.id === "final-consensus-html"
-                              ? "View Handoff"
-                              : item.id === "verdict"
-                              ? item.canonical ? "Export Verdict" : "Export Invalid Verdict"
-                              : item.id === "run-metadata"
-                              ? "Export Metadata"
-                              : item.id === "source-packet"
-                              ? "Export Source"
-                              : "Export Handoff Data";
-                            const download = item.id !== "final-consensus-html";
-                            return (
-                              <button
-                                key={item.id}
-                                onClick={() => openFormalArtifact(item.id, download)}
-                                disabled={!item.exists}
-                                title={item.exists ? `${label}: ${item.relativePath}` : `Missing: ${item.relativePath}`}
-                                style={{ padding: "6px 10px", borderRadius: "6px", border: "1px solid rgba(167,139,250,0.36)", backgroundColor: item.exists ? "rgba(167,139,250,0.1)" : "rgba(255,255,255,0.04)", color: item.exists ? "#c4b5fd" : "var(--text-muted)", cursor: item.exists ? "pointer" : "not-allowed", fontSize: "10px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 700, opacity: item.exists ? 1 : 0.56 }}>
-                                {download ? <FileDown size={11} /> : <FileText size={11} />}
-                                {label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                      <button onClick={handleExportPDF} disabled={exportingPDF} title="Open printable artifact"
-                        style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid rgba(139,92,246,0.4)", backgroundColor: exportingPDF ? "rgba(139,92,246,0.2)" : "rgba(139,92,246,0.08)", color: "#a78bfa", cursor: exportingPDF ? "not-allowed" : "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 600, opacity: exportingPDF ? 0.6 : 1 }}>
-                        {exportingPDF ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />}
-                        {exportingPDF ? "Opening..." : "Print / PDF"}
+                      <button onClick={() => setShowArtifactsPanel(true)} title="Open session artifacts"
+                        style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid rgba(96,165,250,0.42)", backgroundColor: "rgba(96,165,250,0.1)", color: "#60a5fa", cursor: "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 700 }}>
+                        <FileText size={12} /> Artifacts
                       </button>
                       <button onClick={() => handleArchive(false)} disabled={archiving} title="Archive session to workspace memory"
                         style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid rgba(74,222,128,0.3)", backgroundColor: "rgba(74,222,128,0.08)", color: "#4ade80", cursor: archiving ? "not-allowed" : "pointer", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", fontWeight: 600, opacity: archiving ? 0.6 : 1 }}>
@@ -2041,13 +1756,6 @@ export default function AdvisoryPage() {
           customAgents={customAgents}
           onCustomAgentsChange={loadCustomAgents}
           onDeepDive={handleDeepDive}
-        />
-      )}
-
-      {showCompareView && compareSessions[0] && compareSessions[1] && (
-        <SessionComparison
-          sessions={[compareSessions[0], compareSessions[1]]}
-          onClose={() => setShowCompareView(false)}
         />
       )}
 

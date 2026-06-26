@@ -9,6 +9,45 @@ function escapeHtml(value: string) {
     .replace(/"/g, "&quot;");
 }
 
+const FORMAL_SECTION_LABELS = new Set([
+  "verdict",
+  "evidence-backed",
+  "evidence backed",
+  "judgment calls",
+  "judgment call",
+  "could not verify",
+  "minority report",
+  "next actions",
+  "next action",
+  "open questions",
+  "open question",
+]);
+const LIST_MARKER_PATTERN = /^\s*(?:[-*]\s+|\d+[.)]\s+)/;
+
+function repairBrokenBold(value: string) {
+  return value
+    .replace(/^([^*#\n][^:\n]{2,180}):\*\*(\s*)/, "**$1:** ")
+    .replace(/^([^*#\n]{2,180}?)\*\*(\s+[—-]\s+)/, "**$1**$2")
+    .replace(/^([^*#\n]{2,180}?)\*\*(\s+)/, "**$1**$2");
+}
+
+function cleanFormalList(values: string[] = []) {
+  return values
+    .map((value) =>
+      repairBrokenBold(
+        value
+          .replace(/\r\n/g, "\n")
+          .trim()
+          .replace(LIST_MARKER_PATTERN, "")
+          .replace(/^#{1,6}\s+/, "")
+          .replace(/:\s*$/, "")
+          .trim()
+      )
+    )
+    .filter((value) => value && !FORMAL_SECTION_LABELS.has(value.toLowerCase()))
+    .filter((value) => !/^(?:SHIP|CAUTION|BLOCK)\s*[:.]?\s*$/i.test(value));
+}
+
 function paragraphHtml(value: string) {
   return value
     .split(/\n{2,}/)
@@ -17,13 +56,15 @@ function paragraphHtml(value: string) {
 }
 
 function listItems(values: string[]) {
-  return values.length
-    ? values.map((value) => `<li>${escapeHtml(value)}</li>`).join("\n")
+  const cleanValues = cleanFormalList(values);
+  return cleanValues.length
+    ? cleanValues.map((value) => `<li>${escapeHtml(value)}</li>`).join("\n")
     : "<li>None recorded.</li>";
 }
 
 function markdownList(values: string[]) {
-  return values.length ? values.map((value) => `- ${value}`).join("\n") : "- None recorded.";
+  const cleanValues = cleanFormalList(values);
+  return cleanValues.length ? cleanValues.map((value) => `- ${value}`).join("\n") : "- None recorded.";
 }
 
 function markdownTableCell(value: string | undefined) {

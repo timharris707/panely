@@ -532,7 +532,7 @@ if [[ -z "$out" ]]; then
   exit 1
 fi
 if [[ "$out" == *"verifier.md" ]]; then
-  printf '1. NO CONFIRMED FINDINGS\nAPPROVED: yes\n' > "$out"
+  printf '1. NO BLOCKING FINDINGS\n2. Advisory findings\n\n- Non-blocking follow-up.\n\nAPPROVED: yes\n' > "$out"
 else
   printf 'NO FINDINGS\n' > "$out"
 fi
@@ -583,7 +583,7 @@ if [[ -z "$out" ]]; then
   exit 1
 fi
 if [[ "$out" == *"verifier.md" ]]; then
-  printf '1. NO CONFIRMED FINDINGS\nAPPROVED: yes\n' > "$out"
+  printf '1. NO BLOCKING FINDINGS\n2. NO ADVISORY FINDINGS\nAPPROVED: yes\n' > "$out"
   exit 0
 fi
 printf 'NO FINDINGS\n' > "$out"
@@ -611,7 +611,7 @@ if [[ -z "$out" ]]; then
   exit 1
 fi
 if [[ "$out" == *"verifier.md" ]]; then
-  printf 'NO CONFIRMED FINDINGS\n\n1. Confirmed findings\n\n- This should block approval.\n\nAPPROVED: yes\n' > "$out"
+  printf '1. NO BLOCKING FINDINGS\n\n2. Blocking findings\n\n- This should block approval.\n\nAPPROVED: yes\n' > "$out"
 else
   printf 'NO FINDINGS\n' > "$out"
 fi

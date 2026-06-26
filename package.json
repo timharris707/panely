@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
+    "refresh:model-capabilities": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/refresh-model-capabilities.ts",
     "workflow:verify": "workflow/bin/verify-workflow.sh",
     "verify": "npm run lint && npm test && npm run build && npm run typecheck && node scripts/publish-safety-check.mjs && npm run workflow:verify"
   },
@@ -28,6 +29,7 @@
     "stripe": "^18.5.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

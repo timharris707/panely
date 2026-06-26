@@ -24,7 +24,7 @@ export const PROVIDERS: ProviderModel[] = [
     routedModel: "anthropic/claude-opus-4-8",
     localCli: "claude",
     intent: "Most capable Claude option for hard reasoning and agentic work.",
-    thinkingLevels: ["low", "medium", "high", "max"],
+    thinkingLevels: ["low", "medium", "high", "xhigh", "max"],
     intendedUse: "Deep strategy, synthesis, judgment, and high-stakes critique.",
   },
   {
@@ -37,7 +37,7 @@ export const PROVIDERS: ProviderModel[] = [
     routedModel: "anthropic/claude-sonnet-4-6",
     localCli: "claude",
     intent: "Deep reasoning, synthesis, and careful critique.",
-    thinkingLevels: ["low", "medium", "high", "max"],
+    thinkingLevels: ["low", "medium", "high", "xhigh", "max"],
     intendedUse: "Balanced analysis, critique, and live moderation.",
   },
   {
@@ -49,7 +49,7 @@ export const PROVIDERS: ProviderModel[] = [
     routedModel: "google/gemini-3.1-pro-preview",
     localCli: "gemini",
     intent: "Google flagship for long-context analysis, forecasting, and data-heavy review.",
-    thinkingLevels: [],
+    thinkingLevels: ["low", "medium", "high"],
     intendedUse: "Large source packets, repository review, and long-context comparison.",
   },
   {
@@ -61,7 +61,7 @@ export const PROVIDERS: ProviderModel[] = [
     routedModel: "google/gemini-3.5-flash",
     localCli: "gemini",
     intent: "Google's current Flash frontier model for agentic and coding work.",
-    thinkingLevels: [],
+    thinkingLevels: ["low", "medium", "high"],
     intendedUse: "Large-context coding, agentic loops, repository review, and fast high-quality comparison passes.",
   },
   {
@@ -73,7 +73,7 @@ export const PROVIDERS: ProviderModel[] = [
     routedModel: "openai/gpt-5.5",
     localCli: "codex",
     intent: "Coding, product strategy, and broad frontier reasoning.",
-    thinkingLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    thinkingLevels: ["low", "medium", "high", "xhigh"],
     intendedUse: "Software review, product architecture, implementation planning, and broad reasoning.",
   },
 ];

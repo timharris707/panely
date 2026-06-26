@@ -11,6 +11,27 @@ import { validateFormalBoardVerdict } from "./verdict-schema.ts";
 
 const PROTOCOL_VERSION = "advisory-board/formal@1" as const;
 const VERDICT_SCHEMA = "advisory-board/verdict@1" as const;
+const VERDICT_SECTION_LABELS = new Set([
+  "verdict",
+  "evidence-backed",
+  "evidence backed",
+  "judgment calls",
+  "judgment call",
+  "could not verify",
+  "minority report",
+  "next actions",
+  "next action",
+  "open questions",
+  "open question",
+]);
+const LIST_MARKER_PATTERN = /^\s*(?:[-*]\s+|\d+[.)]\s+)/;
+
+function repairBrokenBold(value: string) {
+  return value
+    .replace(/^([^*#\n][^:\n]{2,180}):\*\*(\s*)/, "**$1:** ")
+    .replace(/^([^*#\n]{2,180}?)\*\*(\s+[—-]\s+)/, "**$1**$2")
+    .replace(/^([^*#\n]{2,180}?)\*\*(\s+)/, "**$1**$2");
+}
 
 export function defaultFormalBoardIsolation() {
   const updatedAt = new Date().toISOString();
@@ -37,9 +58,19 @@ export function defaultFormalBoardIsolation() {
 function normalizeLines(text: string, matcher: RegExp, maxItems = 8) {
   return text
     .split("\n")
-    .map((line) => line.replace(/^[-*\d.)\s]+/, "").trim())
-    .filter((line) => line && matcher.test(line))
+    .map(cleanExtractedLine)
+    .filter((line) => line && !VERDICT_SECTION_LABELS.has(line.toLowerCase()) && matcher.test(line))
     .slice(0, maxItems);
+}
+
+function cleanExtractedLine(line: string) {
+  return repairBrokenBold(
+    line
+      .replace(LIST_MARKER_PATTERN, "")
+      .replace(/^#{1,6}\s+/, "")
+      .replace(/:\s*$/, "")
+      .trim()
+  );
 }
 
 function summarize(value: string, maxLength = 900) {
@@ -64,16 +95,21 @@ function parseConfidence(text: string): FormalBoardVerdict["confidence"] {
 }
 
 function sectionLines(text: string, heading: RegExp, maxItems = 8) {
-  const match = text.match(heading);
-  if (!match?.index && match?.index !== 0) return [];
-  const start = match.index + match[0].length;
-  const rest = text.slice(start);
-  const section = rest.split(/\n##\s+/)[0] || "";
+  const section = sectionBody(text, heading);
+  if (!section) return [];
   return section
     .split("\n")
-    .map((line) => line.replace(/^[-*\d.)\s]+/, "").trim())
-    .filter(Boolean)
+    .map(cleanExtractedLine)
+    .filter((line) => line && !VERDICT_SECTION_LABELS.has(line.toLowerCase()))
     .slice(0, maxItems);
+}
+
+function sectionBody(text: string, heading: RegExp) {
+  const match = text.match(heading);
+  if (!match?.index && match?.index !== 0) return "";
+  const start = match.index + match[0].length;
+  const rest = text.slice(start);
+  return rest.split(/\n##\s+/)[0] || "";
 }
 
 function buildBlockers(text: string) {
@@ -379,11 +415,11 @@ export function buildFormalVerdict(input: {
     dissent: buildDissent(text),
     open_questions: sectionLines(text, /(?:^|\n)##\s*(?:Open questions|Could not verify)\s*\n/i, 8),
     next_actions: sectionLines(text, /(?:^|\n)##\s*Next actions\s*\n/i, 8),
-    summary: summarize(text),
-    evidenceBacked: normalizeLines(text, /evidence|verified|shows|observed|because|source|sha|data/i),
-    judgmentCalls: normalizeLines(text, /judgment|assume|likely|should|recommend|trade[- ]?off|opinion/i),
-    couldntVerify: normalizeLines(text, /could not verify|couldn't verify|unknown|unclear|missing|not provided/i),
-    minorityReport: normalizeLines(text, /minority|dissent|disagree|push back|concern|however/i),
+    summary: summarize(sectionBody(text, /(?:^|\n)##\s*Verdict\s*\n/i) || text),
+    evidenceBacked: sectionLines(text, /(?:^|\n)##\s*Evidence-backed\s*\n/i, 8),
+    judgmentCalls: sectionLines(text, /(?:^|\n)##\s*Judgment calls\s*\n/i, 8),
+    couldntVerify: sectionLines(text, /(?:^|\n)##\s*Could not verify\s*\n/i, 8),
+    minorityReport: sectionLines(text, /(?:^|\n)##\s*Minority report\s*\n/i, 8),
     droppedSeats,
     degradedSeats,
     valid,

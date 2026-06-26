@@ -138,6 +138,51 @@ test("formal verdict parses explicit verdict section without whole-text override
   assert.equal(verdict.valid, true);
 });
 
+test("formal verdict extraction ignores markdown section headings as content", () => {
+  const sourcePacket = buildSourcePacket({ topic: "Review the plan" });
+  let state = createFormalBoardState({
+    sessionId: "session-test",
+    agents: ["A", "B"],
+    sourcePacket,
+  });
+  for (const round of [1, 2] as const) {
+    state = recordFormalRoundArtifact(state, { round, agentId: "A", status: "ran", text: "## Verdict\nCAUTION" });
+    state = recordFormalRoundArtifact(state, { round, agentId: "B", status: "ran", text: "## Verdict\nCAUTION" });
+  }
+
+  const verdict = buildFormalVerdict({
+    topic: "Review the plan",
+    state,
+    synthesisText: [
+      "## Verdict",
+      "CAUTION",
+      "",
+      "## Evidence-backed",
+      "- Tests exist.",
+      "",
+      "## Judgment calls",
+      "- Rollout should be staged.",
+      "",
+      "## Could not verify",
+      "- Production load is unknown.",
+      "",
+      "## Minority report",
+      "- One reviewer wanted more load testing.",
+      "",
+      "## Next actions",
+      "- OS breakdown of current users** Pull telemetry before committing.",
+      "- Run the staged rollout.",
+    ].join("\n"),
+  });
+
+  assert.deepEqual(verdict.evidenceBacked, ["Tests exist."]);
+  assert.deepEqual(verdict.judgmentCalls, ["Rollout should be staged."]);
+  assert.deepEqual(verdict.couldntVerify, ["Production load is unknown."]);
+  assert.deepEqual(verdict.minorityReport, ["One reviewer wanted more load testing."]);
+  assert.deepEqual(verdict.next_actions[0], "**OS breakdown of current users** Pull telemetry before committing.");
+  assert.ok(!verdict.couldntVerify.some((item) => /could not verify/i.test(item)));
+});
+
 test("formal verdict is invalid when rebuttal round has fewer than two successful seats", () => {
   const sourcePacket = buildSourcePacket({ topic: "Review the plan" });
   let state = createFormalBoardState({

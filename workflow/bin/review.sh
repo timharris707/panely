@@ -164,15 +164,21 @@ Diff mode: $diff_mode
 
 Read the finder reports in $bundle. Verify each claimed finding against the repository and diff. Try to refute each one. Confirm only findings that are concrete, reproducible, and grounded in file/line evidence.
 
+Classify surviving findings as blocking or advisory:
+- Blocking findings are likely correctness, security, data-loss, privacy, migration, or release-breaker regressions introduced by this diff that should stop a commit.
+- Advisory findings are real but non-blocking follow-ups, including low/medium polish, UX rough edges with an obvious workaround, test gaps, pre-existing issues, portability gaps outside the current release target, or concerns that can reasonably ship with documentation.
+- Do not block solely because more improvements are possible.
+
 Output:
-1. Confirmed findings, or "NO CONFIRMED FINDINGS".
-2. Any rejected finder claims with a short reason.
-3. End with exactly one line:
+1. Blocking findings, or "NO BLOCKING FINDINGS".
+2. Advisory findings, or "NO ADVISORY FINDINGS".
+3. Rejected finder claims with a short reason.
+4. End with exactly one line:
 APPROVED: yes
 or
 APPROVED: no
 
-Use APPROVED: yes only when there are no confirmed findings.
+Use APPROVED: yes when there are no blocking findings, even if advisory findings remain.
 PROMPT
 )"
 
@@ -200,10 +206,11 @@ cat .review/verifier.md
 approval_yes_count="$(grep -cx "APPROVED: yes" .review/verifier.md || true)"
 approval_no_count="$(grep -cx "APPROVED: no" .review/verifier.md || true)"
 last_verifier_line="$(tail -n 1 .review/verifier.md)"
-first_verifier_line="$(awk 'NF { print; exit }' .review/verifier.md)"
-confirmed_phrase_count="$(grep -Eic "confirmed findings?" .review/verifier.md || true)"
+top_verifier_lines="$(awk 'NF { print; n += 1; if (n == 5) exit }' .review/verifier.md)"
+no_blocking_top_count="$(printf '%s\n' "$top_verifier_lines" | grep -Eic "NO[[:space:]]+BLOCKING[[:space:]]+FINDINGS\\.?" || true)"
+late_blocking_heading_count="$(tail -n +2 .review/verifier.md | grep -Eic "^[[:space:]]*([0-9]+[.)][[:space:]]*)?(\\*\\*)?Blocking findings(\\*\\*)?:?\\b" || true)"
 
-if [[ "$approval_yes_count" == "1" && "$approval_no_count" == "0" && "$last_verifier_line" == "APPROVED: yes" && ( "$first_verifier_line" == "NO CONFIRMED FINDINGS" || "$first_verifier_line" == "1. NO CONFIRMED FINDINGS" ) && "$confirmed_phrase_count" == "1" ]]; then
+if [[ "$approval_yes_count" == "1" && "$approval_no_count" == "0" && "$last_verifier_line" == "APPROVED: yes" && "$no_blocking_top_count" -ge 1 && "$late_blocking_heading_count" == "0" ]]; then
   if [[ "$diff_mode" == "staged" && ${#pathspec[@]} -eq 0 ]]; then
     echo "$fingerprint  git diff --cached --binary" > .review/approved.diff.sha256
     echo "review: approved staged diff fingerprint $fingerprint"

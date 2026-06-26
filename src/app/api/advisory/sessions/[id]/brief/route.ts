@@ -20,17 +20,19 @@ export async function GET(
     if (!session) return NextResponse.json({ error: "Session not found" }, { status: 404 });
     if (!canAccess(session, user.id)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const shouldRegenerate = new URL(req.url).searchParams.get("regenerate") === "1";
+    const searchParams = new URL(req.url).searchParams;
+    const shouldRegenerate = searchParams.get("regenerate") === "1";
+    const shouldFresh = searchParams.get("fresh") === "1";
     const existingBrief = (session as AdvisorySession).brief;
     const existingRecord = (session as AdvisorySession).decisionRecord;
-    const brief = shouldRegenerate || !existingBrief
+    const brief = shouldRegenerate || shouldFresh || !existingBrief
       ? buildBoardBrief(session as AdvisorySession)
       : existingBrief;
-    const decisionRecord = shouldRegenerate || !existingRecord
+    const decisionRecord = shouldRegenerate || shouldFresh || !existingRecord
       ? buildDecisionRecord(session as AdvisorySession)
       : existingRecord;
 
-    if (shouldRegenerate || !existingBrief || !existingRecord) {
+    if (shouldRegenerate || (!shouldFresh && (!existingBrief || !existingRecord))) {
       saveAdvisorySession({ ...session, brief, decisionRecord });
     }
 

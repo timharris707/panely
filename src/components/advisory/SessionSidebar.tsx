@@ -9,15 +9,13 @@ import {
   History,
   Search,
   Loader2,
-  Columns2,
-  BarChart3,
   GitBranch,
   Settings,
 } from "lucide-react";
 import Link from "next/link";
-import { AvatarStack, getAgentInitial } from "@/components/AgentAvatar";
+import { AvatarStack } from "@/components/AgentAvatar";
 import type { AdvisorySession } from "@/types/advisory";
-import { AGENTS, MODELS, getStatusBadge, formatDate } from "./constants";
+import { MODELS, getStatusBadge, formatDate } from "./constants";
 
 const MODEL_SHORT: Record<string, string> = Object.fromEntries(
   MODELS.map((m) => [m.id, m.label.replace(/ \(.*\)$/, "")])
@@ -29,29 +27,23 @@ function SessionListItem({
   session,
   active,
   onClick,
-  compareMode,
-  compareSelected,
-  onCompareToggle,
 }: {
   session: AdvisorySession;
   active: boolean;
   onClick: () => void;
-  compareMode?: boolean;
-  compareSelected?: boolean;
-  onCompareToggle?: () => void;
 }) {
   const badge = getStatusBadge(session.status);
 
   return (
     <button
-      onClick={compareMode ? onCompareToggle : onClick}
+      onClick={onClick}
       style={{
         width: "100%",
         textAlign: "left",
         padding: "12px 14px",
         borderRadius: "10px",
-        border: `1px solid ${compareSelected ? "rgba(96,165,250,0.5)" : active ? "var(--accent)" : "var(--border)"}`,
-        backgroundColor: compareSelected ? "rgba(96,165,250,0.08)" : active ? "var(--accent-soft)" : "transparent",
+        border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
+        backgroundColor: active ? "var(--accent-soft)" : "transparent",
         cursor: "pointer",
         transition: "all 150ms ease",
         marginBottom: "6px",
@@ -59,16 +51,6 @@ function SessionListItem({
       }}
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
-        {compareMode && (
-          <div style={{
-            width: 16, height: 16, borderRadius: "4px", marginRight: "6px", flexShrink: 0,
-            border: `2px solid ${compareSelected ? "#60a5fa" : "var(--border)"}`,
-            backgroundColor: compareSelected ? "#60a5fa" : "transparent",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            {compareSelected && <span style={{ color: "#fff", fontSize: "10px", fontWeight: 700 }}>✓</span>}
-          </div>
-        )}
         <span
           style={{
             fontSize: "9px",
@@ -191,20 +173,11 @@ interface SessionSidebarProps {
   loading: boolean;
   refreshing: boolean;
   searchQuery: string;
-  filterAgent: string;
-  showFilters: boolean;
-  compareMode: boolean;
-  compareSelections: string[];
   mobileSidebarOpen: boolean;
   onSelectSession: (session: AdvisorySession) => void;
   onActiveViewChange: (view: "live" | "history") => void;
   onRefresh: () => void;
   onSearchChange: (query: string) => void;
-  onFilterAgentChange: (agent: string) => void;
-  onShowFiltersChange: (show: boolean) => void;
-  onCompareModeToggle: () => void;
-  onCompareToggle: (sessionId: string) => void;
-  onOpenCompare: () => void;
   onShowLaunchModal: () => void;
   onMobileSidebarClose: () => void;
 }
@@ -216,20 +189,11 @@ export default function SessionSidebar({
   loading,
   refreshing,
   searchQuery,
-  filterAgent,
-  showFilters,
-  compareMode,
-  compareSelections,
   mobileSidebarOpen,
   onSelectSession,
   onActiveViewChange,
   onRefresh,
   onSearchChange,
-  onFilterAgentChange,
-  onShowFiltersChange,
-  onCompareModeToggle,
-  onCompareToggle,
-  onOpenCompare,
   onShowLaunchModal,
   onMobileSidebarClose,
 }: SessionSidebarProps) {
@@ -293,21 +257,6 @@ export default function SessionSidebar({
           <MessageSquarePlus size={14} />
           New Session
         </button>
-        <button
-          onClick={onCompareModeToggle}
-          style={{
-            width: "100%", padding: "7px", borderRadius: "8px",
-            border: `1px solid ${compareMode ? "rgba(96,165,250,0.5)" : "var(--border)"}`,
-            backgroundColor: compareMode ? "rgba(96,165,250,0.1)" : "transparent",
-            color: compareMode ? "#60a5fa" : "var(--text-muted)",
-            cursor: "pointer", fontSize: "11px", fontWeight: 600,
-            display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
-            fontFamily: "var(--font-body)", marginTop: "6px", transition: "all 150ms ease",
-          }}
-        >
-          <Columns2 size={13} />
-          {compareMode ? `Compare (${compareSelections.length}/2)` : "Compare Sessions"}
-        </button>
         <Link
           href="/advisory/settings"
           style={{
@@ -322,22 +271,8 @@ export default function SessionSidebar({
           }}
         >
           <Settings size={13} />
-          Model Settings
+          Model Connections
         </Link>
-        {compareMode && compareSelections.length === 2 && (
-          <button
-            onClick={onOpenCompare}
-            style={{
-              width: "100%", padding: "8px", borderRadius: "8px", border: "none",
-              backgroundColor: "#60a5fa", color: "#fff", cursor: "pointer",
-              fontSize: "11px", fontWeight: 700, display: "flex", alignItems: "center",
-              justifyContent: "center", gap: "6px", fontFamily: "var(--font-heading)", marginTop: "4px",
-            }}
-          >
-            <BarChart3 size={13} />
-            Open Comparison
-          </button>
-        )}
       </div>
 
       {/* View Toggle */}
@@ -414,61 +349,6 @@ export default function SessionSidebar({
           )}
         </div>
 
-        {/* Agent filter */}
-        <div style={{ marginTop: "6px" }}>
-          <button
-            onClick={() => onShowFiltersChange(!showFilters)}
-            style={{
-              background: "none", border: "none", cursor: "pointer",
-              color: filterAgent ? "var(--accent)" : "var(--text-muted)",
-              fontSize: "10px", display: "flex", alignItems: "center", gap: "4px",
-              padding: "2px 0", fontWeight: filterAgent ? 700 : 500,
-            }}
-          >
-            <Search size={10} />
-            {filterAgent ? `Filter: ${filterAgent}` : "Filter by agent"}
-            {filterAgent && (
-              <span
-                onClick={(e) => { e.stopPropagation(); onFilterAgentChange(""); }}
-                style={{ marginLeft: "4px", color: "var(--accent)", fontWeight: 700 }}
-              >
-                ✕
-              </span>
-            )}
-          </button>
-
-          {showFilters && (
-            <div
-              style={{
-                marginTop: "6px", padding: "8px", backgroundColor: "var(--surface-elevated)",
-                border: "1px solid var(--border)", borderRadius: "8px",
-                display: "flex", flexWrap: "wrap", gap: "4px",
-              }}
-            >
-              {AGENTS.map((agent) => (
-                <button
-                  key={agent.id}
-                  onClick={() => {
-                    onFilterAgentChange(filterAgent === agent.id ? "" : agent.id);
-                    onShowFiltersChange(false);
-                  }}
-                  style={{
-                    padding: "3px 7px", borderRadius: "12px",
-                    border: `1px solid ${filterAgent === agent.id ? "var(--accent)" : "var(--border)"}`,
-                    backgroundColor: filterAgent === agent.id ? "var(--accent-soft)" : "transparent",
-                    color: filterAgent === agent.id ? "var(--accent)" : "var(--text-muted)",
-                    cursor: "pointer", fontSize: "10px",
-                    fontWeight: filterAgent === agent.id ? 700 : 500,
-                    display: "flex", alignItems: "center", gap: "4px", transition: "all 100ms ease",
-                  }}
-                >
-                  <span>{getAgentInitial(agent.id)}</span>
-                  <span>{agent.id}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Session list */}
@@ -481,18 +361,17 @@ export default function SessionSidebar({
           const baseSessions = activeView === "live" ? liveSessions : completedSessions;
           const displaySessions = baseSessions.filter((s) => {
             const matchesSearch = !searchQuery || s.topic.toLowerCase().includes(searchQuery.toLowerCase());
-            const matchesAgent = !filterAgent || s.agents.some((a) => a.toLowerCase() === filterAgent.toLowerCase());
-            return matchesSearch && matchesAgent;
+            return matchesSearch;
           });
           if (displaySessions.length === 0) {
             return (
               <div style={{ textAlign: "center", padding: "32px 16px", color: "var(--text-muted)" }}>
-                {searchQuery || filterAgent ? (
+                {searchQuery ? (
                   <>
                     <Search size={20} style={{ opacity: 0.4, margin: "0 auto 8px" }} />
                     <div style={{ fontSize: "12px", marginBottom: "4px" }}>No matching sessions</div>
                     <button
-                      onClick={() => { onSearchChange(""); onFilterAgentChange(""); }}
+                      onClick={() => onSearchChange("")}
                       style={{
                         marginTop: "8px", fontSize: "10px", color: "var(--accent)",
                         background: "none", border: "none", cursor: "pointer", fontWeight: 600,
@@ -522,9 +401,6 @@ export default function SessionSidebar({
               session={s}
               active={activeSession?.id === s.id}
               onClick={() => onSelectSession(s)}
-              compareMode={compareMode}
-              compareSelected={compareSelections.includes(s.id)}
-              onCompareToggle={() => onCompareToggle(s.id)}
             />
           ));
         })()}

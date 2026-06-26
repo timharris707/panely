@@ -3,21 +3,29 @@ import assert from "node:assert/strict";
 import { getProviderModelById } from "./providers.ts";
 import { codexReasoningEffortArgs, resolveThinkingLevel, supportedThinkingLevels } from "./thinking-levels.ts";
 
-test("Claude thinking levels do not include unsupported xhigh by default", () => {
+test("Claude thinking levels include current Claude Code effort options", () => {
   const model = getProviderModelById("claude-opus");
-  assert.deepEqual(supportedThinkingLevels(model), ["low", "medium", "high", "max"]);
+  assert.deepEqual(supportedThinkingLevels(model), ["low", "medium", "high", "xhigh", "max"]);
 
   const resolved = resolveThinkingLevel(model, "xhigh");
   assert.equal(resolved.enforced, true);
-  assert.equal(resolved.effective, "max");
-  assert.equal(resolved.normalized, true);
-  assert.match(resolved.note, /using max/i);
+  assert.equal(resolved.effective, "xhigh");
+  assert.equal(resolved.normalized, false);
 });
 
-test("Codex reasoning effort maps to config args", () => {
+test("Codex GPT-5.5 reasoning effort is clamped to provider-supported values", () => {
   const model = getProviderModelById("codex-frontier");
   const resolved = resolveThinkingLevel(model, "max");
-  assert.deepEqual(codexReasoningEffortArgs(resolved), ["--config", "model_reasoning_effort=\"max\""]);
+  assert.equal(resolved.effective, "xhigh");
+  assert.equal(resolved.normalized, true);
+  assert.deepEqual(codexReasoningEffortArgs(resolved), ["--config", "model_reasoning_effort=\"xhigh\""]);
+});
+
+test("Codex unsupported minimal effort normalizes to low instead of the deepest setting", () => {
+  const model = getProviderModelById("codex-frontier");
+  const resolved = resolveThinkingLevel(model, "minimal");
+  assert.equal(resolved.effective, "low");
+  assert.equal(resolved.normalized, true);
 });
 
 test("Gemini thinking level is not overclaimed when CLI has no stable flag", () => {

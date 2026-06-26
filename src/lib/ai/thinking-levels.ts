@@ -1,7 +1,11 @@
 import type { ProviderModel } from "@/lib/ai/providers";
-import { fallbackCliThinkingCapability, normalizeCliThinkingLevel, type CliThinkingCapability } from "./cli-capabilities.ts";
+import { fallbackCliThinkingCapability, normalizeCliThinkingLevel, type CliThinkingCapability, type CliThinkingLevel } from "./cli-capabilities.ts";
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
+type ThinkingCapabilityInput = Partial<Pick<CliThinkingCapability, "supportedThinkingLevels" | "thinkingEnforced" | "thinkingNote">> & {
+  providerThinkingLevels?: Array<Exclude<ThinkingLevel, "off">>;
+};
 
 export interface ThinkingLevelResolution {
   requested: ThinkingLevel;
@@ -13,20 +17,27 @@ export interface ThinkingLevelResolution {
 
 export function supportedThinkingLevels(
   model: ProviderModel,
-  capability?: Partial<Pick<CliThinkingCapability, "supportedThinkingLevels" | "thinkingEnforced">>
+  capability?: ThinkingCapabilityInput
 ): ThinkingLevel[] {
-  if (capability?.thinkingEnforced && capability.supportedThinkingLevels) return capability.supportedThinkingLevels;
+  const providerLevels = capability?.providerThinkingLevels ?? model.thinkingLevels ?? [];
+  const clampToProvider = (levels: ThinkingLevel[]) => (
+    providerLevels.length ? levels.filter((level) => providerLevels.includes(level as Exclude<ThinkingLevel, "off">)) : levels
+  );
+
+  if (capability?.thinkingEnforced && capability.supportedThinkingLevels) {
+    return clampToProvider(capability.supportedThinkingLevels);
+  }
   if (capability && !capability.thinkingEnforced) return [];
-  if (model.localCli === "claude") return fallbackCliThinkingCapability("claude").supportedThinkingLevels;
-  if (model.localCli === "codex") return fallbackCliThinkingCapability("codex").supportedThinkingLevels;
+  if (model.localCli === "claude") return clampToProvider(fallbackCliThinkingCapability("claude").supportedThinkingLevels);
+  if (model.localCli === "codex") return clampToProvider(fallbackCliThinkingCapability("codex").supportedThinkingLevels);
   if (model.localCli === "gemini") return [];
-  return model.thinkingLevels ?? [];
+  return providerLevels;
 }
 
 export function resolveThinkingLevel(
   model: ProviderModel,
   requestedLevel?: ThinkingLevel,
-  capability?: Partial<Pick<CliThinkingCapability, "supportedThinkingLevels" | "thinkingEnforced" | "thinkingNote">>
+  capability?: ThinkingCapabilityInput
 ): ThinkingLevelResolution {
   const requested = requestedLevel ?? "medium";
 
@@ -58,8 +69,9 @@ export function resolveThinkingLevel(
     typeof activeCapability.thinkingEnforced === "boolean" &&
     Array.isArray(activeCapability.supportedThinkingLevels)
   ) {
+    const supported = supportedThinkingLevels(model, activeCapability);
     const resolved = normalizeCliThinkingLevel(requested, {
-      supportedThinkingLevels: activeCapability.supportedThinkingLevels,
+      supportedThinkingLevels: supported.filter((level) => level !== "off") as CliThinkingLevel[],
       thinkingEnforced: activeCapability.thinkingEnforced,
       thinkingNote: activeCapability.thinkingNote || "",
     });

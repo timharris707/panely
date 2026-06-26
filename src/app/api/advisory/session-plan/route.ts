@@ -3,6 +3,7 @@ import { generateText } from "@/lib/ai/router";
 import { getProviderModelById, PROVIDERS, resolveProviderModelId, type ProviderModel } from "@/lib/ai/providers";
 import { detectLocalCliTools, probeAllModelHealth } from "@/lib/ai/model-health";
 import { supportedThinkingLevels } from "@/lib/ai/thinking-levels";
+import { providerThinkingLevels, readProviderCapabilityCache } from "@/lib/ai/provider-capability-cache";
 import { validateSessionPlanProviderDisclosure } from "@/lib/advisory/provider-disclosure-gates";
 import {
   inferAdvisoryIntent,
@@ -30,11 +31,15 @@ const ALLOWED_THINKING: ThinkingLevel[] = ["minimal", "low", "medium", "high", "
 function healthyProviderModels() {
   const health = probeAllModelHealth();
   const tools = detectLocalCliTools();
+  const providerCapabilityCache = readProviderCapabilityCache();
   const healthyIds = new Set(health.filter((result) => result.ok).map((result) => result.id));
   const models = PROVIDERS.filter((provider) => healthyIds.has(provider.id));
   const thinkingLevelsByModelId = new Map(models.map((provider) => [
     provider.id,
-    supportedThinkingLevels(provider, provider.localCli ? tools[provider.localCli] : undefined).filter((level) => level !== "off") as ThinkingLevel[],
+    supportedThinkingLevels(provider, {
+      ...(provider.localCli ? tools[provider.localCli] : undefined),
+      providerThinkingLevels: providerThinkingLevels(provider, providerCapabilityCache),
+    }).filter((level) => level !== "off") as ThinkingLevel[],
   ]));
   return {
     health,
@@ -52,6 +57,12 @@ function chooseModel(availableModelIds: string[], preferredIds: string[]) {
 
 function inferMode(intent: Intent, topic: string): PlannedMode {
   return inferAdvisoryMode(intent, topic);
+}
+
+function normalizeRequestedMode(value: unknown): PlannedMode | null {
+  return value === "roundtable" || value === "competitive" || value === "formal-board"
+    ? value
+    : null;
 }
 
 function supportedPlannerThinkingLevels(model: ProviderModel, thinkingLevelsByModelId?: Map<string, ThinkingLevel[]>) {
@@ -248,10 +259,12 @@ export async function POST(req: NextRequest) {
 
     const availableModelIds = available.ids;
     const requestedPlannerModelId = resolveProviderModelId(body?.modelId || "claude-sonnet");
+    const requestedMode = normalizeRequestedMode(body?.requestedMode);
     const plannerModelId = availableModelIds.includes(requestedPlannerModelId)
       ? requestedPlannerModelId
       : chooseModel(availableModelIds, ["claude-sonnet", "claude-opus", "codex-frontier", "gemini-flash"]);
-    const fallback = fallbackPlan(topic, availableModelIds, available.thinkingLevelsByModelId);
+    const fallbackBase = fallbackPlan(topic, availableModelIds, available.thinkingLevelsByModelId);
+    const fallback = requestedMode ? { ...fallbackBase, mode: requestedMode } : fallbackBase;
     const availableModelLines = available.models
       .map((provider) => {
         const levels = available.thinkingLevelsByModelId.get(provider.id) ?? [];
@@ -273,6 +286,7 @@ Create named advisors specifically for this topic. Do not use existing product a
 ${topic.slice(0, 12000)}
 
 Inferred intent from heuristics: ${fallback.intent}
+Requested session mode: ${requestedMode ?? "auto"}
 
 Return JSON with this exact shape:
 {
@@ -295,7 +309,9 @@ Use 4-6 advisors. If the user asks to review a plan, use stress-test and include
 Mode guidance:
 - roundtable: exploratory collaborative judgment.
 - competitive: rival proposals, critique, and voting.
-- formal-board: high-stakes review, independent first round, rebuttal, and a structured ship/caution/block verdict.`;
+- formal-board: high-stakes review, independent first round, rebuttal, and a structured ship/caution/block verdict.
+
+If requested session mode is not auto, use that mode.`;
 
     try {
       const result = await generateText({
@@ -317,9 +333,9 @@ Mode guidance:
       const intent: Intent = parsed.intent && ["decision", "stress-test", "compare", "ideas", "red-team", "debug"].includes(parsed.intent)
         ? parsed.intent
         : fallback.intent;
-      const mode: PlannedMode = parsed.mode === "competitive" || parsed.mode === "formal-board"
+      const mode: PlannedMode = requestedMode ?? (parsed.mode === "competitive" || parsed.mode === "formal-board"
         ? parsed.mode
-        : inferMode(intent, topic);
+        : inferMode(intent, topic));
       const advisors = Array.isArray(parsed.advisors)
         ? parsed.advisors.slice(0, 6).map((advisor, index) => normalizeAdvisor(advisor, index, fallback.advisors, availableModelIds, available.thinkingLevelsByModelId))
         : fallback.advisors;
