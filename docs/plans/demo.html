@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plan — Demo</title>
+<style>
+:root{
+  --bg:#070b12; --surface:#0e1622; --surface-2:#101a28; --nested:#0b131e;
+  --line:rgba(125,246,255,0.10); --line-2:rgba(125,246,255,0.18);
+  --text:#e7eef6; --muted:#94a3b6; --faint:#62718a;
+  --cyan:#22d3ee; --cyan-br:#7df9ff; --cyan-dp:#0a83ab;
+  --amber:#f5a524; --coral:#fb7185; --green:#34d399;
+  --radius:14px;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:radial-gradient(1100px 560px at 50% -220px,#0f1b2c 0%,#070b12 58%),var(--bg);
+  color:var(--text); font-family:var(--sans); line-height:1.6;
+  -webkit-font-smoothing:antialiased; padding:40px 20px 80px;
+}
+.wrap{max-width:940px;margin:0 auto}
+a{color:var(--cyan-br);text-decoration:none}
+.top-accent{height:3px;border-radius:3px;margin-bottom:26px;
+  background:linear-gradient(90deg,transparent,var(--cyan-dp),var(--cyan),var(--cyan-br),var(--cyan),transparent);
+  opacity:.8}
+.title{display:flex;align-items:center;gap:13px;font-size:27px;font-weight:600;letter-spacing:-.015em;margin:0}
+.title .dot{width:13px;height:13px;border-radius:50%;background:var(--cyan);
+  box-shadow:0 0 0 4px rgba(34,211,238,.14),0 0 18px 2px rgba(34,211,238,.55);flex:none}
+.meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0 6px}
+.canon{font-size:12.5px;color:var(--faint);margin-top:6px}
+.canon b{color:var(--muted);font-weight:500}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 11px;border-radius:999px;
+  font-size:12px;font-weight:500;border:1px solid var(--line-2);color:var(--muted);white-space:nowrap}
+.pill.mono{font-family:var(--mono);font-size:11.5px;background:rgba(34,211,238,.08);
+  color:var(--cyan-br);border-color:rgba(34,211,238,.28)}
+.pill.rel{color:#cdd8e6;border-color:var(--line-2)}
+.pill.amber{color:var(--amber);border-color:rgba(245,165,36,.35);background:rgba(245,165,36,.07)}
+.summary{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:18px 20px;margin:22px 0}
+.summary-row{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.count{font-size:15px;color:var(--muted)}
+.count b{font-family:var(--mono);font-size:22px;color:var(--cyan-br);font-weight:600}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.bead{width:10px;height:10px;border-radius:50%;flex:none}
+.bead.done{background:var(--cyan)} .bead.wip{background:var(--amber)}
+.bead.todo{background:transparent;border:2px solid var(--faint)} .bead.block{background:var(--coral)}
+.track{height:10px;border-radius:999px;background:rgba(255,255,255,.06);margin-top:14px;overflow:hidden}
+.fill{height:100%;border-radius:999px;
+  background:linear-gradient(90deg,var(--cyan-dp),var(--cyan) 60%,var(--cyan-br));
+  box-shadow:0 0 14px rgba(34,211,238,.5)}
+.sec{font-size:12px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--faint);margin:30px 0 6px}
+.diagram{background:var(--nested);border:1px dashed var(--line-2);border-radius:var(--radius);
+  padding:20px;margin:8px 0 8px;display:flex;justify-content:center}
+.diagram svg{max-width:100%;height:auto}
+.ms{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:18px 20px 16px;margin:14px 0}
+.ms-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ms-id{font-family:var(--mono);font-size:12px;color:var(--cyan);background:rgba(34,211,238,.10);
+  border:1px solid rgba(34,211,238,.25);border-radius:7px;padding:2px 8px;font-weight:600}
+.ms-name{font-size:17px;font-weight:600;margin:0}
+.ms-head .right{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ms-outcome{color:var(--muted);font-size:13.5px;margin:8px 0 12px}
+.ms-bar{height:6px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden;margin-bottom:6px}
+.ms-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--cyan-dp),var(--cyan-br))}
+.phase{border-left:2px solid var(--line-2);margin:14px 0 6px;padding:2px 0 2px 16px}
+.phase-name{font-size:13.5px;font-weight:600;color:#cdd8e6;margin:0 0 6px;display:flex;align-items:center;gap:8px}
+.phase-name .px{font-family:var(--mono);font-size:11px;color:var(--faint)}
+.task{display:flex;gap:10px;align-items:flex-start;padding:3px 0;font-size:14px;color:var(--text)}
+.m{width:18px;height:18px;border-radius:50%;flex:none;display:grid;place-items:center;
+  font-size:11px;font-weight:700;margin-top:2px}
+.m.todo{border:2px solid var(--faint)}
+.m.wip{border:2px solid var(--amber);color:var(--amber);box-shadow:0 0 9px rgba(245,165,36,.45);
+  animation:pulse 2.2s ease-in-out infinite}
+.m.done{background:var(--cyan);color:#04121a;box-shadow:0 0 9px rgba(34,211,238,.45)}
+.m.block{background:var(--coral);color:#2a0b10}
+@keyframes pulse{0%,100%{box-shadow:0 0 6px rgba(245,165,36,.35)}50%{box-shadow:0 0 13px rgba(245,165,36,.7)}}
+.task.done .t{color:var(--muted)}
+.task.block .t{color:#fda4af}
+.note{font-size:13px;color:var(--muted);margin:8px 0 2px}
+.note .lbl{font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--cyan);margin-right:8px}
+.gate{font-size:13px;margin:6px 0 2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.gate .lbl{font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--amber)}
+.review{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--faint);
+  margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.review .chk{color:var(--green)}
+.foot{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);
+  font-family:var(--mono);font-size:11.5px;color:var(--faint);display:flex;
+  justify-content:space-between;gap:12px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top-accent"></div>
+  <h1 class="title"><span class="dot"></span>Demo</h1>
+  <div class="meta">
+    <span class="pill">Draft · rev 1</span>
+    <span class="pill">2026-06-25</span>
+    <span class="pill">owner: Codex</span>
+    <span class="pill mono">gate: npm run verify</span>
+  </div>
+  <div class="canon"><b>Canonical:</b> this view is generated from <code>docs/plans/demo.md</code> — do not edit by hand.</div>
+
+  <div class="summary">
+    <div class="summary-row">
+      <div class="count"><b>1</b> / 4 tasks · <b style="font-size:22px">25%</b></div>
+      <div class="legend">
+        <span><i class="bead done"></i> 1 done</span>
+        <span><i class="bead wip"></i> 1 in progress</span>
+        <span><i class="bead block"></i> 1 blocked</span>
+        <span><i class="bead todo"></i> 1 to do</span>
+      </div>
+    </div>
+    <div class="track"><div class="fill" style="width:25%"></div></div>
+  </div>
+
+  <div class="sec">Approach</div>
+  <div class="diagram"><pre><code>flowchart LR
+  A[Input] --&gt; B[Step] --&gt; C[Output]</code></pre></div>
+
+  <div class="sec">Milestones</div>
+
+  <div class="ms">
+    <div class="ms-head">
+      <span class="ms-id">M1</span>
+      <h3 class="ms-name">&lt;name&gt;</h3>
+      <span class="right">
+        <span class="pill rel">→ v0.1.0</span>
+        <span class="pill">depends: none</span>
+      </span>
+    </div>
+    <div class="ms-outcome">&lt;one line: what exists after this PR that didn&#x27;t before.&gt;</div>
+    <div class="ms-bar"><i style="width:33%"></i></div>
+
+    <div class="phase">
+      <div class="phase-name"><span class="px">1.1</span> &lt;name&gt;</div>
+      <div class="task done"><span class="m done">✓</span><span class="t">&lt;task&gt;</span></div>
+<div class="task wip"><span class="m wip">·</span><span class="t">&lt;task&gt;</span></div>
+      <div class="note"><span class="lbl">Testing</span>&lt;what proves this phase correct — the specific unit/integration/mock cases&gt;.</div>
+      <div class="gate"><span class="lbl">Gate</span><span class="pill mono">&lt;named command that must pass for this phase&gt;</span></div>
+    </div>
+    <div class="phase">
+      <div class="phase-name"><span class="px">1.2</span> &lt;name&gt;</div>
+      <div class="task todo"><span class="m todo"></span><span class="t">&lt;task&gt;</span></div>
+      <div class="note"><span class="lbl">Testing</span>&lt;…&gt;</div>
+      <div class="gate"><span class="lbl">Gate</span><span class="pill mono">&lt;command&gt;</span></div>
+    </div>
+
+    <div class="review"><span class="chk">✓</span> Review checkpoint — adversarial review of this milestone&#x27;s diff passes before merge (finders → skeptic verify).</div>
+  </div>
+  <div class="ms">
+    <div class="ms-head">
+      <span class="ms-id">M2</span>
+      <h3 class="ms-name">&lt;name&gt;</h3>
+      <span class="right">
+        <span class="pill rel">→ v0.2.0</span>
+        <span class="pill">depends: M1</span>
+      </span>
+    </div>
+    <div class="ms-outcome">&lt;…&gt;</div>
+    <div class="ms-bar"><i style="width:0%"></i></div>
+
+    <div class="phase">
+      <div class="phase-name"><span class="px">2.1</span> &lt;name&gt;</div>
+      <div class="task block"><span class="m block">!</span><span class="t">&lt;task&gt; (waiting on decision)</span></div>
+      <div class="note"><span class="lbl">Testing</span>&lt;…&gt;</div>
+      <div class="gate"><span class="lbl">Gate</span><span class="pill mono">&lt;command&gt;</span></div>
+    </div>
+
+    <div class="review"><span class="chk">✓</span> Review checkpoint — adversarial review of this milestone&#x27;s diff passes before merge.</div>
+  </div>
+
+  <div class="foot">
+    <span>generated from docs/plans/demo.md — do not edit</span>
+    <span>rendered content sha256:cc06f7614ebc</span>
+  </div>
+</div>
+</body>
+</html>

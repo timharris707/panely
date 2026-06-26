@@ -35,3 +35,5 @@ dist/
 .vercel
 .agents/
 .playwright-cli/
+
+.review/
