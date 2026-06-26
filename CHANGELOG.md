@@ -6,7 +6,10 @@ Panely follows sparse milestone releases. GitHub Releases are created from semve
 
 ## [Unreleased]
 
-- Keep upcoming milestone changes here until the release PR renames this section to `## [vX.Y.Z] - YYYY-MM-DD - Milestone name`.
+- Repositioned the GitHub README around Panely as an AI advisory board for broad life, work, product, creative, and technical decisions.
+- Clarified that Roundtable, Competitive, and Formal Board Review are session modes, separate from model/provider choices such as Claude Code, Codex, and Gemini CLI.
+- Added stronger README artifact examples for the Full Artifact, Decision Memo, Action Plan, Risk Memo, and Board Brief export flow.
+- Removed the obsolete hosted-SaaS landing-page draft with unsupported pricing, free-session, testimonial, share-link, model-provider, and SOC 2 claims.
 
 ## [v0.6.0] - 2026-06-25 - Local Project Debug Board
 

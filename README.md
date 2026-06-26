@@ -1,23 +1,21 @@
 # Panely
 
-**A local-first AI advisory room for serious decisions.**
+**An AI advisory board for decisions too important for one opinion.**
 
-Panely turns an important question, plan, document, or product decision into a structured working session with a panel of AI advisors.
+Panely helps you think through decisions you keep circling: changing jobs, moving cities, making a major purchase, weighing a family tradeoff, shaping a product, comparing investment ideas, or deciding whether a creative bet is worth taking.
 
-Instead of giving you one flat chatbot response, Panely lets multiple frontier models examine the same brief from different roles, challenge each other over multiple rounds, and produce an artifact you can actually use: a decision memo, critique, vote breakdown, transcript, or next-step plan.
+Write the situation once, choose the kind of session you need, and a panel of AI advisors debates the options, pressure-tests the risks, and leaves you with a clear memo, dissenting views, votes when useful, and next steps.
 
-The goal is simple: make high-quality strategic thinking feel like a live advisory board, not another chat thread.
+The goal is simple: make hard decisions feel less like a lonely chat thread and more like a serious advisory board.
 
 ## What You Can Do With It
 
-- Drop in a strategy, proposal, Markdown plan, HTML document, product question, or technical design.
-- Let the AI propose the right advisor lineup for the problem.
-- Run a roundtable when you want collaborative judgment.
-- Run a competitive session when you want sharper disagreement, pitches, critiques, and votes.
-- Run a Formal Board Review when you need prompt-isolated first-pass review, rebuttal, and a structured `ship` / `caution` / `block` verdict.
-- Choose specific models, providers, thinking levels, response lengths, pacing, and context budgets.
-- Watch the discussion unfold live through local model CLIs.
-- Export the final artifact, vote results, Markdown transcript, and printable PDF view.
+- Bring a messy decision, proposal, personal tradeoff, business plan, source file, or local project snapshot.
+- Let Panely propose the right advisor roles for the problem.
+- Run a Roundtable when you want thoughtful advice and synthesis.
+- Run a Competitive session when you want rival options, critiques, and votes.
+- Run a Formal Board Review when you need independent first-pass review, rebuttal, and a structured `ship` / `caution` / `block` verdict.
+- Save the result as a decision memo, action plan, risk memo, board brief, full transcript, Markdown export, HTML view, or printable PDF.
 
 ## Why Panely Exists
 
@@ -26,13 +24,49 @@ Most AI tools collapse complex decisions into a single assistant voice. That is 
 Panely is built around a different pattern:
 
 - Multiple advisors review the same brief.
-- Each advisor has a specific role, model, and reasoning level.
+- Each advisor has a specific role and perspective.
 - The session can unfold over rounds so the panel can challenge itself.
-- Competitive mode forces agents to pitch, critique, and vote.
-- Formal Board Review keeps peer output out of Round 1 prompts, then produces an explicit evidence / judgment / could-not-verify split.
+- Competitive mode forces advisors to pitch, critique, and vote.
+- Formal Board Review keeps peer output out of the first review pass, then produces an explicit evidence, judgment, and could-not-verify split.
 - The final output is an artifact you can save, share, or turn into work.
 
-It is especially useful for reviewing plans, pressure-testing product strategy, comparing options, auditing a proposal, or turning a messy question into a clear next move.
+It is useful for personal, professional, and technical decisions: choosing between jobs, deciding whether to relocate, evaluating a major purchase, preparing for a professional conversation, pressure-testing a product strategy, auditing a proposal, or turning a messy question into a clear next move.
+
+Panely is not a substitute for medical, legal, financial, or other professional advice. It is a structured way to surface options, risks, dissent, and next steps before you decide.
+
+## Session Modes
+
+Panely has three session modes. A mode is the shape of the meeting, not the AI model. You can choose the mode first, then choose which local AI tools or providers power each advisor.
+
+| Mode | Use It When | What Happens | What You Get |
+| --- | --- | --- | --- |
+| **Roundtable** | You want thoughtful advice and synthesis. | Advisors discuss the same question, build on each other's points, and surface agreement and disagreement. | A clear recommendation, key risks, dissenting views, and next steps. |
+| **Competitive** | You want stronger ideas or a decision between options. | Each advisor pitches an approach, critiques the others, then votes. | A winning idea or ranked set of ideas, plus the reasoning behind the vote. |
+| **Formal Board Review** | You need stricter review of an important plan, proposal, or document. | Advisors first review the source independently, then see peer output, rebut, and converge on a structured verdict. | A `ship`, `caution`, or `block` verdict with evidence, judgment calls, open questions, and dissent. |
+
+The short version: use **Roundtable** for advice, **Competitive** for choosing between ideas, and **Formal Board Review** when you want a more disciplined review artifact.
+
+Models are separate from modes. Panely can route advisors through local tools such as Claude Code, Codex, and Gemini CLI when they are installed and authenticated, but the session mode is about how the discussion is run.
+
+## What You Get After A Session
+
+Panely ends each completed session with an artifact library, not just a chat log. You can preview and download each artifact as Markdown, HTML, or printable PDF.
+
+Example session: "Should I take a remote job and move closer to family?"
+
+- **Board Brief:** Executive-ready summary with the recommended call, strongest arguments, dissent, key risks, action items, and model provenance.
+- **Decision Memo:** Decision, recommendation, options considered, dissent and caveats, risks, open questions, action items, and provenance.
+- **Action Plan:** Ordered next steps, owner slots, dependencies, watchpoints, risks to track, and follow-up checks.
+- **Risk Memo:** Primary failure modes, weak assumptions, could-not-verify items, mitigations, and unresolved questions.
+- **Full Artifact + Transcript:** The complete decision record plus the round-by-round advisor transcript, vote results when applicable, and provider/model details.
+
+Illustrative excerpt:
+
+> **Recommendation:** Continue negotiating unless the new role confirms remote permanence, relocation timing, and total compensation in writing.
+>
+> **Dissent:** One advisor argues the family-support upside outweighs the career uncertainty, but only if there is a six-month fallback plan.
+>
+> **Next actions:** Price the move, request written remote-policy terms, compare health and retirement benefits, and schedule a follow-up review before accepting.
 
 ## How It Works
 
@@ -40,10 +74,10 @@ It is especially useful for reviewing plans, pressure-testing product strategy, 
    Start with the topic, question, or document you want reviewed. Panely can infer the intent from the brief instead of forcing you through a rigid form.
 
 2. **Approve the advisory plan**
-   Panely proposes the advisor roles, model/provider choices, thinking levels, number of rounds, response length, pacing, and context budget.
+   Panely proposes advisor roles, session mode, model/provider choices, number of rounds, response length, pacing, and source scope.
 
 3. **Run the room**
-   Advisors respond through local subscription-backed CLIs such as Claude Code, Codex, and Gemini CLI. Roundtable mode emphasizes synthesis. Competitive mode emphasizes ideas, critique, and voting. Formal Board Review emphasizes prompt-level independent review and a structured verdict.
+   Advisors respond through configured local model tools. Roundtable mode emphasizes synthesis. Competitive mode emphasizes ideas, critique, and voting. Formal Board Review emphasizes prompt-level independent review and a structured verdict.
 
 4. **Leave with an artifact**
    The session produces useful output beyond the conversation itself: recommendations, dissent, risks, votes, action items, transcripts, and exportable decision records.
@@ -52,15 +86,13 @@ It is especially useful for reviewing plans, pressure-testing product strategy, 
 
 **Local-first by design**
 
-Panely is intended to run on your machine, using local files and local model CLIs where possible. It is not built around a cloud database dependency or a hosted black box.
+Panely is intended to run on your machine, using local storage and local model CLIs where possible. It is not built around a cloud database dependency or a hosted black box.
+
+Local-first does not mean every model call stays on your machine: selected local CLIs may send prompts and source material to their model providers. Panely surfaces provider disclosure so you can decide what to share.
 
 **Built for frontier model subscriptions**
 
-The app is designed to route work through local subscription-backed tools such as Claude Code, Codex, and Gemini CLI. You can see which provider and model each advisor is using.
-
-**Three useful session modes**
-
-Roundtable mode is for collaborative judgment. Competitive mode is for forcing sharper ideas: each advisor pitches one proposal, critiques the others, and votes. Formal Board Review is for high-stakes review where peer output is withheld from the first-round prompts and the final output needs a structured verdict.
+The app is designed to route work through local subscription-backed tools such as Claude Code, Codex, and Gemini CLI. You can see which provider and model each advisor is using, and Panely hides unavailable local models from setup.
 
 **AI-generated advisor plans**
 
@@ -68,16 +100,17 @@ Instead of asking users to manually pick a cast of static agents, Panely can inf
 
 **Serious source review**
 
-Panely supports large source packets and adjustable context budgets up to 1M characters, making it suitable for reviewing Markdown plans, HTML documents, specs, and compact repo packets.
+Panely supports large source packets, file attachments, and read-only local workspace source snapshots, making it suitable for reviewing Markdown plans, HTML documents, specs, and compact repo packets.
 
 **Artifacts, not just chat**
 
-Sessions can produce exportable Markdown, printable PDF views, vote breakdowns, final synthesis artifacts, and full transcript records.
+Sessions can produce Full Artifact, Decision Memo, Action Plan, Risk Memo, Board Brief, vote breakdowns, exportable Markdown, printable PDF views, HTML views, and full transcript records.
 
 ## Who It Is For
 
 Panely is built for people who make judgment-heavy decisions and want more than a single assistant response:
 
+- People weighing career, relocation, family, purchase, or creative decisions
 - Founders refining product direction
 - Operators reviewing plans before execution
 - Engineers pressure-testing architecture
@@ -87,11 +120,12 @@ Panely is built for people who make judgment-heavy decisions and want more than 
 
 ## Example Uses
 
-- Review a launch plan before execution.
-- Debate whether a product should stay local-first or move cloud-first.
-- Compare several go-to-market strategies.
-- Pressure-test a technical architecture.
-- Ask multiple frontier models to evaluate a proposal before seeing peer output.
+- Compare a job offer against staying in your current role.
+- Decide whether to move, rent, buy, or delay a major life change.
+- Weigh the tradeoffs in a family, budget, or time-allocation decision.
+- Pressure-test a launch plan, go-to-market strategy, or technical architecture.
+- Evaluate several creative, investment, or business ideas side by side.
+- Prepare a better set of questions before talking with a lawyer, doctor, accountant, advisor, or mentor.
 - Turn an advisory session into a decision record with dissent, risks, and next actions.
 
 ## Current Status
@@ -103,17 +137,16 @@ Current capabilities include:
 - Local session storage
 - Roundtable sessions
 - Competitive pitch / critique / vote sessions
-- Formal Board Review sessions with prompt-isolated Round 1, rebuttal, and `advisory-board/verdict@1`
+- Formal Board Review sessions with independent first-pass review, rebuttal, and structured verdicts
 - AI-planned advisor lineups
-- Per-agent model and thinking-level selection
-- Local CLI model routing
-- Adjustable source context budgets
-- Markdown export
-- Printable HTML / PDF artifact view
-- Full session transcript export
+- Per-advisor model selection and thinking-level controls where the selected CLI supports them
+- Local CLI model routing for configured tools
+- File attachments and read-only local workspace source snapshots
+- Artifact library with Full Artifact, Decision Memo, Action Plan, Risk Memo, and Board Brief
+- Markdown, HTML, printable PDF, and full transcript export
 - Model settings page
 
-Planned improvements include stronger process isolation for formal reviews, better replay, and more deliberate follow-up loops for decisions that need to be revisited.
+Planned improvements include better replay, clearer follow-up loops, and more deliberate support for decisions that need to be revisited.
 
 ## Local Development
 

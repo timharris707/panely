@@ -3,27 +3,28 @@
 **Status:** active
 **Created:** 2026-06-25
 **Updated:** 2026-06-26
-**Repo:** `/Users/timharris/projects/panely`
+**Repo:** Panely checkout
 **Validation gate:** `npm run verify`
 **Active plan:** none
 **Handoff:** docs/handoff.md
 
 ## Objective
 
-Publish the durable Codex workflow install and advisory UI/artifact batch for Panely, then set the next real build goal.
+Audit and improve Panely's GitHub-facing marketing page so it represents the current product, appeals to a general-public audience, clearly explains the three session modes, and shows stronger artifact examples.
 
 ## Success Criteria
 
-- Global workflow kit exists under `/Users/timharris/.codex/workflow`.
-- Panely has project workflow files, a durable goal, memory index, handoff, plan/tracker renderer, review gate, and pre-commit hook.
-- The demo plan renders both `docs/plans/demo.html` and `docs/plans/demo.tracker.html` as an example, but it is not the active product plan.
-- The pre-commit hook blocks bare commits and accepts reviewed or explicitly skipped commits.
-- The release workflow avoids direct GitHub expression interpolation inside shell logic.
-- The advisory UI batch includes workspace source snapshots, model capability refresh support, artifact downloads, and formal-board artifact cleanup.
+- Run a roundtable-style marketing audit of the current README/GitHub page using independent sub-agent perspectives.
+- Make the top of the README immediately understandable to non-technical readers as an AI advisory board for tough decisions across life, work, money, career, product, and creative situations.
+- Explain the three session modes in plain language: Roundtable, Competitive, and Formal Board Review.
+- Distinguish session modes from model/provider choices so readers do not confuse "three modes" with Claude/Codex/Gemini model routing.
+- Strengthen artifact examples so visitors can quickly understand what they get after a session.
+- Remove or soften stale technical claims that no longer match the current Launch Wizard and artifact flow.
+- Run the validation gate after the docs update, or record why any skipped verification was not run.
 
 ## Current Next Step
 
-- Push the current workflow/advisory branch to GitHub, then replace this goal with the next real build objective.
+- Review the pushed PR for merge readiness, then decide whether to add follow-up landing-page screenshots, demo artifacts, or a deeper public website.
 
 ## Notes
 
