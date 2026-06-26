@@ -5,26 +5,24 @@
 **Updated:** 2026-06-26
 **Repo:** Panely checkout
 **Validation gate:** `npm run verify`
-**Active plan:** none
+**Active plan:** docs/plans/github-marketing.md
 **Handoff:** docs/handoff.md
 
 ## Objective
 
-Audit and improve Panely's GitHub-facing marketing page so it represents the current product, appeals to a general-public audience, clearly explains the three session modes, and shows stronger artifact examples.
+Create, adversarially review, and then execute a durable plan to make Panely's GitHub presence as honest, marketable, and useful as possible for a broad public audience, including README polish, screenshots, sample artifacts, repo metadata, example prompts, trust/limitations copy, and a release-versioning audit toward a credible `v0.9.x` public-consumption candidate and eventual `v1.0.0`.
 
 ## Success Criteria
 
-- Run a roundtable-style marketing audit of the current README/GitHub page using independent sub-agent perspectives.
-- Make the top of the README immediately understandable to non-technical readers as an AI advisory board for tough decisions across life, work, money, career, product, and creative situations.
-- Explain the three session modes in plain language: Roundtable, Competitive, and Formal Board Review.
-- Distinguish session modes from model/provider choices so readers do not confuse "three modes" with Claude/Codex/Gemini model routing.
-- Strengthen artifact examples so visitors can quickly understand what they get after a session.
-- Remove or soften stale technical claims that no longer match the current Launch Wizard and artifact flow.
-- Run the validation gate after the docs update, or record why any skipped verification was not run.
+- A source-of-truth plan exists at `docs/plans/github-marketing.md`, with generated HTML and tracker views.
+- The plan covers the remaining GitHub presentation work: screenshots/GIFs, sanitized sample artifacts, repo description/topics, a nontechnical first prompt, honest trust/limitations copy, and examples for broad life/work decisions.
+- The plan includes a release-versioning audit that preserves existing tags, treats retrospective tags as opt-in governance exceptions, defines `v0.9.x` as a forward public-consumption candidate, and reserves `v1.0.0` for an explicit production-ready decision.
+- The plan itself is adversarially reviewed before implementation starts.
+- Every implementation milestone requires `npm run verify`, `git diff --check`, publish-safety, and adversarial review before merge.
 
 ## Current Next Step
 
-- Review the pushed PR for merge readiness, then decide whether to add follow-up landing-page screenshots, demo artifacts, or a deeper public website.
+- Commit and push the reviewed `docs/plans/github-marketing.md` plan and generated views, then execute M1.
 
 ## Notes
 

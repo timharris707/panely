@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plan — GitHub Marketing Presence</title>
+<style>
+:root{
+  --bg:#070b12; --surface:#0e1622; --surface-2:#101a28; --nested:#0b131e;
+  --line:rgba(125,246,255,0.10); --line-2:rgba(125,246,255,0.18);
+  --text:#e7eef6; --muted:#94a3b6; --faint:#62718a;
+  --cyan:#22d3ee; --cyan-br:#7df9ff; --cyan-dp:#0a83ab;
+  --amber:#f5a524; --coral:#fb7185; --green:#34d399;
+  --radius:14px;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:radial-gradient(1100px 560px at 50% -220px,#0f1b2c 0%,#070b12 58%),var(--bg);
+  color:var(--text); font-family:var(--sans); line-height:1.6;
+  -webkit-font-smoothing:antialiased; padding:40px 20px 80px;
+}
+.wrap{max-width:940px;margin:0 auto}
+a{color:var(--cyan-br);text-decoration:none}
+.top-accent{height:3px;border-radius:3px;margin-bottom:26px;
+  background:linear-gradient(90deg,transparent,var(--cyan-dp),var(--cyan),var(--cyan-br),var(--cyan),transparent);
+  opacity:.8}
+.title{display:flex;align-items:center;gap:13px;font-size:27px;font-weight:600;letter-spacing:-.015em;margin:0}
+.title .dot{width:13px;height:13px;border-radius:50%;background:var(--cyan);
+  box-shadow:0 0 0 4px rgba(34,211,238,.14),0 0 18px 2px rgba(34,211,238,.55);flex:none}
+.meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0 6px}
+.canon{font-size:12.5px;color:var(--faint);margin-top:6px}
+.canon b{color:var(--muted);font-weight:500}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 11px;border-radius:999px;
+  font-size:12px;font-weight:500;border:1px solid var(--line-2);color:var(--muted);white-space:nowrap}
+.pill.mono{font-family:var(--mono);font-size:11.5px;background:rgba(34,211,238,.08);
+  color:var(--cyan-br);border-color:rgba(34,211,238,.28)}
+.pill.rel{color:#cdd8e6;border-color:var(--line-2)}
+.pill.amber{color:var(--amber);border-color:rgba(245,165,36,.35);background:rgba(245,165,36,.07)}
+.summary{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:18px 20px;margin:22px 0}
+.summary-row{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.count{font-size:15px;color:var(--muted)}
+.count b{font-family:var(--mono);font-size:22px;color:var(--cyan-br);font-weight:600}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.bead{width:10px;height:10px;border-radius:50%;flex:none}
+.bead.done{background:var(--cyan)} .bead.wip{background:var(--amber)}
+.bead.todo{background:transparent;border:2px solid var(--faint)} .bead.block{background:var(--coral)}
+.track{height:10px;border-radius:999px;background:rgba(255,255,255,.06);margin-top:14px;overflow:hidden}
+.fill{height:100%;border-radius:999px;
+  background:linear-gradient(90deg,var(--cyan-dp),var(--cyan) 60%,var(--cyan-br));
+  box-shadow:0 0 14px rgba(34,211,238,.5)}
+.sec{font-size:12px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--faint);margin:30px 0 6px}
+.diagram{background:var(--nested);border:1px dashed var(--line-2);border-radius:var(--radius);
+  padding:20px;margin:8px 0 8px;display:flex;justify-content:center}
+.diagram svg{max-width:100%;height:auto}
+.ms{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:18px 20px 16px;margin:14px 0}
+.ms-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ms-id{font-family:var(--mono);font-size:12px;color:var(--cyan);background:rgba(34,211,238,.10);
+  border:1px solid rgba(34,211,238,.25);border-radius:7px;padding:2px 8px;font-weight:600}
+.ms-name{font-size:17px;font-weight:600;margin:0}
+.ms-head .right{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ms-outcome{color:var(--muted);font-size:13.5px;margin:8px 0 12px}
+.ms-bar{height:6px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden;margin-bottom:6px}
+.ms-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--cyan-dp),var(--cyan-br))}
+.phase{border-left:2px solid var(--line-2);margin:14px 0 6px;padding:2px 0 2px 16px}
+.phase-name{font-size:13.5px;font-weight:600;color:#cdd8e6;margin:0 0 6px;display:flex;align-items:center;gap:8px}
+.phase-name .px{font-family:var(--mono);font-size:11px;color:var(--faint)}
+.task{display:flex;gap:10px;align-items:flex-start;padding:3px 0;font-size:14px;color:var(--text)}
+.m{width:18px;height:18px;border-radius:50%;flex:none;display:grid;place-items:center;
+  font-size:11px;font-weight:700;margin-top:2px}
+.m.todo{border:2px solid var(--faint)}
+.m.wip{border:2px solid var(--amber);color:var(--amber);box-shadow:0 0 9px rgba(245,165,36,.45);
+  animation:pulse 2.2s ease-in-out infinite}
+.m.done{background:var(--cyan);color:#04121a;box-shadow:0 0 9px rgba(34,211,238,.45)}
+.m.block{background:var(--coral);color:#2a0b10}
+@keyframes pulse{0%,100%{box-shadow:0 0 6px rgba(245,165,36,.35)}50%{box-shadow:0 0 13px rgba(245,165,36,.7)}}
+.task.done .t{color:var(--muted)}
+.task.block .t{color:#fda4af}
+.note{font-size:13px;color:var(--muted);margin:8px 0 2px}
+.note .lbl{font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--cyan);margin-right:8px}
+.gate{font-size:13px;margin:6px 0 2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.gate .lbl{font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--amber)}
+.review{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--faint);
+  margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.review .chk{color:var(--green)}
+.foot{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);
+  font-family:var(--mono);font-size:11.5px;color:var(--faint);display:flex;
+  justify-content:space-between;gap:12px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top-accent"></div>
+  <h1 class="title"><span class="dot"></span>GitHub Marketing Presence</h1>
+  <div class="meta">
+    <span class="pill">Draft · rev 2</span>
+    <span class="pill">2026-06-26</span>
+    <span class="pill">owner: Codex</span>
+    <span class="pill mono">gate: npm run verify</span>
+  </div>
+  <div class="canon"><b>Canonical:</b> this view is generated from <code>docs/plans/github-marketing.md</code> — do not edit by hand.</div>
+
+  <div class="summary">
+    <div class="summary-row">
+      <div class="count"><b>0</b> / 57 tasks · <b style="font-size:22px">0%</b></div>
+      <div class="legend">
+        <span><i class="bead done"></i> 0 done</span>
+        <span><i class="bead wip"></i> 0 in progress</span>
+        <span><i class="bead block"></i> 0 blocked</span>
+        <span><i class="bead todo"></i> 57 to do</span>
+      </div>
+    </div>
+    <div class="track"><div class="fill" style="width:0%"></div></div>
+  </div>
+
+  <div class="sec">Approach</div>
+  <div class="diagram"><pre><code>flowchart LR
+  A[Visitor lands on GitHub] --&gt; B[README promise]
+  B --&gt; C[Mode clarity]
+  B --&gt; D[Screenshots and sample artifacts]
+  D --&gt; E[Try-first prompt]
+  E --&gt; F[Trust and limitations]
+  F --&gt; G[Release/version path]</code></pre></div>
+
+  <div class="sec">Milestones</div>
+
+  <div class="ms">
+    <div class="ms-head">
+      <span class="ms-id">M1</span>
+      <h3 class="ms-name">GitHub Front Door Polish</h3>
+      <span class="right">
+        <span class="pill rel">→ v0.7.0</span>
+        <span class="pill">depends: PR #1 merged or rebased</span>
+      </span>
+    </div>
+    <div class="ms-outcome">GitHub presents Panely clearly to nontechnical visitors and accurately reflects the current product without unsupported claims.</div>
+    <div class="ms-bar"><i style="width:0%"></i></div>
+
+    <div class="phase">
+      <div class="phase-name"><span class="px">1.0</span> Preflight and Source-of-Truth Setup</div>
+      <div class="task todo"><span class="m todo"></span><span class="t">Resolve PR #1 merge/rebase state so the current README marketing pass is on the implementation branch or merged into <code>main</code>.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Update <code>docs/goal.md</code> so <code>Active plan</code> points to <code>docs/plans/github-marketing.md</code>.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Run <code>scripts/render_plan --check docs/plans/github-marketing.md</code> before editing the plan or generated views.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Confirm the new plan source plus <code>docs/plans/github-marketing.html</code> and <code>docs/plans/github-marketing.tracker.html</code> are staged together whenever the plan changes.</span></div>
+      <div class="note"><span class="lbl">Testing</span>Confirm <code>git status --short --branch</code>, <code>gh pr view 1</code>, and the plan renderer agree on the current branch, active plan, and generated plan views.</div>
+      <div class="gate"><span class="lbl">Gate</span><span class="pill mono">npm run verify &amp;&amp; git diff --check &amp;&amp; scripts/render_plan --check docs/plans/github-marketing.md</span></div>
+    </div>
+    <div class="phase">
+      <div class="phase-name"><span class="px">1.1</span> README, Trust Copy, and Claim/Proof Matrix</div>
+      <div class="task todo"><span class="m todo"></span><span class="t">Add a &quot;Can I use this today?&quot; README block covering local app status, required model CLIs/accounts, setup comfort level, and prototype maturity.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Add a plain-language trust contract table: what stays local, what may be sent to providers, what Panely never claims, and what remains the user&#x27;s responsibility.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Add a &quot;Try this first&quot; README block with the canonical nontechnical prompt and one product/business prompt.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Add one complete canonical life/work example to the README with prompt, suggested mode, artifact excerpt, dissent, risks, and next actions.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Add <code>docs/github-claims.md</code> mapping each public README claim to proof: current code behavior, screenshot, sample artifact, docs evidence, or removal.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Run a naive-reader check: a reviewer unfamiliar with local AI tools must be able to answer what Panely does, who it is for, what setup is required, what output they get, what may leave their machine, and what not to use it for.</span></div>
+      <div class="note"><span class="lbl">Testing</span>Check the rendered README on GitHub preview, scan for abandoned claims, verify UI labels and artifact names against current code, and verify <code>docs/github-claims.md</code> has no unsupported public claims.</div>
+      <div class="gate"><span class="lbl">Gate</span><span class="pill mono">npm run verify &amp;&amp; git diff --check &amp;&amp; scripts/render_plan --check docs/plans/github-marketing.md &amp;&amp; workflow/bin/review.sh</span></div>
+    </div>
+    <div class="phase">
+      <div class="phase-name"><span class="px">1.2</span> Reviewable GitHub Metadata Proposal</div>
+      <div class="task todo"><span class="m todo"></span><span class="t">Add <code>docs/github-metadata.md</code> with the proposed repo description, topics, homepage value, exact <code>gh repo edit</code> / topic commands, and rationale for each field.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Record before-state evidence from <code>gh repo view --json description,homepageUrl,repositoryTopics</code>.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Proposed description should be outcome-first and honest, for example: &quot;An AI advisory board for decisions too important for one opinion.&quot;</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Apply GitHub metadata only after the diff containing <code>docs/github-metadata.md</code> has passed review; record after-state evidence in the same doc or handoff.</span></div>
+      <div class="note"><span class="lbl">Testing</span>Verify metadata proposal is reviewable in git before any out-of-band GitHub setting changes, then verify actual GitHub state with <code>gh repo view</code> after application.</div>
+      <div class="gate"><span class="lbl">Gate</span><span class="pill mono">npm run verify &amp;&amp; git diff --check &amp;&amp; scripts/render_plan --check docs/plans/github-marketing.md &amp;&amp; workflow/bin/review.sh</span></div>
+    </div>
+    <div class="phase">
+      <div class="phase-name"><span class="px">1.3</span> Deterministic Sanitized Demo Fixture</div>
+      <div class="task todo"><span class="m todo"></span><span class="t">Create a deterministic sanitized demo session, fixture, or capture script for the canonical remote-job/family example.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Do not use existing private <code>data/advisory</code> sessions or local source packets as public screenshot or artifact inputs.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Prefer fixture/capture code outside oversized core UI files. If screenshot work requires new hooks inside <code>src/components/advisory/LaunchWizard.tsx</code> or <code>src/app/advisory/page.tsx</code>, first add a separate modularization phase because those files are already near or above the project split threshold.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Record fixture provenance: whether generated by the current app or hand-authored, date, mode, commit, redactions, and validation performed.</span></div>
+      <div class="note"><span class="lbl">Testing</span>Inspect fixture data manually, run publish-safety, and verify no local paths, secrets, private prompts, real user content, or misleading testimonial language are present.</div>
+      <div class="gate"><span class="lbl">Gate</span><span class="pill mono">npm run verify &amp;&amp; git diff --check &amp;&amp; scripts/render_plan --check docs/plans/github-marketing.md &amp;&amp; workflow/bin/review.sh</span></div>
+    </div>
+    <div class="phase">
+      <div class="phase-name"><span class="px">1.4</span> Visual Proof Capture</div>
+      <div class="task todo"><span class="m todo"></span><span class="t">Capture the canonical-demo wizard prompt.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Capture advisor plan / mode selection.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Capture active disagreement, critique, or voting so the value is visible, not just an empty UI.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Capture the final artifact library with readable recommendation, dissent, risks, and next actions.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Capture a mobile-width view with meaningful content visible.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Reject screenshots with fixture labels, local paths, private source, empty states, developer-only examples, cropped unreadable text, or misleading sample claims.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Add the assets under a publish-safe path such as <code>docs/assets/github/</code> with descriptive filenames and captions that explain decision value, not just UI chrome.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Strip or check image metadata before publishing.</span></div>
+      <div class="note"><span class="lbl">Testing</span>Use Playwright or equivalent browser verification to capture assets, then manually inspect desktop and mobile screenshots plus OCR/readability for private data, fixture leakage, layout issues, and claim/proof alignment.</div>
+      <div class="gate"><span class="lbl">Gate</span><span class="pill mono">npm run verify &amp;&amp; git diff --check &amp;&amp; scripts/render_plan --check docs/plans/github-marketing.md &amp;&amp; workflow/bin/review.sh</span></div>
+    </div>
+
+    <div class="review"><span class="chk">✓</span> Review checkpoint — adversarial review of this milestone&#x27;s diff passes before merge (finders → skeptic verify), with an explicit marketing-honesty lens.</div>
+  </div>
+  <div class="ms">
+    <div class="ms-head">
+      <span class="ms-id">M2</span>
+      <h3 class="ms-name">Example Library and Artifact Proof</h3>
+      <span class="right">
+        <span class="pill rel">→ v0.8.0</span>
+        <span class="pill">depends: M1</span>
+      </span>
+    </div>
+    <div class="ms-outcome">GitHub visitors can inspect honest, sanitized examples of what Panely produces for real-life and professional decisions.</div>
+    <div class="ms-bar"><i style="width:0%"></i></div>
+
+    <div class="phase">
+      <div class="phase-name"><span class="px">2.1</span> Example Scenarios</div>
+      <div class="task todo"><span class="m todo"></span><span class="t">Create <code>docs/examples/README.md</code> that explains examples are illustrative or sanitized, not customer testimonials.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Add <code>docs/examples/manifest.md</code> with each sample&#x27;s prompt, provenance, date, app version/commit, artifact type, mode, and whether it is generated by the app or illustrative.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Add at least three broad-audience example scenarios: career/job change, relocation/major purchase, and product/creative decision.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Add at least one technical/business scenario so existing builder users still recognize the tool.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Include a short &quot;how to read this artifact&quot; note for nontechnical visitors.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Keep examples clearly labeled as examples and avoid confidential or private source material.</span></div>
+      <div class="note"><span class="lbl">Testing</span>Review every example for unsupported claims, professional-advice overreach, invented testimonial language, private data, provenance clarity, and consistency with current artifact structure.</div>
+      <div class="gate"><span class="lbl">Gate</span><span class="pill mono">npm run verify &amp;&amp; git diff --check &amp;&amp; scripts/render_plan --check docs/plans/github-marketing.md &amp;&amp; workflow/bin/review.sh</span></div>
+    </div>
+    <div class="phase">
+      <div class="phase-name"><span class="px">2.2</span> Sanitized Artifact Samples</div>
+      <div class="task todo"><span class="m todo"></span><span class="t">Produce sanitized sample <code>Decision Memo</code>, <code>Action Plan</code>, <code>Risk Memo</code>, and <code>Board Brief</code> files for one nontechnical example.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Include a short <code>Full Artifact</code> excerpt or transcript excerpt without exposing local model logs, keys, private paths, or real user content.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Link these examples from the README in a compact &quot;See example outputs&quot; section.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">For each sample artifact, record provenance: generated by current app vs illustrative, date, mode, providers redacted/generalized, and validation performed.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">If generated by the current app, record the exact command/manual flow used to create it; if hand-authored, label it as illustrative.</span></div>
+      <div class="note"><span class="lbl">Testing</span>Run publish-safety scanning, inspect generated artifacts manually, and have an adversarial reviewer check that the samples are honest about provenance.</div>
+      <div class="gate"><span class="lbl">Gate</span><span class="pill mono">npm run verify &amp;&amp; git diff --check &amp;&amp; scripts/render_plan --check docs/plans/github-marketing.md &amp;&amp; workflow/bin/review.sh</span></div>
+    </div>
+
+    <div class="review"><span class="chk">✓</span> Review checkpoint — adversarial review of this milestone&#x27;s diff passes before merge, with explicit checks for misleading artifact provenance and professional-advice claims.</div>
+  </div>
+  <div class="ms">
+    <div class="ms-head">
+      <span class="ms-id">M3</span>
+      <h3 class="ms-name">Release Versioning and Public-Consumption Readiness</h3>
+      <span class="right">
+        <span class="pill rel">→ v0.9.x candidate after explicit go/no-go</span>
+        <span class="pill">depends: M1 and preferably M2</span>
+      </span>
+    </div>
+    <div class="ms-outcome">Panely has an honest version history, a public-consumption candidate decision, and a public readiness checklist for what must be true before <code>v1.0.0</code>.</div>
+    <div class="ms-bar"><i style="width:0%"></i></div>
+
+    <div class="phase">
+      <div class="phase-name"><span class="px">3.1</span> Release History Audit Only</div>
+      <div class="task todo"><span class="m todo"></span><span class="t">Create <code>docs/releases/history.md</code> with the current release record: <code>v0.5.0</code> and <code>v0.6.0</code>, their target commits, commit dates, GitHub Release publication dates, whether each was tagged contemporaneously, changelog-note source, and any disclosure needed.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Identify candidate pre-<code>v0.5.0</code> historical milestones without assigning version numbers first, starting from <code>9b45efe</code> &quot;Initial public Panely release.&quot;</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">For each candidate, record commit SHA, commit date, evidence from code/docs, why existing <code>v0.5.0</code>/<code>v0.6.0</code> do not already cover it, and whether the target contains obsolete claims that require disclosure.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Default to documenting the milestone without a tag. Approve a retrospective tag only when the milestone is real, externally useful, and explicitly release-governance approved.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Do not delete, retag, or rewrite <code>v0.5.0</code> or <code>v0.6.0</code>.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Do not use generated release notes for retrospective releases. Do not let retrospective releases become Latest; verify the newest forward release remains Latest after publication.</span></div>
+      <div class="note"><span class="lbl">Testing</span>Verify release records with <code>git show</code>, <code>git tag</code>, <code>gh release list</code>, <code>gh release view</code>, <code>CHANGELOG.md</code>, and <code>.github/workflows/release.yml</code>, and avoid creating releases for milestones that cannot be substantiated.</div>
+      <div class="gate"><span class="lbl">Gate</span><span class="pill mono">npm run verify &amp;&amp; git diff --check &amp;&amp; scripts/render_plan --check docs/plans/github-marketing.md &amp;&amp; workflow/bin/review.sh</span></div>
+    </div>
+    <div class="phase">
+      <div class="phase-name"><span class="px">3.2</span> <code>v0.9.x</code> Public-Consumption Candidate Decision</div>
+      <div class="task todo"><span class="m todo"></span><span class="t">Define the minimum bar for a <code>v0.9.x</code> release: honest README, complete canonical example, sanitized screenshots, sample artifacts, trust/limitations copy, local setup expectations, release notes, and no blocking review findings.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Decide whether the current product state is ready for a <code>v0.9.x</code> release after M1 and M2 evidence is complete.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">If yes, prepare a forward release plan and changelog section for a current commit reachable from <code>origin/main</code>; do not tag from a stale branch or unmerged PR.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">If no, document the shortest concrete gap list before <code>v0.9.x</code>.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Make sure any <code>v0.9.x</code> wording says &quot;public-consumption candidate&quot; or equivalent, not &quot;production-ready&quot; or <code>v1.0.0</code>.</span></div>
+      <div class="note"><span class="lbl">Testing</span>Confirm the candidate release maps to current product behavior, passes the full validation gate, and has release notes that explain maturity honestly.</div>
+      <div class="gate"><span class="lbl">Gate</span><span class="pill mono">npm run verify &amp;&amp; git diff --check &amp;&amp; scripts/render_plan --check docs/plans/github-marketing.md &amp;&amp; workflow/bin/review.sh</span></div>
+    </div>
+    <div class="phase">
+      <div class="phase-name"><span class="px">3.3</span> <code>v1.0.0</code> Readiness Definition</div>
+      <div class="task todo"><span class="m todo"></span><span class="t">Add a <code>docs/releases/v1-readiness.md</code> checklist with product, trust, artifact, setup, docs, test, and release criteria.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Define what makes Panely production-ready enough for <code>v1.0.0</code>, including honest provider disclosure, reliable setup, artifact quality, and validated examples.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Set proposed forward releases: <code>v0.7.0</code> for GitHub front door, <code>v0.8.0</code> for examples/artifact proof, and <code>v0.9.x</code> for a public-consumption candidate if the go/no-go criteria are satisfied.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Update README/CHANGELOG release language if needed so visitors understand current maturity.</span></div>
+      <div class="note"><span class="lbl">Testing</span>Review against current implementation and avoid claims that require hosted accounts, billing, compliance, collaboration, or professional-advice guarantees.</div>
+      <div class="gate"><span class="lbl">Gate</span><span class="pill mono">npm run verify &amp;&amp; git diff --check &amp;&amp; scripts/render_plan --check docs/plans/github-marketing.md &amp;&amp; workflow/bin/review.sh</span></div>
+    </div>
+    <div class="phase">
+      <div class="phase-name"><span class="px">3.4</span> Optional Retrospective Tag Publication</div>
+      <div class="task todo"><span class="m todo"></span><span class="t">This phase is blocked unless the user explicitly approves a named retrospective tag and target commit after Phase 3.1 is complete.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Before any tag is created, collect dry-run evidence from <code>git show</code>, changelog extraction, <code>gh release view</code>, main-reachability checks, and release workflow behavior.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">If a retrospective GitHub Release is approved, its notes must begin: &quot;Historical release, tagged retrospectively on YYYY-MM-DD from commit &lt;sha&gt; dated YYYY-MM-DD. This was not a GitHub Release at the time.&quot;</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Ensure retrospective releases cannot become the Latest release; update workflow or publish procedure to support <code>--latest=false</code> or equivalent before publication.</span></div>
+<div class="task todo"><span class="m todo"></span><span class="t">Do not run <code>gh release create</code> by hand during normal flow unless this optional phase has explicit approval and documented evidence.</span></div>
+      <div class="note"><span class="lbl">Testing</span>Treat tag publication as an operational release action, not a PR task; verify tag target, release notes, Latest status, and GitHub Release state after publication.</div>
+      <div class="gate"><span class="lbl">Gate</span><span class="pill mono">npm run verify &amp;&amp; git diff --check &amp;&amp; scripts/render_plan --check docs/plans/github-marketing.md</span></div>
+    </div>
+
+    <div class="review"><span class="chk">✓</span> Review checkpoint — adversarial review of this milestone&#x27;s diff passes before merge, with explicit checks for version-history honesty and tag immutability.</div>
+  </div>
+
+  <div class="foot">
+    <span>generated from docs/plans/github-marketing.md — do not edit</span>
+    <span>rendered content sha256:d67f1c576749</span>
+  </div>
+</div>
+</body>
+</html>

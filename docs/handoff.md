@@ -4,11 +4,11 @@
 
 ## START HERE
 
-Review the GitHub marketing-page update on branch `codex/durable-workflow-kit`, confirm the PR status, then decide whether to merge the README improvements or continue with deeper product/landing-page work.
+Review the GitHub marketing plan on branch `codex/durable-workflow-kit`, confirm PR status, then execute M1 from `docs/plans/github-marketing.md`.
 
 ## STATE
 
-The branch contains the durable workflow install, the advisory UI/artifact batch, and a new README marketing pass for the public GitHub page. `npm run verify` passes after the README changes and stale landing-copy removal. `core.hooksPath` is set to `.githooks`. `docs/plans/demo.md` is only a renderer/tracker example, not the active product plan.
+The branch contains the durable workflow install, the advisory UI/artifact batch, the README marketing pass, and a durable GitHub marketing plan. `npm run verify` passes after the README changes and stale landing-copy removal. `core.hooksPath` is set to `.githooks`. `docs/plans/github-marketing.md` is now the active product plan; generated HTML/tracker views must be regenerated from it.
 
 ## DONE
 
@@ -24,11 +24,20 @@ The branch contains the durable workflow install, the advisory UI/artifact batch
 - Updated `CHANGELOG.md` `[Unreleased]` with the README marketing and artifact-copy improvements.
 - Removed obsolete `content/landing-page-copy.md` because it described an abandoned hosted-SaaS direction with unsupported pricing, free-session, testimonial, share-link, latest-model, and SOC 2 claims.
 - Ran `npm run verify` successfully after the README changes and stale landing-copy removal.
+- Created `docs/plans/github-marketing.md` to cover the next public GitHub work: claim/proof matrix, "Can I use this today?" copy, trust contract, canonical demo, sanitized fixture, screenshots, examples, metadata proposal, and release/versioning governance.
+- Adversarially reviewed the plan with three read-only sub-agent lenses: broad-public marketing proof, release/versioning governance, and implementation/validation feasibility.
+- Patched the plan from reviewer blockers:
+  - moved canonical life/work proof and trust copy into M1;
+  - added reviewable GitHub metadata docs before any out-of-band setting changes;
+  - required deterministic sanitized fixtures before screenshots/artifacts;
+  - made release history audit default to no retrospective tags;
+  - defined `v0.9.x` as a forward public-consumption candidate, not a retroactive relabel;
+  - reserved `v1.0.0` for an explicit production-ready decision.
 
 ## NEXT
 
-- Review the pushed PR for merge readiness.
-- Decide whether to build a deeper public landing page, screenshots, or demo artifacts after the GitHub README update is merged.
+- Execute M1 from `docs/plans/github-marketing.md`.
+- Keep PR #1 in mind: the existing README marketing branch may need merge/rebase before M1 implementation starts.
 
 ## KEY FILES
 
@@ -36,6 +45,8 @@ The branch contains the durable workflow install, the advisory UI/artifact batch
 - `WORKFLOW.md` — short day-to-day usage guide.
 - `docs/goal.md` — durable current objective.
 - `docs/handoff.md` — cold-start resume state.
+- `docs/plans/github-marketing.md` — active source-of-truth plan for GitHub public presentation and release-readiness work.
+- `docs/plans/github-marketing.html` and `docs/plans/github-marketing.tracker.html` — generated views; do not hand-edit.
 - `README.md` — public GitHub page and main marketing surface.
 - `CHANGELOG.md` — milestone change log.
 - `docs/plans/demo.md` — demo source plan.
