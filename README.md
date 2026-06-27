@@ -8,6 +8,8 @@ Instead of giving you one flat chatbot response, Panely lets multiple frontier m
 
 The goal is simple: make high-quality strategic thinking feel like a live advisory board, not another chat thread.
 
+> **There's also an open, run-it-yourself version.** [Advisory Board](https://github.com/timharris707/skills) is a sibling project — the same idea (a board of frontier models on one decision), built as a provider-agnostic agent skill you can run yourself through Claude Code, Codex, or whatever your preferred harness is. Same maker.
+
 ## What You Can Do With It
 
 - Drop in a strategy, proposal, Markdown plan, HTML document, product question, or technical design.
