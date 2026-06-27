@@ -1,0 +1,555 @@
+#!/usr/bin/env python3
+import hashlib
+import html
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+STATUS_CLASS = {
+    "x": "done",
+    "wip": "wip",
+    "f": "block",
+    "!": "block",
+    "": "todo",
+    " ": "todo",
+}
+
+
+def usage():
+    print("Usage: scripts/render_plan [--check] docs/plans/<feature>.md", file=sys.stderr)
+
+
+def relpath(path):
+    try:
+        return path.resolve().relative_to(Path.cwd().resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def pct(done, total):
+    if total <= 0:
+        return 0
+    return round(done / total * 100)
+
+
+def esc(value):
+    return html.escape(str(value), quote=True)
+
+
+def inline_md(value):
+    value = str(value).strip()
+    pieces = re.split(r"(`[^`]*`)", value)
+    rendered = []
+    for piece in pieces:
+        if piece.startswith("`") and piece.endswith("`"):
+            rendered.append(f"<code>{esc(piece[1:-1])}</code>")
+        else:
+            part = esc(piece)
+            part = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", part)
+            rendered.append(part)
+    return "".join(rendered)
+
+
+def first_backtick_value(value):
+    match = re.search(r"`([^`]+)`", value)
+    if match:
+        return match.group(1).strip()
+    return value.strip()
+
+
+def extract_style(contract_path):
+    text = contract_path.read_text(encoding="utf-8")
+    match = re.search(r"<style>\n(.*?)\n</style>", text, re.S)
+    if not match:
+        raise SystemExit(f"Could not find <style> block in {contract_path}")
+    return match.group(1)
+
+
+def find_contract(plan_path, name):
+    candidates = [
+        plan_path.parent / name,
+        Path.home() / ".codex" / "workflow" / "templates" / name,
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    raise SystemExit(f"Missing visual contract {name}; expected one of: {', '.join(str(c) for c in candidates)}")
+
+
+def normalize_marker(marker):
+    marker = marker.strip().lower()
+    if marker not in STATUS_CLASS:
+        raise SystemExit(f"Unknown task status marker: [{marker}]")
+    return STATUS_CLASS[marker]
+
+
+def parse_header(plan_text):
+    data = {
+        "title": "Untitled",
+        "status": "Draft",
+        "rev": "1",
+        "date": "",
+        "owner": "",
+        "global_gate": "",
+    }
+    for line in plan_text.splitlines():
+        if line.startswith("# Plan:"):
+            data["title"] = line.split(":", 1)[1].strip()
+        elif line.startswith("**Status:**"):
+            match = re.match(r"\*\*Status:\*\*\s*(.*?)\s*·\s*\*\*rev\s+([^*]+)\*\*\s*·\s*_(.*?)_", line)
+            if match:
+                data["status"], data["rev"], data["date"] = [part.strip() for part in match.groups()]
+        elif line.startswith("**Owner:**"):
+            data["owner"] = line.split("**Owner:**", 1)[1].strip()
+        elif line.startswith("**Global validation gate:**"):
+            rest = line.split("**Global validation gate:**", 1)[1]
+            data["global_gate"] = first_backtick_value(rest)
+    return data
+
+
+def extract_diagram(plan_text):
+    match = re.search(r"```(mermaid|dot)\n(.*?)\n```", plan_text, re.S)
+    if not match:
+        return None
+    return {"kind": match.group(1), "source": match.group(2).strip()}
+
+
+def strip_svg(svg):
+    svg = re.sub(r"<\?xml[^>]*>\s*", "", svg.strip())
+    svg = re.sub(r"<!DOCTYPE[^>]*>\s*", "", svg)
+    svg = sanitize_svg(svg)
+    return svg
+
+
+def sanitize_svg(svg):
+    svg = re.sub(r"<script\b.*?</script>", "", svg, flags=re.I | re.S)
+    svg = re.sub(r"<foreignObject\b.*?</foreignObject>", "", svg, flags=re.I | re.S)
+    svg = re.sub(r"\s+on[a-zA-Z]+\s*=\s*\"[^\"]*\"", "", svg, flags=re.I)
+    svg = re.sub(r"\s+on[a-zA-Z]+\s*=\s*'[^']*'", "", svg, flags=re.I)
+    svg = re.sub(r"\s+on[a-zA-Z]+\s*=\s*[^'\"\s>]+", "", svg, flags=re.I)
+    svg = re.sub(r"\s+(?:xlink:href|href)\s*=\s*\"[^\"]*\"", "", svg, flags=re.I)
+    svg = re.sub(r"\s+(?:xlink:href|href)\s*=\s*'[^']*'", "", svg, flags=re.I)
+    svg = re.sub(r"\s+(?:xlink:href|href)\s*=\s*[^'\"\s>]+", "", svg, flags=re.I)
+    return svg
+
+
+def render_diagram(diagram):
+    if not diagram:
+        return ""
+    kind = diagram["kind"]
+    source = diagram["source"]
+    if os.environ.get("RENDER_PLAN_DIAGRAMS") != "svg":
+        return f"<pre><code>{esc(source)}</code></pre>"
+    try:
+        if kind == "mermaid" and shutil.which("mmdc"):
+            with tempfile.TemporaryDirectory() as tmp:
+                src = Path(tmp) / "diagram.mmd"
+                out = Path(tmp) / "diagram.svg"
+                src.write_text(source, encoding="utf-8")
+                subprocess.run(
+                    ["mmdc", "-i", str(src), "-o", str(out), "-b", "transparent"],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=20,
+                )
+                return strip_svg(out.read_text(encoding="utf-8"))
+        if kind == "dot" and shutil.which("dot"):
+            result = subprocess.run(
+                ["dot", "-Tsvg"],
+                input=source,
+                text=True,
+                check=True,
+                capture_output=True,
+                timeout=20,
+            )
+            return strip_svg(result.stdout)
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        pass
+    return f"<pre><code>{esc(source)}</code></pre>"
+
+
+def parse_plan(plan_path):
+    text = plan_path.read_text(encoding="utf-8")
+    header = parse_header(text)
+    diagram = extract_diagram(text)
+    milestones = []
+    tasks = []
+    current_ms = None
+    current_phase = None
+    in_milestones = False
+
+    for line in text.splitlines():
+        if re.match(r"^##\s+", line):
+            in_milestones = bool(re.match(r"^##\s+5\.\s+Milestones\s*$", line))
+            current_ms = None
+            current_phase = None
+            continue
+
+        ms_match = re.match(
+            r"^###\s+(M[^\s]+)\s+[—-]\s+(.+?)\s+·\s+→\s+release\s+`?([^`]+?)`?\s+·\s+depends on:\s*(.+?)\s*$",
+            line,
+        )
+        if ms_match:
+            if not in_milestones:
+                raise SystemExit(f"Milestone heading outside '## 5. Milestones': {line}")
+            current_ms = {
+                "id": ms_match.group(1).strip(),
+                "name": ms_match.group(2).strip(),
+                "release": ms_match.group(3).strip(),
+                "depends": ms_match.group(4).strip(),
+                "outcome": "",
+                "review": "",
+                "phases": [],
+                "tasks": [],
+            }
+            milestones.append(current_ms)
+            current_phase = None
+            continue
+        if re.match(r"^###\s+M", line):
+            raise SystemExit(f"Malformed milestone heading: {line}")
+
+        phase_match = re.match(r"^####\s+Phase\s+([^\s]+)\s+[—-]\s+(.+?)\s*$", line)
+        if phase_match and current_ms is not None:
+            current_phase = {
+                "id": phase_match.group(1).strip(),
+                "name": phase_match.group(2).strip(),
+                "testing": "",
+                "gate": "",
+                "tasks": [],
+            }
+            current_ms["phases"].append(current_phase)
+            continue
+        if current_ms is not None and re.match(r"^####\s+", line):
+            raise SystemExit(f"Malformed phase heading: {line}")
+
+        if current_ms is not None and line.startswith("**Outcome:**"):
+            current_ms["outcome"] = line.split("**Outcome:**", 1)[1].strip()
+            continue
+
+        if current_ms is not None and line.startswith("**Review checkpoint:**"):
+            current_ms["review"] = line.split("**Review checkpoint:**", 1)[1].strip()
+            continue
+
+        if current_phase is not None and line.strip().startswith("- **Testing Strategy:**"):
+            current_phase["testing"] = line.split("**Testing Strategy:**", 1)[1].strip()
+            continue
+
+        if current_phase is not None and line.strip().startswith("- **Validation gate:**"):
+            current_phase["gate"] = first_backtick_value(line.split("**Validation gate:**", 1)[1])
+            continue
+
+        task_match = re.match(r"^\s*-\s+\[([^\]]*)\]\s+(.+?)\s*$", line)
+        if task_match and current_phase is not None and current_ms is not None:
+            status = normalize_marker(task_match.group(1))
+            task = {
+                "status": status,
+                "text": task_match.group(2).strip(),
+                "ms_id": current_ms["id"],
+                "ms_name": current_ms["name"],
+                "phase_id": current_phase["id"],
+                "phase_name": current_phase["name"],
+            }
+            current_phase["tasks"].append(task)
+            current_ms["tasks"].append(task)
+            tasks.append(task)
+
+    if not milestones:
+        raise SystemExit("Plan must include at least one milestone under '## 5. Milestones'.")
+    if not tasks:
+        raise SystemExit("Plan must include at least one milestone task.")
+    for milestone in milestones:
+        if not milestone["phases"]:
+            raise SystemExit(f"Milestone {milestone['id']} must include at least one phase.")
+        if not milestone["outcome"]:
+            raise SystemExit(f"Milestone {milestone['id']} must include an Outcome.")
+        if not milestone["review"]:
+            raise SystemExit(f"Milestone {milestone['id']} must include a Review checkpoint.")
+        for phase in milestone["phases"]:
+            phase_label = f"{milestone['id']} phase {phase['id']}"
+            if not phase["tasks"]:
+                raise SystemExit(f"{phase_label} must include at least one task.")
+            if not phase["testing"]:
+                raise SystemExit(f"{phase_label} must include a Testing Strategy.")
+            if not phase["gate"]:
+                raise SystemExit(f"{phase_label} must include a Validation gate.")
+
+    return {"header": header, "diagram": diagram, "milestones": milestones, "tasks": tasks, "text": text}
+
+
+def count_status(tasks):
+    counts = {"done": 0, "wip": 0, "block": 0, "todo": 0}
+    for task in tasks:
+        counts[task["status"]] += 1
+    counts["total"] = len(tasks)
+    counts["pct"] = pct(counts["done"], counts["total"])
+    return counts
+
+
+def task_html(task):
+    marker = {"done": "✓", "wip": "·", "block": "!", "todo": ""}[task["status"]]
+    return (
+        f'<div class="task {task["status"]}"><span class="m {task["status"]}">{marker}</span>'
+        f'<span class="t">{inline_md(task["text"])}</span></div>'
+    )
+
+
+def render_plan_html(parsed, source_md, render_id, style):
+    header = parsed["header"]
+    counts = count_status(parsed["tasks"])
+    diagram_svg = render_diagram(parsed["diagram"])
+    approach = ""
+    if diagram_svg:
+        approach = f'\n  <div class="sec">Approach</div>\n  <div class="diagram">{diagram_svg}</div>\n'
+
+    milestone_blocks = []
+    for ms in parsed["milestones"]:
+        ms_counts = count_status(ms["tasks"])
+        phase_blocks = []
+        for phase in ms["phases"]:
+            tasks = "\n".join(task_html(task) for task in phase["tasks"])
+            phase_blocks.append(
+                f'''    <div class="phase">
+      <div class="phase-name"><span class="px">{esc(phase["id"])}</span> {inline_md(phase["name"])}</div>
+      {tasks}
+      <div class="note"><span class="lbl">Testing</span>{inline_md(phase["testing"])}</div>
+      <div class="gate"><span class="lbl">Gate</span><span class="pill mono">{esc(phase["gate"])}</span></div>
+    </div>'''
+            )
+        review = inline_md(ms["review"] or "adversarial review of this milestone's diff passes before merge.")
+        milestone_blocks.append(
+            f'''  <div class="ms">
+    <div class="ms-head">
+      <span class="ms-id">{esc(ms["id"])}</span>
+      <h3 class="ms-name">{inline_md(ms["name"])}</h3>
+      <span class="right">
+        <span class="pill rel">→ {esc(ms["release"])}</span>
+        <span class="pill">depends: {inline_md(ms["depends"])}</span>
+      </span>
+    </div>
+    <div class="ms-outcome">{inline_md(ms["outcome"])}</div>
+    <div class="ms-bar"><i style="width:{ms_counts["pct"]}%"></i></div>
+
+{chr(10).join(phase_blocks)}
+
+    <div class="review"><span class="chk">✓</span> Review checkpoint — {review}</div>
+  </div>'''
+        )
+
+    return f'''<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plan — {esc(header["title"])}</title>
+<style>
+{style}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top-accent"></div>
+  <h1 class="title"><span class="dot"></span>{inline_md(header["title"])}</h1>
+  <div class="meta">
+    <span class="pill">{esc(header["status"])} · rev {esc(header["rev"])}</span>
+    <span class="pill">{esc(header["date"])}</span>
+    <span class="pill">owner: {inline_md(header["owner"])}</span>
+    <span class="pill mono">gate: {esc(header["global_gate"])}</span>
+  </div>
+  <div class="canon"><b>Canonical:</b> this view is generated from <code>{esc(source_md)}</code> — do not edit by hand.</div>
+
+  <div class="summary">
+    <div class="summary-row">
+      <div class="count"><b>{counts["done"]}</b> / {counts["total"]} tasks · <b style="font-size:22px">{counts["pct"]}%</b></div>
+      <div class="legend">
+        <span><i class="bead done"></i> {counts["done"]} done</span>
+        <span><i class="bead wip"></i> {counts["wip"]} in progress</span>
+        <span><i class="bead block"></i> {counts["block"]} blocked</span>
+        <span><i class="bead todo"></i> {counts["todo"]} to do</span>
+      </div>
+    </div>
+    <div class="track"><div class="fill" style="width:{counts["pct"]}%"></div></div>
+  </div>
+{approach}
+  <div class="sec">Milestones</div>
+
+{chr(10).join(milestone_blocks)}
+
+  <div class="foot">
+    <span>generated from {esc(source_md)} — do not edit</span>
+    <span>rendered {esc(render_id)}</span>
+  </div>
+</div>
+</body>
+</html>
+'''
+
+
+def split_reason(task_text):
+    match = re.search(r"\s+(\([^)]+\))\s*$", task_text)
+    if not match:
+        return task_text, ""
+    return task_text[: match.start()].strip(), match.group(1)
+
+
+def render_tracker_html(parsed, source_md, render_id, style):
+    header = parsed["header"]
+    counts = count_status(parsed["tasks"])
+    arc = round(counts["pct"] / 100 * 289.0, 1)
+
+    wip_tasks = [task for task in parsed["tasks"] if task["status"] == "wip"]
+    if wip_tasks:
+        wip_rows = "\n".join(
+            f'<div class="row"><span>{inline_md(task["text"])}</span><span class="ctx">{esc(task["ms_id"])} · {inline_md(task["phase_name"])}</span></div>'
+            for task in wip_tasks
+        )
+    else:
+        wip_rows = '<div class="empty">Nothing in progress.</div>'
+
+    blocked_tasks = [task for task in parsed["tasks"] if task["status"] == "block"]
+    blocked_strip = ""
+    if blocked_tasks:
+        rows = []
+        for task in blocked_tasks:
+            text, reason = split_reason(task["text"])
+            reason_html = f'<span class="reason">{inline_md(reason)}</span>' if reason else ""
+            rows.append(
+                f'<div class="row"><span>{inline_md(text)}</span>{reason_html}<span class="ctx">{esc(task["ms_id"])} · {inline_md(task["phase_name"])}</span></div>'
+            )
+        blocked_strip = f'''  <div class="strip block-strip">
+    <h2><i class="dotm block"></i> Blocked / failed · needs attention</h2>
+    {chr(10).join(rows)}
+  </div>
+'''
+
+    milestone_rows = []
+    for ms in parsed["milestones"]:
+        ms_counts = count_status(ms["tasks"])
+        pips = "".join(f'<i class="pip {task["status"]}"></i>' for task in ms["tasks"])
+        milestone_rows.append(
+            f'''    <div class="mrow">
+      <span class="ms-id">{esc(ms["id"])}</span>
+      <span class="mname">{inline_md(ms["name"])}</span>
+      <span class="mright">
+        <span class="pips">{pips}</span>
+        <span class="mbar"><i style="width:{ms_counts["pct"]}%"></i></span>
+        <span class="pill rel">→ {esc(ms["release"])}</span>
+        <span class="mcount">{ms_counts["done"]}/{ms_counts["total"]}</span>
+      </span>
+    </div>'''
+        )
+
+    return f'''<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tracker — {esc(header["title"])}</title>
+<style>
+{style}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top-accent"></div>
+  <div class="head">
+    <h1 class="title"><span class="dot"></span>{inline_md(header["title"])}</h1>
+    <div class="pills">
+      <span class="pill">{esc(header["status"])} · rev {esc(header["rev"])}</span>
+      <span class="pill mono">gate: {esc(header["global_gate"])}</span>
+    </div>
+  </div>
+
+  <div class="hero">
+    <div class="ring">
+      <svg width="116" height="116" viewBox="0 0 116 116" role="img" aria-label="{counts["pct"]} percent complete">
+        <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#0a83ab"/><stop offset="60%" stop-color="#22d3ee"/><stop offset="100%" stop-color="#7df9ff"/>
+        </linearGradient></defs>
+        <circle cx="58" cy="58" r="46" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="11"/>
+        <circle cx="58" cy="58" r="46" fill="none" stroke="url(#g)" stroke-width="11" stroke-linecap="round"
+          stroke-dasharray="{arc} 289.0" transform="rotate(-90 58 58)"/>
+        <text x="58" y="55" text-anchor="middle" fill="#e7eef6" font-family="ui-monospace,Menlo,monospace" font-size="25" font-weight="600">{counts["pct"]}%</text>
+        <text x="58" y="73" text-anchor="middle" fill="#94a3b6" font-family="ui-monospace,Menlo,monospace" font-size="10.5">done</text>
+      </svg>
+      <div class="sub"><b>{counts["done"]}</b> of {counts["total"]} tasks complete<br>across <b>{len(parsed["milestones"])}</b> milestones · {counts["block"]} need(s) attention</div>
+    </div>
+    <div class="tiles">
+      <div class="stat done"><span class="n">{counts["done"]}</span><span class="k">done</span></div>
+      <div class="stat wip"><span class="n">{counts["wip"]}</span><span class="k">in progress</span></div>
+      <div class="stat block"><span class="n">{counts["block"]}</span><span class="k">blocked</span></div>
+      <div class="stat todo"><span class="n">{counts["todo"]}</span><span class="k">to do</span></div>
+    </div>
+  </div>
+
+  <div class="strip">
+    <h2><i class="dotm wip"></i> In progress now</h2>
+    {wip_rows}
+  </div>
+
+{blocked_strip}  <div class="sec">Milestones</div>
+  <div class="rail">
+{chr(10).join(milestone_rows)}
+  </div>
+
+  <div class="foot">
+    <span>generated from {esc(source_md)} — re-run scripts/render_plan or /track to refresh</span>
+    <span>rendered {esc(render_id)}</span>
+  </div>
+</div>
+</body>
+</html>
+'''
+
+
+def main(argv):
+    check = False
+    if len(argv) == 3 and argv[1] == "--check":
+      check = True
+      plan_arg = argv[2]
+    elif len(argv) == 2:
+      plan_arg = argv[1]
+    else:
+        usage()
+        return 2
+    plan_path = Path(plan_arg)
+    if not plan_path.exists():
+        print(f"Plan not found: {plan_path}", file=sys.stderr)
+        return 1
+    parsed = parse_plan(plan_path)
+    source_md = relpath(plan_path)
+    render_id = "content sha256:" + hashlib.sha256(parsed["text"].encode("utf-8")).hexdigest()[:12]
+    plan_style = extract_style(find_contract(plan_path, "plan.example.html"))
+    tracker_style = extract_style(find_contract(plan_path, "tracker.example.html"))
+
+    plan_html = render_plan_html(parsed, source_md, render_id, plan_style)
+    tracker_html = render_tracker_html(parsed, source_md, render_id, tracker_style)
+
+    plan_out = plan_path.with_suffix(".html")
+    tracker_out = plan_path.with_suffix(".tracker.html")
+    if check:
+        failures = []
+        if not plan_out.exists() or plan_out.read_text(encoding="utf-8") != plan_html:
+            failures.append(relpath(plan_out))
+        if not tracker_out.exists() or tracker_out.read_text(encoding="utf-8") != tracker_html:
+            failures.append(relpath(tracker_out))
+        if failures:
+            print("stale generated files: " + ", ".join(failures), file=sys.stderr)
+            return 1
+        print(f"checked {relpath(plan_out)}")
+        print(f"checked {relpath(tracker_out)}")
+        return 0
+    plan_out.write_text(plan_html, encoding="utf-8")
+    tracker_out.write_text(tracker_html, encoding="utf-8")
+    print(f"wrote {relpath(plan_out)}")
+    print(f"wrote {relpath(tracker_out)}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

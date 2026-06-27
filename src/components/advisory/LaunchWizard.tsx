@@ -5,6 +5,7 @@ import {
   AlertCircle,
   CheckCircle2,
   FileText,
+  FolderOpen,
   Loader2,
   Paperclip,
   RefreshCw,
@@ -19,11 +20,17 @@ import { PROVIDERS, type ProviderModel } from "@/lib/ai/providers";
 import { supportedThinkingLevels } from "@/lib/ai/thinking-levels";
 import { buildProviderDisclosure } from "@/lib/advisory/provider-disclosure";
 import { inferAdvisoryIntent, type AdvisoryIntent } from "@/lib/advisory/session-intent";
+import {
+  clearWorkspacePreference,
+  defaultWorkspaceTarget,
+  getSavedWorkspacePreference,
+  rememberWorkspaceSelection,
+  type WorkspacePreference,
+} from "@/lib/browser/workspace-artifacts";
 
 type Intent = AdvisoryIntent;
 type SessionMode = "roundtable" | "competitive" | "formal-board";
 type Stance = "balanced" | "adversarial" | "optimistic" | "skeptical";
-type OutputPerspective = "decision-memo" | "action-plan" | "risk-memo" | "board-brief";
 type ResponseLength = "concise" | "balanced" | "detailed" | "verbose";
 type ThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
@@ -37,11 +44,17 @@ type LocalModelStatus = {
   name: string;
   provider: string;
   model: string;
+  localCli?: "claude" | "codex" | "gemini";
   thinkingLevels?: ThinkingLevel[];
   thinkingEnforced?: boolean;
   thinkingNote?: string;
   thinkingEvidence?: string;
   thinkingCapabilityCheckedAt?: string;
+  providerThinkingLevels?: ThinkingLevel[];
+  providerThinkingSourceUrl?: string;
+  providerThinkingSourceName?: string;
+  providerThinkingEvidence?: string;
+  providerThinkingFetchedAt?: string;
   contextWindow?: number;
   contextWindowSource?: "verified" | "configured" | "not-reported";
   contextEvidence?: string;
@@ -70,26 +83,13 @@ type AttachedFile = {
   text: string;
 };
 
-type ProjectContextPreview = {
-  projectLabel: string;
-  rootName: string;
-  selectedFiles: Array<{
-    path: string;
-    size: number;
-    score: number;
-    reasons: string[];
-    truncated: boolean;
-    includedChars: number;
-  }>;
+type ProjectContextPacket = {
+  selectedFiles: Array<{ path: string; includedChars?: number }>;
   candidateFileCount: number;
-  scannedDirCount: number;
-  skippedFileCount: number;
-  skippedDirCount: number;
-  warnings: Array<{ code: string; message: string; path?: string }>;
   referenceContext: string;
   referenceContextChars: number;
-  budgetChars: number;
   truncated: boolean;
+  warnings?: Array<{ code: string; message: string; path?: string }>;
 };
 
 interface LaunchWizardProps {
@@ -105,13 +105,6 @@ const STANCES: Array<{ id: Stance; label: string }> = [
   { id: "adversarial", label: "Adversarial" },
   { id: "optimistic", label: "Opportunity" },
   { id: "skeptical", label: "Skeptical" },
-];
-
-const OUTPUTS: Array<{ id: OutputPerspective; label: string }> = [
-  { id: "decision-memo", label: "Decision memo" },
-  { id: "action-plan", label: "Action plan" },
-  { id: "risk-memo", label: "Risk memo" },
-  { id: "board-brief", label: "Board brief" },
 ];
 
 const RESPONSE_LENGTHS: Array<{ id: ResponseLength; label: string; desc: string }> = [
@@ -136,6 +129,7 @@ const CONTEXT_BUDGETS: Array<{ value: number; label: string; desc: string }> = [
   { value: 500_000, label: "500K", desc: "Large docs or compact repo packets." },
   { value: 1_000_000, label: "1M", desc: "Maximum local context budget for deep reviews." },
 ];
+const INITIAL_WORKSPACE_SCAN_BUDGET_CHARS = 500_000;
 
 const INTENT_COPY: Record<Intent, { label: string; desc: string }> = {
   decision: { label: "Decision", desc: "The panel will help choose a path forward." },
@@ -154,6 +148,7 @@ const MODE_COPY: Record<SessionMode, { label: string; desc: string }> = {
 
 const SUPPORTED_FILE_EXTENSIONS = [".md", ".markdown", ".html", ".htm", ".txt", ".json", ".csv", ".tsv", ".yaml", ".yml"] as const;
 const MAX_FILE_CHARS = 1_000_000;
+const DEFAULT_WORKSPACE_PATH = defaultWorkspaceTarget().replace(/\/Panely$/, "");
 
 const MODEL_BY_ID = new Map(PROVIDERS.map((model) => [model.id, model]));
 
@@ -197,6 +192,24 @@ function formatBytes(size: number): string {
   return `${Math.round(size / 104857.6) / 10} MB`;
 }
 
+function formatCount(value: number) {
+  return new Intl.NumberFormat("en-US").format(value);
+}
+
+function cleanWorkspacePath(value: string) {
+  return value.trim().replace(/[\\/]+$/, "");
+}
+
+function workspaceLabelFromPath(value: string) {
+  return cleanWorkspacePath(value).split(/[\\/]/).filter(Boolean).at(-1) || "local-workspace";
+}
+
+function artifactTargetForPath(value: string) {
+  const cleanPath = cleanWorkspacePath(value);
+  const separator = cleanPath.includes("\\") ? "\\" : "/";
+  return `${cleanPath}${separator}Panely`;
+}
+
 function formatContextValue(contextWindow?: number): string {
   if (!contextWindow) return "";
   if (contextWindow >= 1_000_000) return `${contextWindow / 1_000_000}M`;
@@ -213,8 +226,19 @@ function formatModelContextSummary(model?: LocalModelStatus): string {
   return "context not reported";
 }
 
+function formatThinkingSupportNote(model?: LocalModelStatus): string {
+  if (!model) return "";
+  if (model.thinkingLevels?.length) return model.thinkingNote || "";
+  if (model.providerThinkingLevels?.length) {
+    const adapter = model.localCli ? `${model.localCli} CLI` : "local adapter";
+    return `Provider supports ${model.providerThinkingLevels.join(", ")}, but the current ${adapter} route does not enforce a thinking parameter.`;
+  }
+  return model.thinkingNote || "";
+}
+
 function buildAttachmentContext(files: AttachedFile[], contextBudgetChars: number) {
   if (files.length === 0) return "";
+  if (contextBudgetChars <= 0) return "";
   let remaining = contextBudgetChars;
   const sections: string[] = ["Attached source material:"];
 
@@ -228,11 +252,32 @@ function buildAttachmentContext(files: AttachedFile[], contextBudgetChars: numbe
   return sections.join("\n");
 }
 
+function joinContextSections(sections: string[]) {
+  return sections.filter(Boolean).join("\n\n---\n\n");
+}
+
+function capContextBudget(desiredBudget: number, limitingContextWindow?: number) {
+  if (!limitingContextWindow) return desiredBudget;
+  const cappedBudget = Math.min(desiredBudget, limitingContextWindow);
+  return CONTEXT_BUDGETS.filter((item) => item.value <= cappedBudget).at(-1)?.value ?? Math.max(1, Math.trunc(cappedBudget));
+}
+
+function inferAutomaticContextBudget(sourceChars: number, limitingContextWindow?: number) {
+  const desiredBudget = sourceChars > 500_000
+    ? 1_000_000
+    : sourceChars > 200_000
+      ? 500_000
+      : sourceChars > 50_000
+        ? 200_000
+        : 50_000;
+
+  return capContextBudget(desiredBudget, limitingContextWindow);
+}
+
 function buildPlanContext(params: {
   mode: SessionMode;
   intent: Intent;
   stance: Stance;
-  outputPerspective: OutputPerspective;
   responseLength: ResponseLength;
   lenses: PlannedLens[];
 }) {
@@ -246,7 +291,7 @@ function buildPlanContext(params: {
     `Mode: ${params.mode}`,
     `Intent: ${params.intent}`,
     `Review stance: ${params.stance}`,
-    `Final output perspective: ${params.outputPerspective}`,
+    "Artifacts available after completion: Decision memo, action plan, risk memo, board brief.",
     `Response length preference: ${params.responseLength}`,
     "Advisors:",
     ...lines,
@@ -256,16 +301,16 @@ function buildPlanContext(params: {
 export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
   const [topic, setTopic] = useState("");
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
-  const [projectPath, setProjectPath] = useState("");
-  const [projectContext, setProjectContext] = useState<ProjectContextPreview | null>(null);
-  const [projectScanning, setProjectScanning] = useState(false);
-  const [projectError, setProjectError] = useState("");
+  const [workspacePreference, setWorkspacePreference] = useState<WorkspacePreference | null>(null);
+  const [manualWorkspacePath, setManualWorkspacePath] = useState(DEFAULT_WORKSPACE_PATH);
+  const [projectContext, setProjectContext] = useState<ProjectContextPacket | null>(null);
+  const [scanningProject, setScanningProject] = useState(false);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [preferredMode, setPreferredMode] = useState<SessionMode>("roundtable");
+  const [modeTouched, setModeTouched] = useState(false);
   const [stance, setStance] = useState<Stance>("balanced");
-  const [outputPerspective, setOutputPerspective] = useState<OutputPerspective>("decision-memo");
   const [rounds, setRounds] = useState(3);
   const [responseLength, setResponseLength] = useState<ResponseLength>("balanced");
-  const [contextBudgetChars, setContextBudgetChars] = useState(200_000);
   const [pacing, setPacing] = useState("instant");
   const [plan, setPlan] = useState<{ mode: SessionMode; lenses: PlannedLens[] } | null>(null);
   const [planIntent, setPlanIntent] = useState<Intent | null>(null);
@@ -280,6 +325,9 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
 
   useEffect(() => {
     let cancelled = false;
+    const savedWorkspace = getSavedWorkspacePreference();
+    setWorkspacePreference(savedWorkspace);
+    if (savedWorkspace?.path) setManualWorkspacePath(savedWorkspace.path);
     fetch("/api/advisory/model-availability")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -298,14 +346,14 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
   }, []);
 
   const inferenceText = useMemo(
-    () => [topic, projectContext?.referenceContext ?? "", ...attachedFiles.map((file) => `${file.name}\n${file.text}`)].join("\n\n"),
-    [attachedFiles, projectContext, topic],
+    () => [topic, ...attachedFiles.map((file) => `${file.name}\n${file.text}`)].join("\n\n"),
+    [attachedFiles, topic],
   );
   useEffect(() => {
     setProviderDisclosureAccepted(false);
     setPlan(null);
     setPlanIntent(null);
-  }, [inferenceText]);
+  }, [inferenceText, projectContext?.referenceContext]);
   const intent = useMemo(() => inferIntent(inferenceText), [inferenceText]);
   const activeIntent = planIntent ?? intent;
   const intentInfo = INTENT_COPY[activeIntent];
@@ -322,36 +370,43 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
     .map((modelId) => localModels.find((model) => model.id === modelId)?.contextWindow)
     .filter((value): value is number => typeof value === "number");
   const limitingKnownContextWindow = selectedContextWindows.length ? Math.min(...selectedContextWindows) : undefined;
-  const contextBudgetOptions = CONTEXT_BUDGETS.map((item) => ({
-    ...item,
-    disabled: Boolean(limitingKnownContextWindow && item.value > limitingKnownContextWindow),
-  }));
+  const sourceChars = useMemo(
+    () => topic.length + attachedFiles.reduce((sum, file) => sum + file.text.length, 0) + (projectContext?.referenceContextChars ?? 0),
+    [attachedFiles, projectContext?.referenceContextChars, topic],
+  );
+  const contextBudgetChars = useMemo(
+    () => inferAutomaticContextBudget(sourceChars, limitingKnownContextWindow),
+    [limitingKnownContextWindow, sourceChars],
+  );
+  const workspaceScanBudgetChars = useMemo(
+    () => projectContext
+      ? contextBudgetChars
+      : capContextBudget(INITIAL_WORKSPACE_SCAN_BUDGET_CHARS, limitingKnownContextWindow),
+    [contextBudgetChars, limitingKnownContextWindow, projectContext],
+  );
   const providerDisclosure = buildProviderDisclosure({
     topic: topic.trim(),
     attachedFileCount: attachedFiles.length,
     localProjectFileCount: projectContext?.selectedFiles.length ?? 0,
-    sourceKinds: projectContext ? ["local-project"] : undefined,
+    sourceKinds: [
+      ...(attachedFiles.length ? ["attached-file" as const] : []),
+      ...(projectContext ? ["local-project" as const] : []),
+    ],
     planningModelIds: ["claude-sonnet"],
     modelIds: selectedModelIds,
   });
   const mustAcceptDisclosure = providerDisclosure.requiresConsent && !providerDisclosureAccepted;
-
-  useEffect(() => {
-    if (!limitingKnownContextWindow || contextBudgetChars <= limitingKnownContextWindow) return;
-    const nextBudget = CONTEXT_BUDGETS.filter((item) => item.value <= limitingKnownContextWindow).at(-1)?.value ?? CONTEXT_BUDGETS[0].value;
-    setContextBudgetChars(nextBudget);
-  }, [contextBudgetChars, limitingKnownContextWindow]);
+  const activeMode = plan?.mode ?? preferredMode;
+  const formalRoundsLocked = activeMode === "formal-board";
+  const launchTitle = activeMode === "formal-board"
+    ? "Plan a formal board review"
+    : activeMode === "competitive"
+      ? "Plan a competitive session"
+      : "Plan a roundtable";
 
   useEffect(() => {
     setProviderDisclosureAccepted(false);
   }, [contextBudgetChars, selectedModelSignature]);
-
-  useEffect(() => {
-    if (!projectContext) return;
-    setProjectContext(null);
-    setProviderDisclosureAccepted(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contextBudgetChars]);
 
   useEffect(() => {
     if (!plan || localModels.length === 0) return;
@@ -382,7 +437,11 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
   };
 
   const generatePlan = async () => {
-    const cleanTopic = inferenceText.trim();
+    const projectPlanningContext = projectContext?.referenceContext
+      ? `Read-only workspace source snapshot:\n${projectContext.referenceContext}`
+      : "";
+    const cleanTopic = [inferenceText.trim(), projectPlanningContext].filter(Boolean).join("\n\n---\n\n")
+      || (projectContext ? "Review attached workspace source." : "");
     if (!cleanTopic) {
       setError("Add a topic, decision, or source file first.");
       return;
@@ -401,9 +460,13 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
         body: JSON.stringify({
           topic: cleanTopic,
           modelId: "claude-sonnet",
+          requestedMode: modeTouched ? preferredMode : undefined,
           attachedFileCount: attachedFiles.length,
           localProjectFileCount: projectContext?.selectedFiles.length ?? 0,
-          sourceKinds: projectContext ? ["local-project"] : undefined,
+          sourceKinds: [
+            ...(attachedFiles.length ? ["attached-file"] : []),
+            ...(projectContext ? ["local-project"] : []),
+          ],
           providerDisclosure: providerDisclosureAccepted
             ? {
                 accepted: true,
@@ -433,10 +496,15 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
         thinkingLevel: (advisor.thinkingLevel || "high") as ThinkingLevel,
         stance: String(advisor.stance || "balanced").slice(0, 60),
       }, localModels));
+      const generatedMode: SessionMode = data.mode === "competitive" || data.mode === "formal-board" || data.mode === "roundtable"
+        ? data.mode
+        : preferredMode;
+      if (generatedMode === "formal-board") setRounds(3);
       setPlan({
-        mode: data.mode === "competitive" || data.mode === "formal-board" ? data.mode : "roundtable",
+        mode: generatedMode,
         lenses: plannedLenses,
       });
+      setPreferredMode(generatedMode);
       setPlanIntent((data.intent || intent) as Intent);
       setPlanFallback(Boolean(data.fallback));
     } catch (err) {
@@ -479,14 +547,59 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
     setAttachedFiles((current) => current.filter((file) => file.id !== fileId));
   };
 
-  const scanProject = async () => {
-    const cleanPath = projectPath.trim();
-    if (!cleanPath) {
-      setProjectError("Enter a local project path first.");
+  const chooseWorkspace = async () => {
+    const res = await fetch("/api/local/workspace-picker", {
+      method: "POST",
+      headers: { "x-panely-local-workspace-picker": "1" },
+    });
+    const data = await res.json();
+    if (data.cancelled) return;
+    if (!res.ok || !data.workspace?.artifactTarget) {
+      setError(data.error ? `${data.error} Paste an absolute path to use manual source snapshots.` : "Unable to choose workspace folder.");
       return;
     }
-    setProjectScanning(true);
-    setProjectError("");
+    const preference = rememberWorkspaceSelection({
+      label: String(data.workspace.label || "local-workspace"),
+      path: String(data.workspace.path || ""),
+      artifactTarget: String(data.workspace.artifactTarget),
+    });
+    setWorkspacePreference(preference);
+    setManualWorkspacePath(preference.path || DEFAULT_WORKSPACE_PATH);
+    setProjectContext(null);
+  };
+
+  const useManualWorkspace = () => {
+    const cleanPath = cleanWorkspacePath(manualWorkspacePath);
+    if (!cleanPath) {
+      setError("Enter a local workspace path before attaching source.");
+      return;
+    }
+    const preference = rememberWorkspaceSelection({
+      label: workspaceLabelFromPath(cleanPath),
+      path: cleanPath,
+      artifactTarget: artifactTargetForPath(cleanPath),
+    });
+    setWorkspacePreference(preference);
+    setManualWorkspacePath(cleanPath);
+    setProjectContext(null);
+    setError("");
+  };
+
+  const clearWorkspace = () => {
+    clearWorkspacePreference();
+    setWorkspacePreference(null);
+    setManualWorkspacePath(DEFAULT_WORKSPACE_PATH);
+    setProjectContext(null);
+  };
+
+  const scanWorkspaceSource = async () => {
+    if (!workspacePreference?.path) {
+      setError("Choose a workspace folder before attaching source.");
+      return;
+    }
+
+    setError("");
+    setScanningProject(true);
     try {
       const res = await fetch("/api/advisory/project-context", {
         method: "POST",
@@ -495,34 +608,36 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
           "x-panely-local-project-scan": "1",
         },
         body: JSON.stringify({
-          projectPath: cleanPath,
-          topic: topic.trim(),
-          contextBudgetChars,
+          projectPath: workspacePreference.path,
+          topic: inferenceText.trim() || topic.trim() || "Review this local project.",
+          contextBudgetChars: workspaceScanBudgetChars,
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to scan project.");
-      setProjectContext(data.projectContext as ProjectContextPreview);
+      if (!res.ok || !data.projectContext?.referenceContext) {
+        throw new Error(data.error || "Unable to attach workspace source.");
+      }
+      setProjectContext(data.projectContext as ProjectContextPacket);
       setProviderDisclosureAccepted(false);
     } catch (err) {
       setProjectContext(null);
       setProviderDisclosureAccepted(false);
-      setProjectError(err instanceof Error ? err.message : "Failed to scan project.");
+      setError(err instanceof Error ? err.message : "Unable to attach workspace source.");
     } finally {
-      setProjectScanning(false);
+      setScanningProject(false);
     }
   };
 
-  const clearProject = () => {
-    setProjectPath("");
-    setProjectContext(null);
-    setProjectError("");
-    setProviderDisclosureAccepted(false);
+  const chooseMode = (mode: SessionMode) => {
+    setModeTouched(true);
+    setPreferredMode(mode);
+    if (mode === "formal-board") setRounds(3);
+    setPlan((current) => current ? { ...current, mode } : current);
   };
 
   const handleLaunch = async () => {
     const cleanTopic = topic.trim()
-      || (projectContext ? `Debug local project ${projectContext.projectLabel}` : "")
+      || (projectContext ? "Review attached workspace source." : "")
       || (attachedFiles.length > 0 ? `Review attached material: ${attachedFiles.map((file) => file.name).join(", ")}` : "");
     if (!cleanTopic) {
       setError("Add a topic, decision, or source file first.");
@@ -555,12 +670,22 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
       mode: plan.mode,
       intent: planIntent ?? intent,
       stance,
-      outputPerspective,
       responseLength,
       lenses: plan.lenses,
     });
-    const attachmentContext = buildAttachmentContext(attachedFiles, contextBudgetChars);
-    const mergedContext = [planContext, projectContext?.referenceContext ?? "", attachmentContext].filter(Boolean).join("\n\n---\n\n");
+    const projectSourceContext = projectContext?.referenceContext
+      ? `Read-only workspace source snapshot:\n${projectContext.referenceContext}`
+      : "";
+    const contextDelimiterBudget = "\n\n---\n\n".length;
+    const attachmentBudget = projectSourceContext
+      ? Math.max(0, contextBudgetChars - joinContextSections([planContext, projectSourceContext]).length - contextDelimiterBudget)
+      : contextBudgetChars;
+    const attachmentContext = buildAttachmentContext(attachedFiles, attachmentBudget);
+    const mergedContext = joinContextSections([planContext, projectSourceContext, attachmentContext]);
+    const sourceKinds = [
+      ...(attachmentContext ? ["attached-file"] : []),
+      ...(projectSourceContext ? ["local-project"] : []),
+    ];
 
     try {
       const res = await fetch("/api/advisory/sessions", {
@@ -576,8 +701,8 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
           responseLength,
           referenceContextBudgetChars: contextBudgetChars,
           referenceContext: mergedContext,
-          sourceKinds: projectContext ? ["local-project"] : undefined,
-          localProjectFileCount: projectContext?.selectedFiles.length ?? 0,
+          sourceKinds,
+          localProjectFileCount: projectSourceContext ? projectContext?.selectedFiles.length ?? 0 : 0,
           agentModelOverrides,
           agentPersonalityTraits,
           agentCommunicationStyles,
@@ -618,7 +743,7 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
         <header className="launch-header">
           <div>
             <div className="eyebrow">New session</div>
-            <h2>Plan a roundtable</h2>
+            <h2>{launchTitle}</h2>
             <p>Brief the topic. Panely recommends the perspectives, models, and session shape.</p>
           </div>
           <button className="icon-button" onClick={onClose} aria-label="Close setup">
@@ -687,76 +812,82 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
               )}
             </div>
 
-            <div className="field local-project-box">
-              <div className="local-project-header">
+            <div className="field workspace-box">
+              <div className="workspace-header">
                 <div>
-                  <label htmlFor="projectPath">Local project</label>
-                  <span>Scan happens on this machine. Advisor planning and session launch can send the selected packet through local CLIs after disclosure.</span>
+                  <label>Workspace</label>
+                  <span>Choose a local folder for source snapshots. Downloads use the browser default location.</span>
                 </div>
-                {projectContext && (
-                  <button type="button" className="mini-button" onClick={clearProject}>
+                {workspacePreference && (
+                  <button type="button" className="mini-button" onClick={clearWorkspace}>
                     Clear
                   </button>
                 )}
               </div>
-              <div className="project-scan-row">
+              <div className="workspace-row">
                 <input
-                  id="projectPath"
-                  value={projectPath}
-                  onChange={(event) => {
-                    setProjectPath(event.target.value);
-                    setProjectContext(null);
-                    setProjectError("");
-                    setProviderDisclosureAccepted(false);
-                  }}
-                  placeholder="/path/to/project"
+                  value={manualWorkspacePath}
+                  onChange={(event) => setManualWorkspacePath(event.target.value)}
+                  aria-label="Workspace folder path"
                 />
-                <button type="button" className="secondary-button compact" onClick={scanProject} disabled={projectScanning || !projectPath.trim()}>
-                  {projectScanning ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}
-                  Scan
+                <button type="button" className="secondary-button compact" onClick={useManualWorkspace}>
+                  <CheckCircle2 size={14} />
+                  Use path
+                </button>
+                <button type="button" className="secondary-button compact" onClick={() => void chooseWorkspace()}>
+                  <FolderOpen size={14} />
+                  Choose folder
                 </button>
               </div>
-              {projectError && (
-                <div className="project-error">
-                  <AlertCircle size={14} />
-                  {projectError}
+              <div className="workspace-note">
+                {workspacePreference
+                  ? `${workspacePreference.label} is selected for optional source snapshots.`
+                  : "No folder selected yet. You can still use attached files and browser downloads."}
+              </div>
+              {workspacePreference && (
+                <div className="workspace-source-row">
+                  <button type="button" className="secondary-button compact" onClick={() => void scanWorkspaceSource()} disabled={scanningProject}>
+                    {scanningProject ? <Loader2 size={14} className="spin" /> : <FileText size={14} />}
+                    {projectContext ? "Refresh source" : "Attach source"}
+                  </button>
+                  <span>
+                    {projectContext
+                      ? `${projectContext.selectedFiles.length} files · ${formatCount(projectContext.referenceContextChars)} chars${projectContext.truncated ? " · truncated" : ""}`
+                      : "Optional read-only code snapshot for advisors."}
+                  </span>
                 </div>
               )}
               {projectContext && (
-                <div className="project-summary">
-                  <div className="project-summary-main">
-                    <strong>{projectContext.projectLabel}</strong>
+                <div className="workspace-source-summary">
+                  <div>
+                    <strong>Source snapshot attached</strong>
                     <span>
-                      {projectContext.selectedFiles.length} selected · {projectContext.candidateFileCount} candidates · {projectContext.referenceContextChars.toLocaleString()} chars
+                      {projectContext.selectedFiles.slice(0, 4).map((file) => file.path).join(", ")}
+                      {projectContext.selectedFiles.length > 4 ? `, +${projectContext.selectedFiles.length - 4} more` : ""}
                     </span>
                   </div>
-                  <div className="project-file-list">
-                    {projectContext.selectedFiles.slice(0, 8).map((file) => (
-                      <div className="project-file" key={file.path} title={file.reasons.join("; ")}>
-                        <FileText size={13} />
-                        <span>{file.path}</span>
-                        <small>{formatBytes(file.size)}{file.truncated ? " · truncated" : ""}</small>
-                      </div>
-                    ))}
-                    {projectContext.selectedFiles.length > 8 && (
-                      <div className="project-file muted">
-                        +{projectContext.selectedFiles.length - 8} more selected files
-                      </div>
-                    )}
-                  </div>
-                  {projectContext.warnings.length > 0 && (
-                    <div className="project-warnings">
-                      {projectContext.warnings.slice(0, 4).map((warning, index) => (
-                        <div key={`${warning.code}-${warning.path || index}`}>
-                          <AlertCircle size={12} />
-                          <span>{warning.path ? `${warning.path}: ` : ""}{warning.message}</span>
-                        </div>
-                      ))}
-                      {projectContext.warnings.length > 4 && <small>+{projectContext.warnings.length - 4} more warnings</small>}
-                    </div>
-                  )}
+                  <button type="button" className="mini-button" onClick={() => setProjectContext(null)}>
+                    Remove
+                  </button>
                 </div>
               )}
+            </div>
+
+            <div className="field">
+              <label>Session mode</label>
+              <div className="mode-options">
+                {(Object.entries(MODE_COPY) as Array<[SessionMode, (typeof MODE_COPY)[SessionMode]]>).map(([modeId, copy]) => (
+                  <button
+                    key={modeId}
+                    type="button"
+                    className={preferredMode === modeId ? "selected" : ""}
+                    onClick={() => chooseMode(modeId)}
+                  >
+                    <strong>{copy.label}</strong>
+                    <span>{copy.desc}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="field">
@@ -791,11 +922,6 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
               </div>
             )}
 
-            <button type="button" className="generate-plan-button" onClick={generatePlan} disabled={planning || !inferenceText.trim() || mustAcceptDisclosure}>
-              {planning ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />}
-              {plan ? "Regenerate advisor plan" : "Generate advisor plan"}
-            </button>
-
             <div className="field">
               <label>Review stance</label>
               <div className="segmented">
@@ -815,13 +941,21 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
             <div className="control-grid">
               <div className="field">
                 <label htmlFor="rounds">Rounds</label>
-                <select id="rounds" value={rounds} onChange={(event) => setRounds(Number(event.target.value))}>
+                <select
+                  id="rounds"
+                  value={rounds}
+                  disabled={formalRoundsLocked}
+                  onChange={(event) => setRounds(Number(event.target.value))}
+                >
                   {[2, 3, 4, 5, 7, 10].map((count) => (
                     <option key={count} value={count}>
                       {count} rounds
                     </option>
                   ))}
                 </select>
+                {formalRoundsLocked && (
+                  <div className="field-note locked-note">Formal Board Review runs independent review, rebuttal, and conditional convergence.</div>
+                )}
               </div>
 
               <div className="field">
@@ -853,44 +987,6 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
               </div>
             </div>
 
-            <div className="field">
-              <label>Context budget</label>
-              <div className="segmented">
-                {contextBudgetOptions.map((item) => (
-                  <button
-                    key={item.value}
-                    type="button"
-                    className={contextBudgetChars === item.value ? "selected" : ""}
-                    disabled={item.disabled}
-                    onClick={() => setContextBudgetChars(item.value)}
-                    title={item.disabled ? `Above the limiting reported/configured selected model context (${formatContextValue(limitingKnownContextWindow)}).` : item.desc}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-              <small>
-                {limitingKnownContextWindow
-                  ? `Budgets are capped by the smallest reported or configured selected model context: ${formatContextValue(limitingKnownContextWindow)}.`
-                  : "Selected model CLIs have not reported a context limit; Panely will use this as the source-packet budget only."}
-              </small>
-            </div>
-
-            <div className="field">
-              <label htmlFor="outputPerspective">Output perspective</label>
-              <select
-                id="outputPerspective"
-                value={outputPerspective}
-                onChange={(event) => setOutputPerspective(event.target.value as OutputPerspective)}
-              >
-                {OUTPUTS.map((output) => (
-                  <option key={output.id} value={output.id}>
-                    {output.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
           </section>
 
           <section className="plan-column">
@@ -907,10 +1003,6 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
                     <div className="eyebrow">{planFallback ? "Fallback plan" : "AI-generated plan"}</div>
                     <h3>{MODE_COPY[plan.mode].label}</h3>
                   </div>
-                  <button type="button" className="secondary-button" onClick={generatePlan} disabled={planning}>
-                    {planning ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}
-                    Regenerate
-                  </button>
                 </div>
 
                 <div className="summary-strip">
@@ -933,7 +1025,7 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
                         key={modeId}
                         type="button"
                         className={plan.mode === modeId ? "selected" : ""}
-                        onClick={() => setPlan((current) => current ? { ...current, mode: modeId } : current)}
+                        onClick={() => chooseMode(modeId)}
                       >
                         <strong>{copy.label}</strong>
                         <span>{copy.desc}</span>
@@ -962,6 +1054,7 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
                     const model = getModel(lens.modelId);
                     const localModel = localModels.find((item) => item.id === lens.modelId);
                     const thinkingOptions = getThinkingOptions(lens.modelId, localModels);
+                    const thinkingNote = formatThinkingSupportNote(localModel);
                     return (
                       <div className="lens-row" key={lens.id}>
                         <div className="agent-initial" aria-hidden="true">
@@ -994,7 +1087,7 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
                               </option>
                             ))}
                           </select>
-                          <span title={[localModel?.contextNote, localModel?.thinkingNote].filter(Boolean).join(" ") || undefined}>
+                          <span title={[localModel?.contextNote, thinkingNote, localModel?.providerThinkingEvidence].filter(Boolean).join(" ") || undefined}>
                             {model.provider} · {formatModelContextSummary(localModel)}{localModel?.thinkingEnforced === false ? " · thinking not enforced" : ""}
                           </span>
                         </div>
@@ -1027,10 +1120,16 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
           <button type="button" className="ghost-button" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="primary-button" onClick={handleLaunch} disabled={loading || !plan || mustAcceptDisclosure}>
-            {loading ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />}
-            Start session
-          </button>
+          <div className="launch-footer-actions">
+            <button type="button" className="secondary-button" onClick={generatePlan} disabled={planning || loading}>
+              {planning ? <Loader2 size={16} className="spin" /> : plan ? <RefreshCw size={16} /> : <Sparkles size={16} />}
+              {plan ? "Regenerate advisor plan" : "Generate advisor plan"}
+            </button>
+            <button type="button" className="primary-button" onClick={handleLaunch} disabled={loading || !plan}>
+              {loading ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />}
+              Start session
+            </button>
+          </div>
         </footer>
       </div>
 
@@ -1071,6 +1170,14 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
         .launch-footer {
           border-top: 1px solid var(--border);
           border-bottom: none;
+        }
+
+        .launch-footer-actions {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 10px;
+          flex-wrap: wrap;
         }
 
         .launch-header h2,
@@ -1165,6 +1272,11 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
           padding: 0 12px;
         }
 
+        select:disabled {
+          cursor: not-allowed;
+          opacity: 0.58;
+        }
+
         textarea:focus,
         input:focus,
         select:focus {
@@ -1177,6 +1289,11 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
           color: var(--text-muted);
           font-size: 11px;
           text-align: right;
+        }
+
+        .field-note.locked-note {
+          text-align: left;
+          line-height: 1.4;
         }
 
         .topic-actions {
@@ -1271,14 +1388,14 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
           color: var(--text-primary);
         }
 
-        .local-project-box {
+        .workspace-box {
           border: 1px solid var(--border);
           border-radius: 10px;
           background: rgba(255, 255, 255, 0.025);
           padding: 14px;
         }
 
-        .local-project-header {
+        .workspace-header {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
@@ -1286,26 +1403,31 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
           margin-bottom: 12px;
         }
 
-        .local-project-header label {
+        .workspace-header label {
           margin-bottom: 4px;
         }
 
-        .local-project-header span {
+        .workspace-header span {
           display: block;
           color: var(--text-muted);
           font-size: 12px;
           line-height: 1.45;
         }
 
-        .project-scan-row {
+        .workspace-row {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) auto;
+          grid-template-columns: minmax(0, 1fr) auto auto;
           gap: 10px;
         }
 
-        .project-scan-row input {
+        .workspace-row input {
           min-height: 40px;
           padding: 0 12px;
+        }
+
+        .workspace-row input[readonly] {
+          color: var(--text-secondary);
+          cursor: default;
         }
 
         .secondary-button.compact {
@@ -1330,7 +1452,59 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
           color: var(--text-primary);
         }
 
-        .project-error {
+        .workspace-note {
+          margin-top: 10px;
+          color: var(--text-muted);
+          font-size: 11px;
+          line-height: 1.45;
+        }
+
+        .workspace-source-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin-top: 10px;
+        }
+
+        .workspace-source-row span {
+          min-width: 0;
+          color: var(--text-muted);
+          font-size: 11px;
+          line-height: 1.4;
+        }
+
+        .workspace-source-summary {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 10px;
+          margin-top: 10px;
+          border: 1px solid rgba(96, 165, 250, 0.32);
+          border-radius: 8px;
+          background: rgba(96, 165, 250, 0.08);
+          padding: 10px;
+        }
+
+        .workspace-source-summary strong,
+        .workspace-source-summary span {
+          display: block;
+        }
+
+        .workspace-source-summary strong {
+          color: var(--text-primary);
+          font-size: 12px;
+          font-weight: 800;
+        }
+
+        .workspace-source-summary span {
+          margin-top: 4px;
+          color: var(--text-muted);
+          font-size: 11px;
+          line-height: 1.45;
+          overflow-wrap: anywhere;
+        }
+
+        .workspace-error {
           display: flex;
           align-items: flex-start;
           gap: 8px;
@@ -1344,97 +1518,9 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
           line-height: 1.4;
         }
 
-        .project-error svg,
-        .project-warnings svg {
+        .workspace-error svg {
           flex: 0 0 auto;
           margin-top: 1px;
-        }
-
-        .project-summary {
-          margin-top: 12px;
-          border: 1px solid rgba(34, 197, 94, 0.26);
-          border-radius: 8px;
-          background: rgba(34, 197, 94, 0.06);
-          padding: 12px;
-        }
-
-        .project-summary-main {
-          display: flex;
-          justify-content: space-between;
-          gap: 12px;
-          margin-bottom: 10px;
-        }
-
-        .project-summary-main strong {
-          min-width: 0;
-          overflow: hidden;
-          color: var(--text-primary);
-          font-size: 13px;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .project-summary-main span {
-          flex: 0 0 auto;
-          color: var(--text-muted);
-          font-size: 11px;
-        }
-
-        .project-file-list {
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-        }
-
-        .project-file {
-          display: grid;
-          grid-template-columns: 16px minmax(0, 1fr) auto;
-          align-items: center;
-          gap: 8px;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 7px;
-          background: rgba(0, 0, 0, 0.18);
-          padding: 7px 8px;
-          color: var(--text-secondary);
-          font-size: 12px;
-        }
-
-        .project-file.muted {
-          display: block;
-          color: var(--text-muted);
-          text-align: center;
-        }
-
-        .project-file span {
-          min-width: 0;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .project-file small {
-          color: var(--text-muted);
-          font-size: 10px;
-          white-space: nowrap;
-        }
-
-        .project-warnings {
-          display: flex;
-          flex-direction: column;
-          gap: 5px;
-          margin-top: 10px;
-          color: #fbbf24;
-          font-size: 11px;
-          line-height: 1.35;
-        }
-
-        .project-warnings div {
-          display: flex;
-          gap: 6px;
-        }
-
-        .project-warnings small {
-          color: var(--text-muted);
         }
 
         .intent-card {
@@ -1494,13 +1580,23 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
         }
 
         .provider-disclosure label {
-          display: flex;
+          display: inline-flex;
           align-items: center;
           gap: 8px;
           margin-top: 12px;
+          margin-bottom: 0;
           color: var(--text-primary);
           font-size: 12px;
           font-weight: 800;
+          line-height: 1.35;
+        }
+
+        .provider-disclosure input[type="checkbox"] {
+          flex: 0 0 auto;
+          width: 16px;
+          height: 16px;
+          margin: 0;
+          accent-color: var(--accent);
         }
 
         .generate-plan-button {
@@ -1532,7 +1628,7 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
 
         .mode-options {
           display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
           gap: 8px;
         }
 
@@ -1823,6 +1919,13 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
           font-size: 13px;
         }
 
+        .launch-footer-actions .secondary-button {
+          min-width: 210px;
+          border-color: var(--accent);
+          color: var(--accent);
+          background: var(--accent-soft);
+        }
+
         .ghost-button {
           min-width: 92px;
         }
@@ -1902,18 +2005,10 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
           .segmented,
           .segmented-compact,
           .control-grid,
-          .project-scan-row,
+          .mode-options,
+          .workspace-row,
           .add-lens {
             grid-template-columns: 1fr;
-          }
-
-          .project-summary-main {
-            flex-direction: column;
-            gap: 4px;
-          }
-
-          .project-summary-main span {
-            flex: 0 1 auto;
           }
 
           .secondary-button.compact {
@@ -1925,8 +2020,15 @@ export default function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
             flex-direction: column-reverse;
           }
 
+          .launch-footer-actions {
+            width: 100%;
+            flex-direction: column;
+            align-items: stretch;
+          }
+
           .primary-button,
-          .ghost-button {
+          .ghost-button,
+          .launch-footer-actions .secondary-button {
             width: 100%;
           }
         }

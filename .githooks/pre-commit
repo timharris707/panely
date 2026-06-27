@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! git rev-parse --show-toplevel >/dev/null 2>&1; then
+  exit 0
+fi
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+staged_names="$(git diff --cached --name-only)"
+if [[ -z "$staged_names" ]]; then
+  exit 0
+fi
+
+renderer_mode="$(git ls-files --cached -s -- scripts/render_plan | awk 'NR == 1 { print $1 }')"
+if [[ "$renderer_mode" != "100755" || ! -x scripts/render_plan ]]; then
+  if git diff --cached --name-only -- scripts/render_plan 'docs/plans/*.md' 'docs/plans/*.html' | grep -q .; then
+    echo "pre-commit: scripts/render_plan is required and must be executable in both the working tree and staged index for plan-related commits." >&2
+    exit 1
+  fi
+else
+  generator_changed=0
+  if git diff --cached --name-only -- scripts/render_plan docs/plans/plan.example.html docs/plans/tracker.example.html | grep -q .; then
+    generator_changed=1
+    for generator in scripts/render_plan docs/plans/plan.example.html docs/plans/tracker.example.html; do
+      if [[ -e "$generator" ]] && ! git diff --quiet -- "$generator"; then
+        echo "pre-commit: $generator has unstaged changes. Stage them before committing generated plan views." >&2
+        exit 1
+      fi
+    done
+    while IFS= read -r plan; do
+      [[ -z "$plan" ]] && continue
+      [[ "$(basename "$plan")" == "plan.template.md" ]] && continue
+      if ! git diff --quiet -- "$plan"; then
+        echo "pre-commit: $plan has unstaged changes. Stage or stash them before committing renderer/template changes." >&2
+        exit 1
+      fi
+      if ! scripts/render_plan --check "$plan" >/dev/null; then
+        echo "pre-commit: renderer/template changes make generated views stale for $plan." >&2
+        echo "Run scripts/render_plan $plan, then stage the regenerated views." >&2
+        exit 1
+      fi
+      html="${plan%.md}.html"
+      tracker="${plan%.md}.tracker.html"
+      for generated in "$html" "$tracker"; do
+        if ! git diff --quiet -- "$generated"; then
+          echo "pre-commit: renderer/template changes regenerated $generated, but it is not staged." >&2
+          echo "Run git add $generated before committing." >&2
+          exit 1
+        fi
+      done
+    done < <(git ls-files --cached -- 'docs/plans/*.md')
+  fi
+
+  while IFS= read -r plan; do
+    [[ -z "$plan" ]] && continue
+    [[ "$(basename "$plan")" == "plan.template.md" ]] && continue
+    html="${plan%.md}.html"
+    tracker="${plan%.md}.tracker.html"
+    if ! git cat-file -e ":$plan" 2>/dev/null; then
+      for generated in "$html" "$tracker"; do
+        if git ls-files --cached --error-unmatch "$generated" >/dev/null 2>&1; then
+          echo "pre-commit: deleting $plan also requires deleting generated file $generated." >&2
+          exit 1
+        fi
+      done
+      continue
+    fi
+    if ! git diff --quiet -- "$plan"; then
+      echo "pre-commit: $plan has unstaged changes. Stage or stash them before committing." >&2
+      exit 1
+    fi
+    scripts/render_plan --check "$plan" >/dev/null
+    for generated in "$html" "$tracker"; do
+      if [[ ! -f "$generated" ]]; then
+        echo "pre-commit: missing generated file $generated. Run scripts/render_plan $plan and git add it." >&2
+        exit 1
+      fi
+      if ! git ls-files --cached --error-unmatch "$generated" >/dev/null 2>&1; then
+        echo "pre-commit: generated file $generated is not staged." >&2
+        exit 1
+      fi
+      if ! git diff --quiet -- "$generated"; then
+        echo "pre-commit: generated file $generated is stale or unstaged." >&2
+        echo "Run scripts/render_plan $plan, then git add $generated." >&2
+        exit 1
+      fi
+    done
+  done < <(git diff --cached --name-only -- 'docs/plans/*.md')
+
+  while IFS= read -r generated; do
+    [[ -z "$generated" ]] && continue
+    case "$generated" in
+      docs/plans/plan.example.html|docs/plans/tracker.example.html)
+        continue
+        ;;
+      docs/plans/plan.template.html|docs/plans/plan.template.tracker.html)
+        continue
+        ;;
+      *.tracker.html)
+        plan="${generated%.tracker.html}.md"
+        ;;
+      *.html)
+        plan="${generated%.html}.md"
+        ;;
+      *)
+        continue
+        ;;
+    esac
+    if ! git diff --cached --name-only -- "$plan" | grep -qxF "$plan"; then
+      if [[ "$generator_changed" == "1" ]]; then
+        if [[ ! -f "$plan" ]]; then
+          echo "pre-commit: generated plan view $generated has no source $plan." >&2
+          exit 1
+        fi
+        scripts/render_plan --check "$plan" >/dev/null
+        if ! git diff --quiet -- "$generated"; then
+          echo "pre-commit: generated plan view $generated has unstaged changes. Stage the regenerated file." >&2
+          exit 1
+        fi
+      else
+        echo "pre-commit: generated plan view $generated is staged without its source $plan." >&2
+        echo "Edit the markdown source, run scripts/render_plan, and stage both source and generated views. Renderer/template-only changes may stage generated views with the renderer/template change." >&2
+        exit 1
+      fi
+    fi
+  done < <(git diff --cached --name-only -- 'docs/plans/*.html')
+fi
+
+if [[ "${SKIP_REVIEW:-}" == "1" ]]; then
+  exit 0
+fi
+
+if [[ "${REVIEWED:-}" != "1" ]]; then
+  cat >&2 <<'MSG'
+pre-commit: non-trivial commits require adversarial review.
+
+Run:
+  /review
+  REVIEWED=1 git commit ...
+
+For truly trivial changes only:
+  SKIP_REVIEW=1 git commit ...
+MSG
+  exit 1
+fi
+
+expected_file=".review/approved.diff.sha256"
+if [[ ! -f "$expected_file" ]]; then
+  echo "pre-commit: REVIEWED=1 was set, but $expected_file is missing. Run /review first." >&2
+  exit 1
+fi
+if [[ -L "$expected_file" ]]; then
+  echo "pre-commit: $expected_file must not be a symlink." >&2
+  exit 1
+fi
+
+expected="$(awk '{print $1}' "$expected_file" | head -n 1)"
+actual="$(git diff --cached --binary | shasum -a 256 | awk '{print $1}')"
+
+if [[ -z "$expected" || "$expected" != "$actual" ]]; then
+  cat >&2 <<MSG
+pre-commit: staged diff changed after review.
+
+Reviewed fingerprint: ${expected:-missing}
+Current fingerprint:  $actual
+
+Run /review again, then commit with REVIEWED=1.
+MSG
+  exit 1
+fi

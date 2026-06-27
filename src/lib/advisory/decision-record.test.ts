@@ -79,12 +79,12 @@ test("buildDecisionRecord includes formal board verdict artifact", () => {
         blockers: [],
         dissent: [{ who: "B", body: "One reviewer wanted to block until load testing." }],
         open_questions: ["Production load is unknown."],
-        next_actions: ["Run a staged rollout."],
-        summary: "Ship with a scoped rollout.",
-        evidenceBacked: ["Tests exist."],
-        judgmentCalls: ["Rollout should be staged."],
-        couldntVerify: ["Production load is unknown."],
-        minorityReport: ["One reviewer wanted to block until load testing."],
+        next_actions: ["OS breakdown of current users** Pull telemetry before committing.", "CAUTION before launch by verifying telemetry.", "Run a staged rollout."],
+        summary: "## Verdict\nCAUTION. Ship with a scoped rollout.",
+        evidenceBacked: ["## Evidence-backed", "Tests exist."],
+        judgmentCalls: ["## Judgment calls", "Rollout should be staged."],
+        couldntVerify: ["## Could not verify", "Production load is unknown."],
+        minorityReport: ["## Minority report", "One reviewer wanted to block until load testing."],
         droppedSeats: [],
         degradedSeats: [],
         valid: true,
@@ -99,6 +99,12 @@ test("buildDecisionRecord includes formal board verdict artifact", () => {
   const record = buildDecisionRecord(session);
   assert.equal(record.formalVerdict?.schema, "advisory-board/verdict@1");
   assert.equal(record.optionsConsidered[0].title, "CAUTION");
+  assert.equal(record.optionsConsidered[0].summary, "Ship with a scoped rollout.");
   assert.match(record.markdown, /Formal Board Verdict/);
+  assert.doesNotMatch(record.markdown, /CAUTION: ## Verdict/);
   assert.match(record.markdown, /Production load is unknown/);
+  assert.match(record.markdown, /- \*\*OS breakdown of current users\*\* Pull telemetry before committing\./);
+  assert.match(record.markdown, /- CAUTION before launch by verifying telemetry\./);
+  assert.doesNotMatch(record.markdown, /(^|\n)- OS breakdown of current users\*\* Pull/);
+  assert.doesNotMatch(record.markdown, /- ## (?:Evidence-backed|Judgment calls|Could not verify|Minority report)/i);
 });

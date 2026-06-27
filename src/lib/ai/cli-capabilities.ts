@@ -15,7 +15,7 @@ export interface CliThinkingCapability {
   capabilityCheckedAt: string;
 }
 
-export const CLI_CAPABILITY_SCHEMA_VERSION = 2;
+export const CLI_CAPABILITY_SCHEMA_VERSION = 3;
 
 const THINKING_ORDER: CliThinkingLevel[] = ["minimal", "low", "medium", "high", "xhigh", "max"];
 
@@ -58,9 +58,9 @@ export function fallbackCliThinkingCapability(command: CliCapabilityCommand, che
   if (command === "claude") {
     return {
       schemaVersion: CLI_CAPABILITY_SCHEMA_VERSION,
-      supportedThinkingLevels: ["low", "medium", "high", "max"],
+      supportedThinkingLevels: ["low", "medium", "high", "xhigh", "max"],
       thinkingEnforced: true,
-      thinkingEvidence: "fallback: Claude Code has historically exposed --effort low, medium, high, max.",
+      thinkingEvidence: "fallback: Claude Code exposes --effort low, medium, high, xhigh, max; available levels still depend on the selected model.",
       thinkingNote: "Claude effort levels are using fallback capability data until the local CLI help can be checked.",
       contextWindowSource: "not-reported",
       contextEvidence: "not-reported: Claude CLI did not expose a parseable context limit.",
@@ -72,7 +72,7 @@ export function fallbackCliThinkingCapability(command: CliCapabilityCommand, che
   if (command === "codex") {
     return {
       schemaVersion: CLI_CAPABILITY_SCHEMA_VERSION,
-      supportedThinkingLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+      supportedThinkingLevels: ["low", "medium", "high", "xhigh"],
       thinkingEnforced: true,
       thinkingEvidence: "fallback: Codex reasoning effort is passed with model_reasoning_effort.",
       thinkingNote: "Codex reasoning effort is passed to the local CLI; run a force check if this CLI changes.",
@@ -163,7 +163,10 @@ export function normalizeCliThinkingLevel(
     };
   }
 
-  const fallback = capability.supportedThinkingLevels.at(-1);
+  const requestedIndex = THINKING_ORDER.indexOf(requested);
+  const fallback = capability.supportedThinkingLevels.find((level) => THINKING_ORDER.indexOf(level) > requestedIndex)
+    ?? [...capability.supportedThinkingLevels].reverse().find((level) => THINKING_ORDER.indexOf(level) < requestedIndex)
+    ?? capability.supportedThinkingLevels.at(-1);
   return {
     effective: fallback,
     normalized: Boolean(fallback),

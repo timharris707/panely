@@ -64,6 +64,11 @@ type ModelStatus = {
   thinkingNote?: string;
   thinkingEvidence?: string;
   thinkingCapabilityCheckedAt?: string;
+  providerThinkingLevels?: string[];
+  providerThinkingSourceUrl?: string;
+  providerThinkingSourceName?: string;
+  providerThinkingEvidence?: string;
+  providerThinkingFetchedAt?: string;
   intendedUse?: string;
   probe?: {
     ok: boolean;
@@ -136,9 +141,11 @@ export default function AdvisorySettingsPage() {
   const [safety, setSafety] = useState<PublishSafetyReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [probing, setProbing] = useState(false);
+  const [refreshingCapabilities, setRefreshingCapabilities] = useState(false);
   const [safetyLoading, setSafetyLoading] = useState(false);
   const [updatingTool, setUpdatingTool] = useState<LocalCliToolId | null>(null);
   const [updateResult, setUpdateResult] = useState<ToolUpdateResult | null>(null);
+  const [refreshCapabilitiesError, setRefreshCapabilitiesError] = useState("");
   const [pendingUpdate, setPendingUpdate] = useState<{ tool: LocalCliToolId; command?: string } | null>(null);
 
   const load = async (probe = false) => {
@@ -197,6 +204,24 @@ export default function AdvisorySettingsPage() {
     }
   };
 
+  const refreshCapabilities = async () => {
+    setRefreshingCapabilities(true);
+    setRefreshCapabilitiesError("");
+    try {
+      const res = await fetch("/api/advisory/model-availability/refresh-capabilities", {
+        method: "POST",
+        headers: { "X-Panely-Local-Update": "1" },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Capability refresh failed");
+      await load(true);
+    } catch (err) {
+      setRefreshCapabilitiesError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRefreshingCapabilities(false);
+    }
+  };
+
   useEffect(() => {
     void load();
     void loadSafety();
@@ -211,7 +236,7 @@ export default function AdvisorySettingsPage() {
               <ArrowLeft size={14} />
               Back to Panely
             </Link>
-            <h1 style={{ margin: 0, fontSize: "28px", fontFamily: "var(--font-heading)", letterSpacing: 0 }}>Model Settings</h1>
+            <h1 style={{ margin: 0, fontSize: "28px", fontFamily: "var(--font-heading)", letterSpacing: 0 }}>Model Connections</h1>
             <p style={{ margin: "8px 0 0", color: "var(--text-muted)", lineHeight: 1.6, maxWidth: "680px" }}>
               Panely is configured for local CLI routing only. These are the models shown in session setup and the local source each one uses.
             </p>
@@ -236,6 +261,27 @@ export default function AdvisorySettingsPage() {
             >
               <RefreshCw size={14} className={probing ? "animate-spin" : ""} />
               Force Test
+            </button>
+            <button
+              onClick={() => void refreshCapabilities()}
+              disabled={refreshingCapabilities || loading || probing}
+              title="Fetch official provider docs and refresh Panely's local capability cache."
+              style={{
+                minHeight: "36px",
+                padding: "0 12px",
+                borderRadius: "8px",
+                border: "1px solid var(--border)",
+                background: "var(--surface-elevated)",
+                color: "var(--text-secondary)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                cursor: refreshingCapabilities || loading || probing ? "not-allowed" : "pointer",
+                fontWeight: 800,
+              }}
+            >
+              <RefreshCw size={14} className={refreshingCapabilities ? "animate-spin" : ""} />
+              Refresh Capabilities
             </button>
           </div>
         </header>
@@ -330,6 +376,13 @@ export default function AdvisorySettingsPage() {
               {updateResult.stderr ? <><br />{updateResult.stderr.slice(0, 400)}</> : null}
             </div>
           ) : null}
+          {refreshCapabilitiesError ? (
+            <div style={{ marginTop: "12px", border: "1px solid rgba(248,113,113,0.35)", borderRadius: "8px", background: "rgba(248,113,113,0.08)", padding: "10px", color: "var(--text-secondary)", fontSize: "12px", lineHeight: 1.5 }}>
+              <strong style={{ color: "#f87171" }}>Capability refresh failed</strong>
+              <br />
+              {refreshCapabilitiesError}
+            </div>
+          ) : null}
         </section>
 
         <section style={{ border: "1px solid var(--border)", borderRadius: "10px", background: "var(--surface)", padding: "18px", marginBottom: "18px" }}>
@@ -420,6 +473,14 @@ export default function AdvisorySettingsPage() {
                   >
                     Thinking: {model.thinkingLevels?.join(", ") || "not enforced"}
                   </span>
+                  {model.providerThinkingLevels?.length ? (
+                    <span
+                      title={[model.providerThinkingEvidence, model.providerThinkingSourceUrl].filter(Boolean).join(" ")}
+                      style={{ border: "1px solid var(--border)", borderRadius: "999px", padding: "3px 8px", color: "var(--text-secondary)", fontSize: "11px", fontWeight: 800 }}
+                    >
+                      Provider: {model.providerThinkingLevels.join(", ")}
+                    </span>
+                  ) : null}
                 </div>
                 {(model.thinkingNote || model.contextNote) ? (
                   <div style={{ color: "var(--text-muted)", fontSize: "11px", marginTop: "7px", lineHeight: 1.45 }}>

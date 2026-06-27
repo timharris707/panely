@@ -176,6 +176,10 @@ code, pre, .font-mono { font-family: var(--font-mono); }
   border-radius: 4px;
 }
 
+button[aria-label="Open Next.js Dev Tools"] {
+  display: none !important;
+}
+
 /* Pulse animation */
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; transform: scale(1); }

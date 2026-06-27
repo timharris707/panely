@@ -725,11 +725,32 @@ function beginRunStepRecord(sessionPath: string, input: {
   attemptId?: string;
 }) {
   const step = createRunStep(input);
+  let recordedStep = step;
   updateSessionRecord(sessionPath, (session) => {
     const steps = Array.isArray(session.runSteps) ? (session.runSteps as AdvisoryRunStep[]) : [];
-    session.runSteps = [...steps, step];
+    const existingAttemptStepIndex = input.attemptId
+      ? steps.findIndex((candidate) => candidate.attemptId === input.attemptId)
+      : -1;
+
+    if (existingAttemptStepIndex >= 0) {
+      recordedStep = {
+        ...steps[existingAttemptStepIndex],
+        sessionId: input.sessionId,
+        index: input.index,
+        phase: input.phase,
+        agentId: input.agentId,
+        model: input.model,
+        key: input.key ?? steps[existingAttemptStepIndex].key,
+      };
+      session.runSteps = steps.map((candidate, index) =>
+        index === existingAttemptStepIndex ? recordedStep : candidate
+      );
+      return;
+    }
+
+    session.runSteps = [...steps, recordedStep];
   });
-  return step;
+  return recordedStep;
 }
 
 function updateRunStepRecord(

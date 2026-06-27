@@ -36,16 +36,27 @@ Usage: claude [options]
   assert.match(capability.thinkingEvidence, /xhigh/);
 });
 
-test("normalizes unsupported Claude xhigh to max", () => {
+test("Claude fallback includes current xhigh effort level", () => {
   const capability = fallbackCliThinkingCapability("claude", "2026-06-25T00:00:00.000Z");
   assert.equal(capability.contextWindow, undefined);
   assert.equal(capability.contextWindowSource, "not-reported");
-  const normalized = normalizeCliThinkingLevel("xhigh", capability);
+  assert.deepEqual(capability.supportedThinkingLevels, ["low", "medium", "high", "xhigh", "max"]);
 
+  const normalized = normalizeCliThinkingLevel("xhigh", capability);
   assert.equal(normalized.enforced, true);
-  assert.equal(normalized.effective, "max");
+  assert.equal(normalized.effective, "xhigh");
+  assert.equal(normalized.normalized, false);
+});
+
+test("normalizes lower unsupported thinking to the nearest supported level", () => {
+  const capability = fallbackCliThinkingCapability("codex", "2026-06-25T00:00:00.000Z");
+  const normalized = normalizeCliThinkingLevel("minimal", capability);
+
+  assert.deepEqual(capability.supportedThinkingLevels, ["low", "medium", "high", "xhigh"]);
+  assert.equal(normalized.enforced, true);
+  assert.equal(normalized.effective, "low");
   assert.equal(normalized.normalized, true);
-  assert.match(normalized.note, /using max/i);
+  assert.match(normalized.note, /using low/i);
 });
 
 test("Gemini fallback does not claim enforceable thinking", () => {

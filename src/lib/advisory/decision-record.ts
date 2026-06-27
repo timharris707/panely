@@ -11,13 +11,60 @@ import type {
 import { buildTopIdeasFromTally } from "./competitive.ts";
 import { buildRequestedModelProvenance, formatModelProvenance } from "./provenance.ts";
 
+const LIST_MARKER_PATTERN = /^\s*(?:[-*]\s+|\d+[.)]\s+)/;
+
 function cleanMarkdown(value: string) {
   return value.replace(/\r\n/g, "\n").trim();
+}
+
+const FORMAL_SECTION_LABELS = new Set([
+  "verdict",
+  "formal board verdict",
+  "evidence-backed",
+  "evidence backed",
+  "judgment calls",
+  "judgment call",
+  "could not verify",
+  "minority report",
+  "next actions",
+  "next action",
+  "open questions",
+  "open question",
+]);
+
+function repairBrokenBold(value: string) {
+  return value
+    .replace(/^([^*#\n][^:\n]{2,180}):\*\*(\s*)/, "**$1:** ")
+    .replace(/^([^*#\n]{2,180}?)\*\*(\s+[—-]\s+)/, "**$1**$2")
+    .replace(/^([^*#\n]{2,180}?)\*\*(\s+)/, "**$1**$2");
+}
+
+function cleanFormalListItems(value: string[] | undefined) {
+  return safeList(value)
+    .map((item) =>
+      repairBrokenBold(
+        cleanMarkdown(item)
+          .replace(LIST_MARKER_PATTERN, "")
+          .replace(/^#{1,6}\s+/, "")
+          .replace(/:\s*$/, "")
+          .trim()
+      )
+    )
+    .filter((item) => item && !FORMAL_SECTION_LABELS.has(item.toLowerCase()))
+    .filter((item) => !/^(?:SHIP|CAUTION|BLOCK)\s*[:.]?\s*$/i.test(item));
 }
 
 function summarizeText(value: string, maxLength = 420) {
   const text = cleanMarkdown(value).replace(/\s+/g, " ");
   return text.length > maxLength ? `${text.slice(0, maxLength).trim()}...` : text;
+}
+
+function cleanFormalSummary(value: string) {
+  return cleanMarkdown(value)
+    .replace(/^#{1,6}\s*Verdict\s*/i, "")
+    .replace(/^(?:\*\*)?(SHIP|CAUTION|BLOCK)[.:]\s*(?:\*\*)?/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function eventLabel(event: AdvisoryEvent) {
@@ -35,7 +82,8 @@ function extractActionItems(events: AdvisoryEvent[]): DecisionRecordActionItem[]
   const finalEvents = events.filter((event) => event.type === "complete" || /action|next step|timeline|owner/i.test(event.text));
   const lines = finalEvents
     .flatMap((event) => cleanMarkdown(event.text).split("\n"))
-    .map((line) => line.replace(/^[-*\d.)\s]+/, "").trim())
+    .map((line) => line.replace(LIST_MARKER_PATTERN, "").trim())
+    .filter((line) => !/^#{1,6}\s+/.test(line))
     .filter((line) => /action|next|owner|timeline|ship|implement|fix|add|create|verify/i.test(line))
     .slice(0, 8);
   const source = "session transcript";
@@ -46,7 +94,8 @@ function extractActionItems(events: AdvisoryEvent[]): DecisionRecordActionItem[]
 function extractRisks(events: AdvisoryEvent[]) {
   return events
     .flatMap((event) => cleanMarkdown(event.text).split("\n"))
-    .map((line) => line.replace(/^[-*\d.)\s]+/, "").trim())
+    .map((line) => line.replace(LIST_MARKER_PATTERN, "").trim())
+    .filter((line) => !/^#{1,6}\s+/.test(line))
     .filter((line) => /risk|failure|failed|concern|blocker|unsafe|leak|timeout|stuck|missing/i.test(line))
     .slice(0, 8);
 }
@@ -54,14 +103,16 @@ function extractRisks(events: AdvisoryEvent[]) {
 function extractOpenQuestions(events: AdvisoryEvent[]) {
   return events
     .flatMap((event) => cleanMarkdown(event.text).split("\n"))
-    .map((line) => line.replace(/^[-*\d.)\s]+/, "").trim())
+    .map((line) => line.replace(LIST_MARKER_PATTERN, "").trim())
+    .filter((line) => !/^#{1,6}\s+/.test(line))
     .filter((line) => /\?|open question|unknown|needs research|follow-up/i.test(line))
     .slice(0, 8);
 }
 
 function buildDecision(session: AdvisorySession, events: AdvisoryEvent[]) {
   if (session.mode === "formal-board" && session.formalBoard?.verdict) {
-    return `${session.formalBoard.verdict.verdict.toUpperCase()}: ${session.formalBoard.verdict.summary}`;
+    const summary = cleanFormalSummary(session.formalBoard.verdict.summary);
+    return `${session.formalBoard.verdict.verdict.toUpperCase()}: ${summary || session.formalBoard.verdict.verdict.toUpperCase()}`;
   }
 
   const finalEvent = [...events].reverse().find((event) => event.type === "complete" && event.text);
@@ -81,7 +132,7 @@ function buildOptions(session: AdvisorySession): DecisionRecordOption[] {
     return [
       {
         title: verdict.verdict.toUpperCase(),
-        summary: verdict.summary,
+        summary: cleanFormalSummary(verdict.summary) || verdict.summary,
         rank: 1,
       },
     ];
@@ -116,6 +167,41 @@ function buildDissent(events: AdvisoryEvent[]): DecisionRecordDissent[] {
     .slice(0, 8);
 }
 
+function buildFormalDissent(session: AdvisorySession): DecisionRecordDissent[] {
+  const dissent = session.formalBoard?.verdict?.dissent || [];
+  return dissent.map((item) => ({
+    agent: item.who,
+    summary: normalizeArtifactText(item.body),
+  })).filter((item) => item.summary).slice(0, 8);
+}
+
+function normalizeArtifactText(value: string) {
+  return repairBrokenBold(
+    cleanMarkdown(value)
+      .replace(LIST_MARKER_PATTERN, "")
+      .replace(/^#{1,6}\s+/, "")
+      .trim()
+  );
+}
+
+function buildFormalRisks(session: AdvisorySession) {
+  const verdict = session.formalBoard?.verdict;
+  if (!verdict) return [];
+  const blockers = verdict.blockers.map((item) => normalizeArtifactText(item.body));
+  const caveats = cleanFormalListItems(verdict.couldntVerify);
+  return [...blockers, ...caveats].filter(Boolean).slice(0, 8);
+}
+
+function buildFormalOpenQuestions(session: AdvisorySession) {
+  return cleanFormalListItems(session.formalBoard?.verdict?.open_questions).slice(0, 8);
+}
+
+function buildFormalActionItems(session: AdvisorySession): DecisionRecordActionItem[] {
+  return cleanFormalListItems(session.formalBoard?.verdict?.next_actions)
+    .map((title) => ({ title, source: "formal board verdict" }))
+    .slice(0, 8);
+}
+
 function buildProvenance(session: AdvisorySession): DecisionRecordProvenance[] {
   const attempts = Array.isArray(session.runAttempts) ? session.runAttempts : [];
   if (attempts.length) {
@@ -146,10 +232,10 @@ function safeList<T>(value: T[] | undefined): T[] {
 export function renderDecisionRecordMarkdown(record: Omit<DecisionRecord, "markdown">) {
   const formalVerdict = record.formalVerdict;
   const formalSameSeatContinuity = safeList(formalVerdict?.sameSeatContinuity);
-  const formalEvidenceBacked = safeList(formalVerdict?.evidenceBacked);
-  const formalJudgmentCalls = safeList(formalVerdict?.judgmentCalls);
-  const formalCouldntVerify = safeList(formalVerdict?.couldntVerify);
-  const formalMinorityReport = safeList(formalVerdict?.minorityReport);
+  const formalEvidenceBacked = cleanFormalListItems(formalVerdict?.evidenceBacked);
+  const formalJudgmentCalls = cleanFormalListItems(formalVerdict?.judgmentCalls);
+  const formalCouldntVerify = cleanFormalListItems(formalVerdict?.couldntVerify);
+  const formalMinorityReport = cleanFormalListItems(formalVerdict?.minorityReport);
   return [
     `# ${record.title}`,
     "",
@@ -239,6 +325,10 @@ export function buildDecisionRecord(session: AdvisorySession): DecisionRecord {
   const generatedAt = new Date().toISOString();
   const title = session.title || session.topic.slice(0, 90);
   const transcriptMarkdown = buildTranscript(events);
+  const formalDissent = session.mode === "formal-board" ? buildFormalDissent(session) : [];
+  const formalRisks = session.mode === "formal-board" ? buildFormalRisks(session) : [];
+  const formalOpenQuestions = session.mode === "formal-board" ? buildFormalOpenQuestions(session) : [];
+  const formalActionItems = session.mode === "formal-board" ? buildFormalActionItems(session) : [];
   const recordBase: Omit<DecisionRecord, "markdown"> = {
     id: `decision-${session.id}`,
     sessionId: session.id,
@@ -250,10 +340,10 @@ export function buildDecisionRecord(session: AdvisorySession): DecisionRecord {
     recommendation,
     decision,
     optionsConsidered,
-    dissent: buildDissent(events),
-    risks: extractRisks(events),
-    openQuestions: extractOpenQuestions(events),
-    actionItems: extractActionItems(events),
+    dissent: formalDissent.length ? formalDissent : buildDissent(events),
+    risks: formalRisks.length ? formalRisks : extractRisks(events),
+    openQuestions: formalOpenQuestions.length ? formalOpenQuestions : extractOpenQuestions(events),
+    actionItems: formalActionItems.length ? formalActionItems : extractActionItems(events),
     voteMode: session.competitive?.voteMode,
     blindVote: session.mode === "competitive",
     voteTally: session.competitive?.voteTally,
