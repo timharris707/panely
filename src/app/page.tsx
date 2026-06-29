@@ -1,107 +1,268 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import type { CSSProperties } from "react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  Download,
+  FileText,
+  Gavel,
+  ShieldCheck,
+  Sparkles,
+  Users,
+} from "lucide-react";
 
-const advisorNodes = [
-  { label: "S", role: "Strategy", color: "#7c8cff", delay: "0s" },
-  { label: "R", role: "Risk", color: "#f3c969", delay: "-1.2s" },
-  { label: "O", role: "Operator", color: "#2dd4bf", delay: "-2.4s" },
-  { label: "C", role: "Critic", color: "#f472b6", delay: "-3.6s" },
-  { label: "D", role: "Decision", color: "#60a5fa", delay: "-4.8s" },
+const macDownloadUrl = "/downloads/Panely-1.0.0.dmg";
+const checksumUrl = "/downloads/Panely-1.0.0.dmg.sha256";
+const releaseUrl = "https://github.com/timharris707/panely-mac/releases/tag/v1.0.0";
+
+const proofPoints = [
+  "Signed and notarized Developer ID app",
+  "Gatekeeper-ready direct download",
+  "Source-safe workflow evidence behind v1.0",
 ];
 
-function BoardAnimation() {
-  return (
-    <div className="entry-board" aria-hidden="true">
-      <div className="board-grid" />
-      <div className="decision-core">
-        <div className="core-line short" />
-        <div className="core-line" />
-        <div className="core-line muted" />
-      </div>
-      {advisorNodes.map((node, index) => (
-        <div
-          className={`advisor-node node-${index + 1}`}
-          key={node.label}
-          style={{
-            "--node-color": node.color,
-            "--delay": node.delay,
-          } as CSSProperties}
-        >
-          <span>{node.label}</span>
-          <small>{node.role}</small>
-        </div>
-      ))}
-      <div className="signal-ring ring-one" />
-      <div className="signal-ring ring-two" />
-    </div>
-  );
-}
+const workflows = [
+  {
+    icon: Users,
+    title: "Roundtable",
+    body: "Ask a serious question and let a panel of advisors examine the same brief from different angles before producing a usable synthesis.",
+  },
+  {
+    icon: Sparkles,
+    title: "Competitive",
+    body: "Force sharper thinking with proposal, critique, and vote rounds when you need options compared instead of softened into consensus.",
+  },
+  {
+    icon: Gavel,
+    title: "Formal Board",
+    body: "Run high-stakes reviews through stricter source-packet, provider-disclosure, artifact, and verdict gates where the protocol is implemented.",
+  },
+];
+
+const trustItems = [
+  "Local session storage and Finder-owned artifacts",
+  "Explicit provider disclosure before model work",
+  "Exportable Markdown, HTML, PDF, JSON, and transcript records",
+  "Narrow v1 claims with post-1.0 caveats documented",
+];
 
 export default function Home() {
   return (
-    <main className="entry-page">
-      <section className="entry-shell">
-        <div className="entry-copy">
-          <Link href="/advisory" className="brand-link" aria-label="Enter Panely">
+    <main className="marketing-page">
+      <section className="hero" aria-labelledby="hero-title">
+        <div className="hero-media" aria-hidden="true">
+          <Image
+            src="/images/panely-mac-workbench.png"
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className="hero-image"
+          />
+          <div className="hero-scrim" />
+        </div>
+
+        <nav className="topbar" aria-label="Primary navigation">
+          <Link href="/" className="brand-link" aria-label="Panely home">
             Panely
           </Link>
-          <h1>Open your advisory room.</h1>
-          <p>
-            Start a local AI roundtable, review a plan, or stress-test a decision with the models available on this machine.
-          </p>
-          <div className="entry-actions">
-            <Link href="/advisory" className="entry-primary">
-              Enter Panely
+          <div className="topbar-actions">
+            <Link href="/advisory" className="text-link">
+              Web app
             </Link>
-            <Link href="/advisory/settings" className="entry-secondary">
-              Model settings
-            </Link>
+            <a href={releaseUrl} className="text-link">
+              Release notes
+            </a>
           </div>
-          <div className="entry-meta" aria-label="Panely setup notes">
-            <span>Local CLI routing</span>
-            <span>Availability-aware setup</span>
-            <span>Private by default</span>
+        </nav>
+
+        <div className="hero-content">
+          <p className="eyebrow">Panely Mac 1.0 is ready</p>
+          <h1 id="hero-title">Panely Mac</h1>
+          <p className="lede">
+            A native, local-first advisory room for serious decisions. Run
+            Roundtable, Competitive, and implemented Formal Board workflows with
+            local model CLIs, source-safe review gates, and user-owned artifacts.
+          </p>
+
+          <div className="hero-actions">
+            <a href={macDownloadUrl} download className="primary-download">
+              <Download size={18} aria-hidden="true" />
+              Download for Mac
+            </a>
+            <a href={releaseUrl} className="secondary-download">
+              View v1.0 release
+              <ArrowRight size={17} aria-hidden="true" />
+            </a>
+          </div>
+
+          <div className="download-meta" aria-label="Mac download details">
+            <span>v1.0.0</span>
+            <span>macOS 14 or later</span>
+            <span>Apple silicon</span>
+            <a href={checksumUrl}>SHA-256</a>
+          </div>
+
+          <div className="proof-strip" aria-label="Release proof">
+            {proofPoints.map((point) => (
+              <span key={point}>
+                <CheckCircle2 size={16} aria-hidden="true" />
+                {point}
+              </span>
+            ))}
           </div>
         </div>
-        <BoardAnimation />
+      </section>
+
+      <section className="section download-panel" aria-labelledby="download-title">
+        <div>
+          <p className="section-kicker">Direct Mac download</p>
+          <h2 id="download-title">Install the native app. Keep the work local.</h2>
+          <p>
+            Panely Mac ships in a DMG containing the signed, notarized app. Drag
+            the app to Applications, open it normally, and connect the local
+            model tools you already use.
+          </p>
+        </div>
+        <div className="install-steps" aria-label="Installation steps">
+          <div>
+            <strong>1</strong>
+            <span>Download the DMG</span>
+          </div>
+          <div>
+            <strong>2</strong>
+            <span>Drag Panely to Applications</span>
+          </div>
+          <div>
+            <strong>3</strong>
+            <span>Launch and choose your first workflow</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="section workflow-section" aria-labelledby="workflow-title">
+        <div className="section-heading">
+          <p className="section-kicker">Built for decisions with consequences</p>
+          <h2 id="workflow-title">Three rooms for different kinds of thinking.</h2>
+        </div>
+        <div className="workflow-grid">
+          {workflows.map(({ icon: Icon, title, body }) => (
+            <article className="workflow-card" key={title}>
+              <Icon size={22} aria-hidden="true" />
+              <h3>{title}</h3>
+              <p>{body}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="section trust-section" aria-labelledby="trust-title">
+        <div>
+          <p className="section-kicker">First-user-ready, not overclaimed</p>
+          <h2 id="trust-title">Serious workflow proof without pretending every future feature is done.</h2>
+        </div>
+        <div className="trust-list">
+          {trustItems.map((item) => (
+            <div key={item}>
+              <ShieldCheck size={18} aria-hidden="true" />
+              <span>{item}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="section artifact-section" aria-labelledby="artifact-title">
+        <div className="artifact-copy">
+          <p className="section-kicker">Artifacts, not just chat</p>
+          <h2 id="artifact-title">Walk away with records you can inspect, export, and share.</h2>
+          <p>
+            Panely creates decision records, vote breakdowns, transcripts, and
+            generated artifact bundles that live on disk. Formal Board artifact
+            surfaces stay gated by source confirmation and verification checks.
+          </p>
+        </div>
+        <div className="artifact-list" aria-label="Artifact outputs">
+          {["Decision memo", "Vote breakdown", "Printable brief", "Transcript", "Formal Board verdict"].map((item) => (
+            <span key={item}>
+              <FileText size={15} aria-hidden="true" />
+              {item}
+            </span>
+          ))}
+        </div>
+      </section>
+
+      <section className="final-cta" aria-labelledby="final-title">
+        <h2 id="final-title">Download Panely Mac 1.0</h2>
+        <p>
+          Start with a real decision, connect your local model tools, and let
+          the room argue its way toward a clear next move.
+        </p>
+        <a href={macDownloadUrl} download className="primary-download">
+          <Download size={18} aria-hidden="true" />
+          Download DMG
+        </a>
       </section>
 
       <style jsx global>{`
-        .entry-page {
+        .marketing-page {
           min-height: 100vh;
+          color: #f5f7fb;
+          background: #090a0d;
+          font-family: var(--font-body);
+        }
+
+        .hero {
+          position: relative;
+          min-height: 92vh;
           overflow: hidden;
           display: grid;
-          place-items: center;
-          padding: 32px;
-          color: #eef2f7;
+          align-content: space-between;
+          padding: 28px;
+        }
+
+        .hero-media {
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+        }
+
+        .hero-image {
+          object-fit: cover;
+          object-position: 62% 46%;
+          opacity: 0.74;
+          filter: saturate(1.04) contrast(1.08);
+        }
+
+        .hero-scrim {
+          position: absolute;
+          inset: 0;
           background:
-            radial-gradient(circle at 15% 18%, rgba(45, 212, 191, 0.12), transparent 28%),
-            radial-gradient(circle at 82% 20%, rgba(243, 201, 105, 0.1), transparent 24%),
-            linear-gradient(135deg, #08090b 0%, #111318 48%, #07080a 100%);
+            linear-gradient(90deg, rgba(9, 10, 13, 0.96) 0%, rgba(9, 10, 13, 0.84) 38%, rgba(9, 10, 13, 0.35) 72%, rgba(9, 10, 13, 0.68) 100%),
+            linear-gradient(180deg, rgba(9, 10, 13, 0.7) 0%, rgba(9, 10, 13, 0.24) 46%, rgba(9, 10, 13, 0.98) 100%);
         }
 
-        .entry-shell {
-          width: min(1120px, 100%);
-          min-height: min(680px, calc(100vh - 64px));
-          display: grid;
-          grid-template-columns: minmax(0, 0.94fr) minmax(360px, 1.06fr);
+        .topbar,
+        .hero-content {
+          position: relative;
+          z-index: 1;
+        }
+
+        .topbar {
+          width: min(1180px, 100%);
+          margin: 0 auto;
+          display: flex;
           align-items: center;
-          gap: 54px;
-        }
-
-        .entry-copy {
-          max-width: 520px;
+          justify-content: space-between;
+          gap: 24px;
         }
 
         .brand-link {
-          display: inline-flex;
-          margin-bottom: 34px;
-          color: #eef2f7;
+          color: #f5f7fb;
           font-family: var(--font-heading);
           font-size: 22px;
-          font-weight: 800;
+          font-weight: 850;
           letter-spacing: 0;
           text-decoration: none;
         }
@@ -111,284 +272,373 @@ export default function Home() {
           color: #7c8cff;
         }
 
-        .entry-copy h1 {
-          margin: 0;
-          max-width: 560px;
-          font-family: var(--font-heading);
-          font-size: clamp(48px, 7vw, 86px);
-          line-height: 0.96;
-          letter-spacing: 0;
+        .topbar-actions {
+          display: flex;
+          align-items: center;
+          gap: 18px;
+        }
+
+        .text-link {
+          color: rgba(245, 247, 251, 0.74);
+          font-size: 14px;
+          font-weight: 760;
+          text-decoration: none;
+        }
+
+        .text-link:hover {
+          color: #ffffff;
+        }
+
+        .hero-content {
+          width: min(1180px, 100%);
+          margin: 0 auto;
+          padding: 12vh 0 7vh;
+        }
+
+        .eyebrow,
+        .section-kicker {
+          margin: 0 0 14px;
+          color: #77e6d4;
+          font-size: 12px;
           font-weight: 850;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
         }
 
-        .entry-copy p {
-          margin: 24px 0 0;
-          max-width: 520px;
-          color: #a7b0bd;
-          font-size: 18px;
-          line-height: 1.65;
+        .hero h1 {
+          margin: 0;
+          max-width: 760px;
+          font-family: var(--font-heading);
+          font-size: clamp(64px, 11vw, 132px);
+          line-height: 0.9;
+          letter-spacing: 0;
+          font-weight: 900;
         }
 
-        .entry-actions {
+        .lede {
+          margin: 28px 0 0;
+          max-width: 690px;
+          color: rgba(245, 247, 251, 0.82);
+          font-size: clamp(18px, 2.3vw, 24px);
+          line-height: 1.5;
+        }
+
+        .hero-actions {
           display: flex;
           flex-wrap: wrap;
           gap: 12px;
           margin-top: 36px;
         }
 
-        .entry-primary,
-        .entry-secondary {
-          min-height: 48px;
+        .primary-download,
+        .secondary-download {
+          min-height: 52px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
+          gap: 10px;
           border-radius: 8px;
           padding: 0 20px;
           font-size: 15px;
-          font-weight: 800;
+          font-weight: 850;
           text-decoration: none;
           transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
         }
 
-        .entry-primary {
+        .primary-download {
           color: #08090b;
-          background: #eef2f7;
+          background: #f5f7fb;
+          box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
         }
 
-        .entry-secondary {
-          color: #dce3ec;
-          border: 1px solid rgba(238, 242, 247, 0.18);
-          background: rgba(255, 255, 255, 0.045);
+        .secondary-download {
+          color: #f5f7fb;
+          border: 1px solid rgba(245, 247, 251, 0.2);
+          background: rgba(255, 255, 255, 0.06);
+          backdrop-filter: blur(14px);
         }
 
-        .entry-primary:hover,
-        .entry-secondary:hover {
+        .primary-download:hover,
+        .secondary-download:hover {
           transform: translateY(-1px);
         }
 
-        .entry-secondary:hover {
-          border-color: rgba(124, 140, 255, 0.5);
-          background: rgba(124, 140, 255, 0.12);
+        .secondary-download:hover {
+          border-color: rgba(119, 230, 212, 0.55);
+          background: rgba(119, 230, 212, 0.1);
         }
 
-        .entry-meta {
+        .download-meta,
+        .proof-strip {
           display: flex;
           flex-wrap: wrap;
-          gap: 9px;
+          gap: 10px;
+          margin-top: 18px;
+        }
+
+        .download-meta span,
+        .download-meta a,
+        .proof-strip span {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          border-radius: 999px;
+          border: 1px solid rgba(245, 247, 251, 0.14);
+          color: rgba(245, 247, 251, 0.75);
+          background: rgba(9, 10, 13, 0.46);
+          padding: 8px 11px;
+          font-size: 12px;
+          font-weight: 760;
+          text-decoration: none;
+          backdrop-filter: blur(12px);
+        }
+
+        .download-meta a:hover {
+          color: #ffffff;
+          border-color: rgba(124, 140, 255, 0.52);
+        }
+
+        .proof-strip {
           margin-top: 28px;
         }
 
-        .entry-meta span {
-          border: 1px solid rgba(255, 255, 255, 0.12);
-          border-radius: 999px;
-          padding: 7px 10px;
-          color: #8d97a7;
-          background: rgba(255, 255, 255, 0.035);
-          font-size: 12px;
-          font-weight: 750;
+        .proof-strip span {
+          border-color: rgba(119, 230, 212, 0.22);
+          color: rgba(245, 247, 251, 0.84);
         }
 
-        .entry-board {
-          position: relative;
-          width: min(520px, 100%);
-          aspect-ratio: 1;
-          justify-self: center;
-          border-radius: 28px;
-          background:
-            linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025)),
-            radial-gradient(circle at center, rgba(124, 140, 255, 0.16), transparent 58%);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          box-shadow: 0 36px 90px rgba(0, 0, 0, 0.38);
-          overflow: hidden;
+        .proof-strip svg {
+          color: #77e6d4;
         }
 
-        .board-grid {
-          position: absolute;
-          inset: 0;
-          background-image:
-            linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
-          background-size: 42px 42px;
-          mask-image: radial-gradient(circle at center, black 0%, transparent 74%);
+        .section {
+          width: min(1180px, calc(100% - 48px));
+          margin: 0 auto;
+          padding: 86px 0;
         }
 
-        .decision-core {
-          position: absolute;
-          inset: 50%;
-          width: 164px;
-          height: 120px;
-          transform: translate(-50%, -50%);
+        .section h2,
+        .final-cta h2 {
+          margin: 0;
+          font-family: var(--font-heading);
+          font-size: clamp(34px, 5vw, 58px);
+          line-height: 1;
+          letter-spacing: 0;
+          font-weight: 870;
+        }
+
+        .section p,
+        .final-cta p {
+          color: #aeb8c6;
+          font-size: 17px;
+          line-height: 1.7;
+        }
+
+        .download-panel {
           display: grid;
-          align-content: center;
+          grid-template-columns: minmax(0, 1fr) minmax(340px, 0.72fr);
+          gap: 48px;
+          align-items: center;
+          border-bottom: 1px solid rgba(245, 247, 251, 0.08);
+        }
+
+        .install-steps {
+          display: grid;
           gap: 12px;
-          padding: 24px;
-          border-radius: 18px;
-          border: 1px solid rgba(238, 242, 247, 0.16);
-          background: rgba(8, 9, 11, 0.72);
-          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 20px 50px rgba(0, 0, 0, 0.35);
         }
 
-        .core-line {
-          height: 8px;
-          border-radius: 999px;
-          background: #eef2f7;
+        .install-steps div {
+          display: grid;
+          grid-template-columns: 44px 1fr;
+          align-items: center;
+          min-height: 62px;
+          border-radius: 8px;
+          border: 1px solid rgba(245, 247, 251, 0.1);
+          background: #12161d;
+          padding: 10px 14px;
         }
 
-        .core-line.short {
-          width: 62%;
-          background: #7c8cff;
-        }
-
-        .core-line.muted {
-          width: 82%;
-          background: rgba(238, 242, 247, 0.28);
-        }
-
-        .advisor-node {
-          --radius: 188px;
-          position: absolute;
-          left: 50%;
-          top: 50%;
-          width: 94px;
-          height: 94px;
+        .install-steps strong {
+          width: 30px;
+          height: 30px;
           display: grid;
           place-items: center;
-          align-content: center;
-          gap: 3px;
           border-radius: 999px;
-          color: #eef2f7;
-          border: 1px solid color-mix(in srgb, var(--node-color) 72%, transparent);
-          background: color-mix(in srgb, var(--node-color) 20%, rgba(8, 9, 11, 0.86));
-          box-shadow: 0 0 34px color-mix(in srgb, var(--node-color) 30%, transparent);
-          animation: floatNode 6s ease-in-out infinite;
-          animation-delay: var(--delay);
+          color: #090a0d;
+          background: #f3c969;
+          font-size: 13px;
         }
 
-        .advisor-node span {
-          font-size: 24px;
-          font-weight: 900;
+        .install-steps span {
+          color: #e9eef7;
+          font-weight: 780;
         }
 
-        .advisor-node small {
-          color: rgba(238, 242, 247, 0.7);
-          font-size: 11px;
-          font-weight: 800;
+        .section-heading {
+          max-width: 780px;
         }
 
-        .node-1 { transform: translate(-50%, -50%) rotate(-88deg) translateX(var(--radius)) rotate(88deg); }
-        .node-2 { transform: translate(-50%, -50%) rotate(-18deg) translateX(var(--radius)) rotate(18deg); }
-        .node-3 { transform: translate(-50%, -50%) rotate(55deg) translateX(var(--radius)) rotate(-55deg); }
-        .node-4 { transform: translate(-50%, -50%) rotate(128deg) translateX(var(--radius)) rotate(-128deg); }
-        .node-5 { transform: translate(-50%, -50%) rotate(198deg) translateX(var(--radius)) rotate(-198deg); }
-
-        .signal-ring {
-          position: absolute;
-          inset: 92px;
-          border-radius: 999px;
-          border: 1px solid rgba(124, 140, 255, 0.23);
-          animation: pulseRing 4s ease-in-out infinite;
+        .workflow-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 14px;
+          margin-top: 34px;
         }
 
-        .ring-two {
-          inset: 52px;
-          border-color: rgba(45, 212, 191, 0.18);
-          animation-delay: -2s;
+        .workflow-card {
+          min-height: 260px;
+          border-radius: 8px;
+          border: 1px solid rgba(245, 247, 251, 0.1);
+          background: #11151c;
+          padding: 26px;
         }
 
-        @keyframes floatNode {
-          0%, 100% { filter: brightness(1); }
-          50% { filter: brightness(1.22); }
+        .workflow-card svg {
+          color: #7c8cff;
         }
 
-        @keyframes pulseRing {
-          0%, 100% {
-            opacity: 0.32;
-            transform: scale(0.96);
+        .workflow-card h3 {
+          margin: 22px 0 12px;
+          font-family: var(--font-heading);
+          font-size: 22px;
+          letter-spacing: 0;
+        }
+
+        .workflow-card p {
+          margin: 0;
+          font-size: 15px;
+        }
+
+        .trust-section {
+          display: grid;
+          grid-template-columns: minmax(0, 0.92fr) minmax(340px, 0.8fr);
+          gap: 54px;
+          align-items: start;
+          border-top: 1px solid rgba(245, 247, 251, 0.08);
+          border-bottom: 1px solid rgba(245, 247, 251, 0.08);
+        }
+
+        .trust-list {
+          display: grid;
+          gap: 12px;
+        }
+
+        .trust-list div,
+        .artifact-list span {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          border-radius: 8px;
+          border: 1px solid rgba(245, 247, 251, 0.1);
+          color: #e9eef7;
+          background: #12161d;
+          padding: 14px;
+          font-weight: 760;
+        }
+
+        .trust-list svg {
+          flex: 0 0 auto;
+          color: #77e6d4;
+        }
+
+        .artifact-section {
+          display: grid;
+          grid-template-columns: minmax(0, 0.82fr) minmax(340px, 1fr);
+          gap: 48px;
+          align-items: center;
+        }
+
+        .artifact-list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+        }
+
+        .artifact-list span {
+          background: #141821;
+        }
+
+        .artifact-list svg {
+          color: #f3c969;
+        }
+
+        .final-cta {
+          width: min(1180px, calc(100% - 48px));
+          margin: 0 auto 42px;
+          display: grid;
+          justify-items: start;
+          gap: 18px;
+          border-radius: 8px;
+          border: 1px solid rgba(245, 247, 251, 0.1);
+          background:
+            linear-gradient(135deg, rgba(124, 140, 255, 0.18), transparent 38%),
+            #11151c;
+          padding: 44px;
+        }
+
+        .final-cta p {
+          max-width: 680px;
+          margin: 0;
+        }
+
+        @media (max-width: 900px) {
+          .hero {
+            min-height: 820px;
           }
-          50% {
-            opacity: 0.78;
-            transform: scale(1.02);
-          }
-        }
 
-        @media (prefers-reduced-motion: reduce) {
-          .advisor-node,
-          .signal-ring {
-            animation: none;
-          }
-        }
-
-        @media (max-width: 860px) {
-          .entry-page {
-            place-items: start center;
-            padding: 24px;
+          .hero-image {
+            object-position: center bottom;
+            opacity: 0.5;
           }
 
-          .entry-shell {
-            min-height: auto;
+          .hero-scrim {
+            background:
+              linear-gradient(180deg, rgba(9, 10, 13, 0.97) 0%, rgba(9, 10, 13, 0.78) 46%, rgba(9, 10, 13, 0.99) 100%);
+          }
+
+          .hero-content {
+            padding-top: 10vh;
+          }
+
+          .download-panel,
+          .trust-section,
+          .artifact-section {
             grid-template-columns: 1fr;
-            gap: 34px;
           }
 
-          .entry-copy {
-            max-width: none;
-          }
-
-          .brand-link {
-            margin-bottom: 28px;
-          }
-
-          .entry-board {
-            width: min(420px, 100%);
-            order: -1;
-          }
-
-          .advisor-node {
-            --radius: 146px;
-            width: 76px;
-            height: 76px;
-          }
-
-          .advisor-node small {
-            display: none;
-          }
-
-          .decision-core {
-            width: 134px;
-            height: 100px;
+          .workflow-grid {
+            grid-template-columns: 1fr;
           }
         }
 
-        @media (max-width: 520px) {
-          .entry-page {
-            padding: 18px;
+        @media (max-width: 560px) {
+          .hero {
+            padding: 20px;
           }
 
-          .entry-copy h1 {
-            font-size: 46px;
+          .topbar {
+            align-items: flex-start;
           }
 
-          .entry-copy p {
-            font-size: 16px;
+          .topbar-actions {
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
           }
 
-          .entry-actions {
-            display: grid;
-          }
-
-          .entry-primary,
-          .entry-secondary {
+          .hero-actions,
+          .primary-download,
+          .secondary-download {
             width: 100%;
           }
 
-          .advisor-node {
-            --radius: 120px;
-            width: 62px;
-            height: 62px;
+          .section,
+          .final-cta {
+            width: min(100% - 32px, 1180px);
           }
 
-          .advisor-node span {
-            font-size: 20px;
+          .final-cta {
+            padding: 28px;
           }
         }
       `}</style>
